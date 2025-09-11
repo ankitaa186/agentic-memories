@@ -243,4 +243,222 @@ Cursor Prompt: "Add security middleware, full Pytest suite for multi-user isolat
 - Full Build: 3–4 weeks total.
 - Post‑Build: Monitor and iterate based on usage.
 
+
+## API Contracts
+
+### Versioning
+- Base path: `/v1`
+- Media type: `application/json`
+
+### Common Fields
+- Headers: `X-API-KEY: <string>` (required)
+- Error shape:
+```json
+{
+  "error": {
+    "code": "string",
+    "message": "string",
+    "details": {"any": "optional"}
+  }
+}
+```
+
+### POST /v1/store
+- Purpose: Extract memories from a transcript and persist them.
+- Request body:
+```json
+{
+  "user_id": "user-123",
+  "history": [
+    {"role": "user", "content": "I love sci-fi books."},
+    {"role": "assistant", "content": "Noted. Any favorite authors?"}
+  ],
+  "metadata": {"conversation_id": "abc-123"}
+}
+```
+- Response body:
+```json
+{
+  "memories_created": 2,
+  "ids": ["mem_01", "mem_02"],
+  "summary": "Extracted explicit preference for sci-fi; created short-term memory."
+}
+```
+- Errors: `400` invalid schema, `401` unauthorized, `429` rate limit, `500` internal.
+
+### GET /v1/retrieve
+- Purpose: Retrieve ranked memories for a query.
+- Query params: `query` (required), `layer` (optional), `type` (optional), `limit` (default 10), `offset` (default 0)
+- Response body:
+```json
+{
+  "results": [
+    {
+      "id": "mem_01",
+      "content": "User prefers sci-fi books",
+      "layer": "semantic",
+      "type": "explicit",
+      "score": 0.83,
+      "metadata": {"source": "extraction"}
+    }
+  ],
+  "pagination": {"limit": 10, "offset": 0, "total": 1}
+}
+```
+
+### POST /v1/forget
+- Purpose: Trigger forgetting flows manually.
+- Request body:
+```json
+{"scopes": ["short-term", "semantic"], "dry_run": false}
+```
+- Response body:
+```json
+{"jobs_enqueued": ["ttl_cleanup", "promotion"], "dry_run": false}
+```
+
+### POST /v1/maintenance
+- Purpose: Run scheduled maintenance jobs on demand.
+- Request body:
+```json
+{"jobs": ["compaction"], "since_hours": 24}
+```
+- Response body:
+```json
+{"jobs_started": ["compaction"], "status": "running"}
+```
+
+### Curl examples
+```bash
+curl -X POST http://localhost:8080/v1/store \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: $API_KEY" \
+  -d '{"user_id":"user-123","history":[{"role":"user","content":"I love sci-fi books."}]}'
+
+curl "http://localhost:8080/v1/retrieve?query=sci-fi&limit=5" \
+  -H "X-API-KEY: $API_KEY"
+```
+
+
+## Storage & Retrieval Details
+
+### ChromaDB Collections
+- Collection: `memories`
+- Embedding model: `text-embedding-3-small` (1536 dims)
+- Document: `content`
+- IDs: `mem_<uuid>`
+- Metadata keys:
+  - `user_id: str`
+  - `layer: "short-term"|"semantic"|"long-term"`
+  - `type: "explicit"|"implicit"`
+  - `ttl_epoch: int` (optional; for short-term expiration)
+  - `timestamp: iso8601`
+  - `confidence: float`
+  - `relevance_score: float`
+
+### Indexing & Filters
+- Filter by `user_id` for isolation; combine with `layer`/`type` as needed.
+- Create secondary keyword index via stored metadata fields for fallback search.
+
+### Ranking
+- Hybrid score = `0.8 * semantic_similarity + 0.2 * keyword_overlap`
+- Minimum score cutoff: `0.35`; ties broken by `usage_count` and recency.
+- Pagination: `limit` (<=50), `offset`.
+
+
+## Caching Policy (Redis)
+- What: Cache top-N short-term retrieval results per `(user_id, query_hash)`.
+- TTLs: 60–300 seconds configurable; align with short-term TTL policy.
+- Invalidation: On `store` upserts for same `user_id`, evict matching keys.
+- Keys: `mem:srch:{user_id}:{hash(query)}` → JSON list of results.
+
+
+## Scheduler Jobs (APScheduler)
+- `ttl_cleanup` (every 15m): Remove expired short-term docs from ChromaDB; evict cache.
+- `promotion` (daily): Summarize frequently used short-term into long-term; preserve provenance.
+- `compaction` (weekly): Cluster long-term; LLM summarize clusters; archive originals.
+- Concurrency limits: Max 1 job per type; batch size default 500 docs.
+- Rollback: Keep snapshots of affected IDs; on failure, restore originals.
+
+
+## Auth & Multitenancy
+- Authentication: `X-API-KEY` (or JWT) required for all endpoints.
+- Rate limits: Default 60 req/min per key; `429` on exceed with `Retry-After`.
+- Isolation: All reads/writes filter by `user_id` at query time; reject cross-user IDs.
+- User lifecycle: Support export/delete on request (basic GDPR consideration).
+
+
+## Security & Compliance
+- Secrets: `.env` for local only; use a secrets manager in deployed envs.
+- Transport: HTTPS/TLS recommended; do not log sensitive content.
+- Storage: Optionally encrypt embeddings and PII at rest.
+- PII: Minimize retention; configurable retention windows per layer.
+- Audit: Log auth events and admin operations with redaction.
+
+
+## Reliability
+- Retries/backoff for OpenAI/Chroma/Redis (exponential, jitter; max 3).
+- Idempotency for `POST /store` via `X-Idempotency-Key` header (optional).
+- Dead-letter: Persist failed maintenance jobs with reason and retry window.
+
+
+## Observability & Performance
+- Logging: Structured JSON; include `user_id`, request_id, latency.
+- Metrics: p95 latency (store/retrieve), cache hit rate, extraction success %, job durations.
+- Tracing: Instrument FastAPI handlers and Chroma/OpenAI calls (OpenTelemetry).
+- Targets: p95 retrieve <150ms (warm cache), <400ms (cold); store <800ms.
+
+
+## Local Orchestration (Docker Compose)
+```yaml
+version: "3.9"
+services:
+  api:
+    build: .
+    command: uvicorn src.app:app --host 0.0.0.0 --port 8080
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8080:8080"
+    depends_on:
+      - chroma
+      - redis
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+```
+
+
+## CI/CD & Environments
+- CI: Lint, type-check, tests, build image; push on main.
+- CD: Deploy to dev → stage → prod with env-specific configs.
+- Config: `.env.development`, `.env.staging`, `.env.production` (or secrets manager).
+
+
+## Governance
+- LICENSE: Choose permissive (e.g., MIT) or copyleft as needed.
+- CONTRIBUTING: PR process, coding standards, commit guidelines.
+- CODE_OF_CONDUCT: Expected behavior, reporting process.
+
+
+## Progress Tracker
+- [ ] Phase 1 — Project Setup & Models
+- [ ] Phase 2 — Extraction Engine
+- [ ] Phase 3 — Storage & Retrieval
+- [ ] Phase 4 — Auth & Interfaces
+- [ ] Phase 5 — Forgetting & Maintenance
+- [ ] Phase 6 — Security, Testing, Deployment
+- [ ] API Contracts implemented
+- [ ] Docker Compose validated locally
+- [ ] Metrics & dashboards in place
+- [ ] CI/CD pipeline green
+
  
