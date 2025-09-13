@@ -12,6 +12,10 @@ from src.schemas import (
 	StoreResponse,
 	TranscriptRequest,
 )
+from src.dependencies.chroma import get_chroma_client
+from src.dependencies.redis_client import get_redis_client
+from src.config import get_openai_api_key, get_chroma_host, get_chroma_port
+import httpx
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0")
 
@@ -19,6 +23,51 @@ app = FastAPI(title="Agentic Memories API", version="0.1.0")
 @app.get("/health")
 def health() -> dict:
 	return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/health/full")
+def health_full() -> dict:
+	checks = {}
+
+	# Env check
+	required_envs = ["OPENAI_API_KEY"]
+	missing_envs = [k for k in required_envs if (get_openai_api_key() is None and k == "OPENAI_API_KEY")]
+	checks["env"] = {"required": required_envs, "missing": missing_envs}
+
+	# ChromaDB check (active heartbeat)
+	chroma_ok = False
+	chroma_error: Optional[str] = None
+	try:
+		host = get_chroma_host()
+		port = get_chroma_port()
+		url = f"http://{host}:{port}/api/v2/heartbeat"
+		with httpx.Client(timeout=2.0) as client:
+			resp = client.get(url)
+			chroma_ok = resp.status_code == 200
+	except Exception as exc:  # pragma: no cover
+		chroma_error = str(exc)
+	checks["chroma"] = {"ok": chroma_ok, "error": chroma_error}
+
+	# Redis check (optional)
+	redis_ok = None
+	redis_error: Optional[str] = None
+	try:
+		redis_client = get_redis_client()
+		if redis_client is None:
+			redis_ok = None  # not configured
+		else:
+			redis_ok = bool(redis_client.ping())
+	except Exception as exc:  # pragma: no cover
+		redis_ok = False
+		redis_error = str(exc)
+	checks["redis"] = {"ok": redis_ok, "error": redis_error}
+
+	overall_ok = chroma_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
+	return {
+		"status": "ok" if overall_ok else "degraded",
+		"time": datetime.now(timezone.utc).isoformat(),
+		"checks": checks,
+	}
 
 
 @app.post("/v1/store", response_model=StoreResponse)

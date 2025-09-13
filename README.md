@@ -127,11 +127,22 @@ Dockerfile
 requirements.txt
 ```
 
-### Environment
-Required variables:
-- `OPENAI_API_KEY`
-- `CHROMA_HOST=localhost`, `CHROMA_PORT=8000`
-- `REDIS_URL=redis://localhost:6379/0` (optional)
+### Environment Setup (.env)
+- Copy `env.example` to `.env` and fill in values:
+```bash
+# PowerShell
+Copy-Item env.example .env
+# bash
+cp env.example .env
+```
+- Required: `OPENAI_API_KEY`
+- Optional: `CHROMA_HOST`, `CHROMA_PORT`, `REDIS_URL`
+- The app auto-loads `.env` at startup.
+
+### Configuration Wrapper
+- Centralized in `src/config.py` and auto-loads `.env` via `python-dotenv`.
+- Getters (cached): `get_openai_api_key()`, `get_chroma_host()`, `get_chroma_port()`, `get_redis_url()`.
+- Dependencies (`chroma`, `redis_client`) and `/health/full` use these getters, ensuring consistent config.
 
 ### Run
 ```bash
@@ -492,5 +503,21 @@ API will be available at http://localhost:8080, ChromaDB at http://localhost:800
 - 2025-09-11: Phase 1 started. Added `requirements.txt`, FastAPI app with `/health` (`src/app.py`), Pydantic `Memory` model (`src/models.py`), ChromaDB client helper (`src/dependencies/chroma.py`), basic health test (`tests/test_health.py`), `Dockerfile`, GitHub Actions CI, and `docker-compose.yml` for local run.
 - 2025-09-11: Added /v1 API skeleton with stubbed `POST /v1/store`, `GET /v1/retrieve`, `POST /v1/forget`, `POST /v1/maintenance`; introduced request/response schemas in `src/schemas.py`; added tests in `tests/test_api.py`.
 - 2025-09-11: Phase 1 completed. Local tests passing; OpenAPI docs available at `/docs`. CI workflow added and Compose in place for local deployment.
+- 2025-09-13: Health check verified locally at http://localhost:8080/health (status ok).
+- 2025-09-13: Stub retrieval verified at /v1/retrieve?query=hello&limit=1 (1 result returned).
+- 2025-09-13: Added comprehensive `GET /health/full` (env, ChromaDB, Redis checks) and tests.
+
+ 
+### ChromaDB Host Configuration
+- Set `CHROMA_HOST` and `CHROMA_PORT` for your environment.
+  - Example (remote host):
+    - PowerShell: `$env:CHROMA_HOST='192.168.1.220'; $env:CHROMA_PORT='8000'`
+    - bash: `export CHROMA_HOST=192.168.1.220 CHROMA_PORT=8000`
+  - Compose picks these up (defaults to `host.docker.internal:8000` if not set).
+
+### Chroma Health Check Notes
+- The app checks Chroma connectivity via `GET /api/v2/heartbeat`.
+- Ensure your Chroma server supports v2 APIs. Older servers may return 410 on `/api/v1/heartbeat`.
+- Configure `CHROMA_HOST` and `CHROMA_PORT` per environment (can be an IP like `192.168.1.220`).
 
  

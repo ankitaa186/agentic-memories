@@ -1,12 +1,15 @@
 import os
 from typing import Any
 
-import httpx
+from src.config import get_chroma_host, get_chroma_port
 
 try:
-	from chromadb import HttpClient
+	from chromadb import HttpClient, Client  # type: ignore
+	exists_httpclient = True
 except Exception:  # pragma: no cover
-	HttpClient = None  # type: ignore[assignment]
+	HttpClient = None  # type: ignore
+	Client = None  # type: ignore
+	exists_httpclient = False
 
 
 def get_chroma_client() -> Any:
@@ -16,12 +19,22 @@ def get_chroma_client() -> Any:
 	- CHROMA_HOST (default: localhost)
 	- CHROMA_PORT (default: 8000)
 	"""
-	host = os.getenv("CHROMA_HOST", "localhost")
-	port = int(os.getenv("CHROMA_PORT", "8000"))
-	base_url = f"http://{host}:{port}"
+	host = get_chroma_host()
+	port = get_chroma_port()
 
-	if HttpClient is None:  # Fallback to settings-based client if needed
-		from chromadb import Client  # type: ignore
+	# Prefer HttpClient(host=..., port=...) if available
+	if exists_httpclient and HttpClient is not None:
+		try:
+			return HttpClient(host=host, port=port)  # newer signature
+		except TypeError:
+			# Fall through to Settings-based Client
+			pass
+		except Exception:
+			# Fall through
+			pass
+
+	# Fallback to Settings-based REST client
+	try:
 		from chromadb.config import Settings  # type: ignore
 		return Client(
 			Settings(
@@ -30,7 +43,6 @@ def get_chroma_client() -> Any:
 				chroma_server_http_port=port,
 			)
 		)
-
-	http_client = httpx.Client(base_url=base_url)
-	return HttpClient(http_client=http_client)
+	except Exception:
+		return None
 

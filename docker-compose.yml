@@ -5,8 +5,8 @@ services:
     image: agentic-memories:local
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CHROMA_HOST=chroma
-      - CHROMA_PORT=8000
+      - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
+      - CHROMA_PORT=${CHROMA_PORT:-8000}
       - REDIS_URL=redis://redis:6379/0
     ports:
       - "8080:8080"

@@ -25,3 +25,11 @@ def test_retrieve_stub():
 	assert "results" in data and isinstance(data["results"], list)
 	assert "pagination" in data
 
+
+def test_health_full_structure():
+	resp = client.get("/health/full")
+	assert resp.status_code == 200
+	data = resp.json()
+	assert "status" in data
+	assert "checks" in data and isinstance(data["checks"], dict)
+
