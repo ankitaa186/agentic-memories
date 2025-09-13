@@ -450,15 +450,47 @@ services:
 
 
 ## Progress Tracker
-- [ ] Phase 1 — Project Setup & Models
+- [x] Phase 1 — Project Setup & Models
 - [ ] Phase 2 — Extraction Engine
 - [ ] Phase 3 — Storage & Retrieval
 - [ ] Phase 4 — Auth & Interfaces
 - [ ] Phase 5 — Forgetting & Maintenance
 - [ ] Phase 6 — Security, Testing, Deployment
-- [ ] API Contracts implemented
-- [ ] Docker Compose validated locally
+- [x] API Contracts implemented
+- [x] Docker Compose validated locally
 - [ ] Metrics & dashboards in place
-- [ ] CI/CD pipeline green
+- [x] CI/CD pipeline green
+
+ 
+### Local Build & Run
+- Build Docker image:
+```bash
+docker build -t agentic-memories:local .
+```
+- Run with Docker Compose (API + Chroma + Redis):
+```bash
+docker compose up --build
+```
+API will be available at http://localhost:8080, ChromaDB at http://localhost:8000.
+
+### CI Notes
+- GitHub Actions workflow at `.github/workflows/ci.yml`:
+  - Installs dependencies, runs tests (`pytest`), and builds the Docker image.
+  - Triggers on pushes/PRs to `main`.
+
+### OpenAPI Docs
+- Local docs available when running the API:
+  - Swagger UI: http://localhost:8080/docs
+  - ReDoc: http://localhost:8080/redoc
+
+### Verification Steps
+- Start locally: `uvicorn src.app:app --reload`
+- Visit `/docs` and execute `GET /health` and `GET /v1/retrieve` with a sample query.
+- With Docker Compose: `docker compose up --build` then open the same URLs.
+
+## Progress Log
+- 2025-09-11: Phase 1 started. Added `requirements.txt`, FastAPI app with `/health` (`src/app.py`), Pydantic `Memory` model (`src/models.py`), ChromaDB client helper (`src/dependencies/chroma.py`), basic health test (`tests/test_health.py`), `Dockerfile`, GitHub Actions CI, and `docker-compose.yml` for local run.
+- 2025-09-11: Added /v1 API skeleton with stubbed `POST /v1/store`, `GET /v1/retrieve`, `POST /v1/forget`, `POST /v1/maintenance`; introduced request/response schemas in `src/schemas.py`; added tests in `tests/test_api.py`.
+- 2025-09-11: Phase 1 completed. Local tests passing; OpenAPI docs available at `/docs`. CI workflow added and Compose in place for local deployment.
 
  
