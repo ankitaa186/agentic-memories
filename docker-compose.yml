@@ -3,6 +3,7 @@ services:
   api:
     build: .
     image: agentic-memories:local
+    restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
@@ -14,5 +15,6 @@ services:
       - redis
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"

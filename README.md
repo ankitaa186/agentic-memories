@@ -426,23 +426,20 @@ version: "3.9"
 services:
   api:
     build: .
-    command: uvicorn src.app:app --host 0.0.0.0 --port 8080
+    image: agentic-memories:local
+    restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CHROMA_HOST=chroma
-      - CHROMA_PORT=8000
+      - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
+      - CHROMA_PORT=${CHROMA_PORT:-8000}
       - REDIS_URL=redis://redis:6379/0
     ports:
       - "8080:8080"
     depends_on:
-      - chroma
       - redis
-  chroma:
-    image: chromadb/chroma:latest
-    ports:
-      - "8000:8000"
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
 ```
@@ -474,15 +471,21 @@ services:
 
  
 ### Local Build & Run
-- Build Docker image:
+- Recommended: helper script
+```bash
+./run_docker.sh
+```
+This will interactively create `.env` if missing (prompts with sensible defaults), auto-detect your host IP for `CHROMA_HOST` when unset, and start the stack with restart policies.
+
+- Manual build:
 ```bash
 docker build -t agentic-memories:local .
 ```
-- Run with Docker Compose (API + Chroma + Redis):
+- Manual run (API + Redis; ChromaDB external):
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
-API will be available at http://localhost:8080, ChromaDB at http://localhost:8000.
+API: http://localhost:8080. ChromaDB: `http://${CHROMA_HOST:-127.0.0.1}:${CHROMA_PORT:-8000}` (external).
 
 ### CI Notes
 - GitHub Actions workflow at `.github/workflows/ci.yml`:
@@ -506,6 +509,8 @@ API will be available at http://localhost:8080, ChromaDB at http://localhost:800
 - 2025-09-13: Health check verified locally at http://localhost:8080/health (status ok).
 - 2025-09-13: Stub retrieval verified at /v1/retrieve?query=hello&limit=1 (1 result returned).
 - 2025-09-13: Added comprehensive `GET /health/full` (env, ChromaDB, Redis checks) and tests.
+
+- 2025-09-14: Docker updates for external ChromaDB: added `restart: unless-stopped`, removed Chroma service, kept Redis, and introduced `run_docker.sh` (interactive `.env` creation with defaults, host IP auto-detection for `CHROMA_HOST`, compose up/build).
 
  
 ### ChromaDB Host Configuration
