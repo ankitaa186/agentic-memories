@@ -14,7 +14,7 @@ from src.services.retrieval import search_memories
 from src.schemas import TranscriptRequest, Message
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("agentic_memories.memory_context")
 
 
 def get_relevant_existing_memories(
@@ -38,6 +38,7 @@ def get_relevant_existing_memories(
     
     # Extract key topics from the conversation for context retrieval
     context_queries = _extract_context_queries(request.history)
+    logger.info("[ctx.relevant] user_id=%s queries=%s", request.user_id, context_queries)
     
     all_memories = []
     seen_ids = set()
@@ -52,6 +53,7 @@ def get_relevant_existing_memories(
                 limit=max_memories // len(context_queries) + 1,
                 offset=0
             )
+            logger.info("[ctx.search] user_id=%s q='%s' got=%s", request.user_id, query, len(memories))
             
             # Add unique memories that meet similarity threshold
             for memory in memories:
@@ -61,11 +63,12 @@ def get_relevant_existing_memories(
                     seen_ids.add(memory["id"])
                     
         except Exception as e:
-            logger.warning(f"Failed to retrieve memories for query '{query}': {e}")
+            logger.warning(f"[ctx.search.error] q='{query}' error={e}")
             continue
     
     # Sort by relevance score and return top memories
     all_memories.sort(key=lambda x: x.get("score", 0), reverse=True)
+    logger.info("[ctx.result] user_id=%s returned=%s", request.user_id, len(all_memories[:max_memories]))
     return all_memories[:max_memories]
 
 

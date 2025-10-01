@@ -156,9 +156,9 @@ def get_max_memories_per_request() -> int:
 @lru_cache(maxsize=1)
 def get_extraction_timeouts_ms() -> int:
 	try:
-		return int(os.getenv("EXTRACTION_TIMEOUT_MS", "8000"))
+		return int(os.getenv("EXTRACTION_TIMEOUT_MS", "180000"))
 	except ValueError:
-		return 8000
+		return 180000
 
 
 @lru_cache(maxsize=1)
@@ -179,3 +179,19 @@ def get_disable_heuristics() -> bool:
 	# When true, heuristic extraction is hard-disabled (used to force LLM-only).
 	# Tests can override via env to re-enable heuristics.
 	return os.getenv("EXTRACTION_DISABLE_HEURISTICS", "true").lower() in {"1", "true", "yes", "on"}
+
+
+@lru_cache(maxsize=1)
+def is_scheduled_maintenance_enabled() -> bool:
+	"""Control daily scheduled maintenance (compaction) via env.
+
+	Primary flag: SCHEDULED_MAINTENANCE_ENABLED (default: true)
+	Legacy alias supported: SCHEDULED_EXTRACTION_ENABLED
+	"""
+	val = os.getenv("SCHEDULED_MAINTENANCE_ENABLED")
+	if val is None:
+		alias = os.getenv("SCHEDULED_EXTRACTION_ENABLED")
+		if alias is None:
+			return True
+		return alias.strip().lower() in {"1", "true", "yes", "on"}
+	return val.strip().lower() in {"1", "true", "yes", "on"}

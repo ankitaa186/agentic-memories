@@ -56,6 +56,7 @@ class Pagination(BaseModel):
 class RetrieveResponse(BaseModel):
 	results: List[RetrieveItem]
 	pagination: Pagination
+	finance: Optional["FinanceAggregate"] = None
 
 
 class ForgetRequest(BaseModel):
@@ -92,4 +93,52 @@ class StructuredRetrieveResponse(BaseModel):
 	relationships: List[RetrieveItem] = Field(default_factory=list)
 	learning_journal: List[RetrieveItem] = Field(default_factory=list)
 	other: List[RetrieveItem] = Field(default_factory=list)
+	finance: Optional["FinanceAggregate"] = None
+
+
+# Portfolio summary
+class PortfolioHolding(BaseModel):
+	asset_type: Optional[Literal["public_equity", "private_equity", "etf", "mutual_fund", "cash", "bond", "crypto", "other"]] = None
+	ticker: Optional[str] = None
+	name: Optional[str] = None
+	shares: Optional[float] = None
+	avg_price: Optional[float] = None
+	current_value: Optional[float] = None
+	cost_basis: Optional[float] = None
+	ownership_pct: Optional[float] = None
+	position: Optional[Literal["long", "short"]] = None
+	intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
+	target_price: Optional[float] = None
+	stop_loss: Optional[float] = None
+	time_horizon: Optional[Literal["days", "weeks", "months", "years"]] = None
+	notes: Optional[str] = None
+	source_memory_id: Optional[str] = None
+	updated_at: Optional[datetime] = None
+
+
+class PortfolioSummaryResponse(BaseModel):
+	user_id: str
+	holdings: List[PortfolioHolding] = Field(default_factory=list)
+	counts_by_asset_type: dict[str, int] = Field(default_factory=dict)
+
+
+class FinanceGoal(BaseModel):
+    text: str
+    tickers: List[str] = Field(default_factory=list)
+    intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
+    time_horizon: Optional[Literal["days", "weeks", "months", "years"]] = None
+    target_price: Optional[float] = None
+    risk_tolerance: Optional[Literal["low", "medium", "high"]] = None
+    concern: Optional[str] = None
+    source_memory_id: Optional[str] = None
+
+
+class FinanceAggregate(BaseModel):
+    portfolio: PortfolioSummaryResponse
+    goals: List[FinanceGoal] = Field(default_factory=list)
+
+
+# Forward refs resolution
+RetrieveResponse.model_rebuild()
+StructuredRetrieveResponse.model_rebuild()
 

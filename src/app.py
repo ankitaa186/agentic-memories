@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import logging
 import os
 from typing import List, Optional
+import json
 
 from fastapi import FastAPI, Query, HTTPException, Header, Cookie, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +19,13 @@ from src.schemas import (
 	TranscriptRequest,
 	StructuredRetrieveRequest,
 	StructuredRetrieveResponse,
+    PortfolioSummaryResponse,
+    FinanceAggregate,
+    FinanceGoal,
 )
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.redis_client import get_redis_client
-from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider
+from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled
 from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url
 import httpx
@@ -30,15 +34,104 @@ from src.services.storage import upsert_memories
 from src.services.retrieval import search_memories
 from src.services.extract_utils import _call_llm_json
 from src.dependencies.cloudflare_access import verify_cf_access_token, extract_token_from_headers
+from src.dependencies.redis_client import get_redis_client
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+except Exception:
+    BackgroundScheduler = None  # type: ignore
+from datetime import datetime as _dt, timezone as _tz
+from src.services.forget import run_compaction_for_user
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0")
+# Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
+_scheduler: Optional[BackgroundScheduler] = None
+
+def _run_daily_compaction() -> None:
+    r = get_redis_client()
+    if r is None:
+        logger.info("[maint.compaction] skipped: redis unavailable")
+        return
+    # Look at yesterday's activity set
+    day_key = (_dt.now(_tz.utc)).strftime("%Y%m%d")
+    # Run for yesterday too in case of clock skew
+    keys = [f"recent_users:{day_key}"]
+    users: set[str] = set()
+    for k in keys:
+        try:
+            members = r.smembers(k) or []
+            users.update(members)
+        except Exception as exc:
+            logger.info("[maint.compaction] failed to read %s: %s", k, exc)
+    if not users:
+        logger.info("[maint.compaction] no active users in last 24h")
+        return
+    # TODO: enqueue compaction graph per user (placeholder log)
+    for uid in sorted(users):
+        try:
+            stats = run_compaction_for_user(uid)
+            logger.info("[maint.compaction.done] user_id=%s stats=%s", uid, stats)
+        except Exception as exc:
+            logger.info("[maint.compaction.error] user_id=%s %s", uid, exc)
+
+def _start_scheduler() -> None:
+    global _scheduler
+    try:
+        if _scheduler is None and is_scheduled_maintenance_enabled() and BackgroundScheduler is not None:
+            _scheduler = BackgroundScheduler(timezone="UTC")  # type: ignore
+            _scheduler.add_job(_run_daily_compaction, "cron", hour=0, minute=0, id="daily_compaction")
+            _scheduler.start()
+            logger.info("[sched] started APScheduler with daily compaction job at 00:00 UTC")
+        elif _scheduler is None:
+            if not is_scheduled_maintenance_enabled():
+                logger.info("[sched] disabled via env; not starting scheduler")
+            else:
+                logger.info("[sched] APScheduler not installed; scheduled jobs disabled")
+    except Exception as exc:
+        logger.info("[sched] failed to start: %s", exc)
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _start_scheduler()
 logger = logging.getLogger("agentic_memories.api")
 if not logger.handlers:
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     logger.addHandler(_handler)
-logger.setLevel(logging.INFO)
-logger.propagate = False
+_level_name = getenv("LOG_LEVEL", "INFO").upper()
+try:
+    _level = getattr(logging, _level_name, logging.INFO)
+except Exception:
+    _level = logging.INFO
+logger.setLevel(_level)
+logger.propagate = True
+
+# Root logger fallback (so module loggers without handlers still emit)
+_root = logging.getLogger()
+if not _root.handlers:
+    _root_handler = logging.StreamHandler()
+    _root_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+    _root.addHandler(_root_handler)
+    _root.setLevel(_level)
+
+# Request/response logging middleware (minimal, no bodies)
+import time as _time
+
+@app.middleware("http")
+async def _log_requests(request: Request, call_next):
+    start = _time.perf_counter()
+    path = request.url.path
+    method = request.method
+    client = request.client.host if request.client else "-"
+    try:
+        response = await call_next(request)
+        status = getattr(response, "status_code", 200)
+    except Exception as exc:  # pragma: no cover
+        elapsed_ms = int(((_time.perf_counter() - start) * 1000))
+        logger.exception("[http] %s %s error=%s client=%s latency_ms=%s", method, path, exc.__class__.__name__, client, elapsed_ms)
+        raise
+    elapsed_ms = int(((_time.perf_counter() - start) * 1000))
+    logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
+    return response
 # Auth dependency: validate Cloudflare Access JWT if provided
 def get_identity(
     cf_access_jwt_assertion: Optional[str] = Header(default=None),
@@ -177,7 +270,7 @@ def health_full() -> dict:
 		host = get_chroma_host()
 		port = get_chroma_port()
 		url = f"http://{host}:{port}/api/v2/heartbeat"
-		with httpx.Client(timeout=2.0) as client:
+		with httpx.Client(timeout=180.0) as client:
 			resp = client.get(url)
 			chroma_ok = resp.status_code == 200
 	except Exception as exc:  # pragma: no cover
@@ -220,6 +313,11 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 		redis = get_redis_client()
 		if redis is not None:
 			redis.incr(f"mem:ns:{body.user_id}")
+			# Record daily activity for compaction trigger (UTC date key)
+			day_key = datetime.now(timezone.utc).strftime("%Y%m%d")
+			redis.sadd(f"recent_users:{day_key}", body.user_id)
+			# Also track all users set
+			redis.sadd("all_users", body.user_id)
 	except Exception:
 		pass
 	items = [
@@ -272,7 +370,76 @@ def retrieve(
 		)
 		for r in results
 	]
-	return RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total})
+	# Build finance aggregate (lightweight) from current page results
+	fin_holdings: List[dict] = []
+	counts_by_asset_type: dict[str, int] = {}
+	goals: List[FinanceGoal] = []
+	for r in results:
+		meta = r.get("metadata", {})
+		p = meta.get("portfolio")
+		try:
+			if isinstance(p, str):
+				p = json.loads(p)
+		except Exception:
+			p = None
+		if isinstance(p, dict):
+			base = {
+				"asset_type": None,
+				"ticker": p.get("ticker"),
+				"name": None,
+				"shares": p.get("shares"),
+				"avg_price": p.get("avg_price"),
+				"position": p.get("position"),
+				"intent": p.get("intent"),
+				"target_price": p.get("target_price"),
+				"stop_loss": p.get("stop_loss"),
+				"time_horizon": p.get("time_horizon"),
+				"notes": p.get("notes"),
+				"source_memory_id": r.get("id"),
+				"updated_at": meta.get("timestamp"),
+			}
+			h = p.get("holdings")
+			if isinstance(h, list) and h:
+				for one in h:
+					if not isinstance(one, dict):
+						continue
+					row = {
+						**base,
+						"asset_type": one.get("asset_type"),
+						"ticker": one.get("ticker") or base.get("ticker"),
+						"name": one.get("name"),
+						"shares": one.get("shares", base.get("shares")),
+						"avg_price": one.get("avg_price", base.get("avg_price")),
+						"ownership_pct": one.get("ownership_pct"),
+					}
+					fin_holdings.append(row)
+					at = row.get("asset_type") or "unknown"
+					counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+			else:
+				if base.get("ticker") or base.get("shares"):
+					fin_holdings.append(base)
+					at = base.get("asset_type") or ("public_equity" if base.get("ticker") else "unknown")
+					counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+
+		# Extract finance goals hints from tags or content
+		tags_json = meta.get("tags")
+		tags: List[str] = []
+		try:
+			if isinstance(tags_json, str):
+				tags = json.loads(tags_json)
+			elif isinstance(tags_json, list):
+				tags = [str(t) for t in tags_json]
+		except Exception:
+			tags = []
+		if any(t for t in tags if t.startswith("ticker:")) or "finance" in tags:
+			goals.append(FinanceGoal(text=r.get("content", ""), source_memory_id=r.get("id")))
+
+	finance_agg = FinanceAggregate(
+		portfolio=PortfolioSummaryResponse(user_id=user_id, holdings=fin_holdings, counts_by_asset_type=counts_by_asset_type),
+		goals=goals,
+	) if (fin_holdings or goals) else None
+
+	return RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total}, finance=finance_agg)
 
 
 # Advanced structured retrieval endpoint
@@ -283,7 +450,7 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 
 	# Pull ALL memories for the user (paginate with empty query)
 	all_results: List[dict] = []
-	batch_limit = max(100, body.limit)
+	batch_limit = max(10000, body.limit)
 	offset = 0
 	while True:
 		batch, _ = search_memories(user_id=body.user_id, query="", filters={}, limit=batch_limit, offset=offset)
@@ -305,15 +472,29 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 		for r in all_results
 	]
 
-	SYSTEM_PROMPT = (
-		"You are a retrieval organizer for a personal memory system.\n"
-		"You will be given an optional user query and ALL candidate memories for that user.\n"
-		"If the query is present, select and categorize the most relevant memories into these buckets: \n"
-		"- emotions\n- behaviors\n- personal\n- professional\n- habits\n- skills_tools\n- projects\n- relationships\n- learning_journal\n- other\n"
-		"If the query is empty, categorize candidates into the buckets based on their content and metadata (do not drop items unless they fit nowhere; use 'other').\n"
-		"Return strict JSON with keys exactly as above. For each key, return an array of memory ids from the candidates (do not invent ids).\n"
-		"Favor precision but include relevant context. Do not exceed 25 items per category."
-	)
+	SYSTEM_PROMPT = """
+	You are a retrieval organizer for a personal memory system.
+	You will be given an optional user query and ALL candidate memories for that user.
+	If the query is present, select and categorize the most relevant memories into these buckets: 
+	- emotions
+	- behaviors
+	- personal
+	- professional
+	- habits
+	- skills_tools
+	- projects
+	- relationships
+	- learning_journal
+	- other
+	Additionally, build a finance aggregate that summarizes portfolio holdings and finance goals if present.
+	Finance aggregate JSON schema (keys): {"portfolio_ids": string[], "goal_ids": string[]}.
+	- portfolio_ids: ids of memories containing metadata.portfolio or tags including 'ticker:'
+	- goal_ids: ids of memories describing finance goals, risk tolerance, targets, watchlists.
+	If the query is empty, categorize candidates into the buckets based on their content and metadata (do not drop items unless they fit nowhere; use 'other').
+	Return strict JSON with keys exactly as above PLUS a top-level key 'finance' with shape {portfolio_ids:[], goal_ids:[]}. For each category key, return an array of memory ids from the candidates (do not invent ids).
+	Favor precision but include relevant context. Do not exceed 25 items per category.
+	"""
+
 	payload = {"query": (body.query or ""), "candidates": candidates}
 	resp = _call_llm_json(SYSTEM_PROMPT, payload)
 	if not isinstance(resp, dict):
@@ -339,6 +520,83 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 			)
 		return items
 
+	# Build finance aggregate from ids if present
+	fin_ids = (resp.get("finance") or {}) if isinstance(resp, dict) else {}
+	portfolio_ids = list(fin_ids.get("portfolio_ids", [])) if isinstance(fin_ids, dict) else []
+	goal_ids = list(fin_ids.get("goal_ids", [])) if isinstance(fin_ids, dict) else []
+
+	id_to_item2 = {r["id"]: r for r in all_results}
+	# Portfolio holdings summary from selected ids
+	fin_holdings2: List[dict] = []
+	counts_by_asset_type2: dict[str, int] = {}
+	for _id in portfolio_ids:
+		src = id_to_item2.get(_id) or {}
+		meta = src.get("metadata", {})
+		p = meta.get("portfolio")
+		try:
+			if isinstance(p, str):
+				p = json.loads(p)
+		except Exception:
+			p = None
+		if isinstance(p, dict):
+			base = {
+				"asset_type": None,
+				"ticker": p.get("ticker"),
+				"name": None,
+				"shares": p.get("shares"),
+				"avg_price": p.get("avg_price"),
+				"position": p.get("position"),
+				"intent": p.get("intent"),
+				"target_price": p.get("target_price"),
+				"stop_loss": p.get("stop_loss"),
+				"time_horizon": p.get("time_horizon"),
+				"notes": p.get("notes"),
+				"source_memory_id": src.get("id"),
+				"updated_at": meta.get("timestamp"),
+			}
+			h = p.get("holdings")
+			if isinstance(h, list) and h:
+				for one in h:
+					if not isinstance(one, dict):
+						continue
+					row = {
+						**base,
+						"asset_type": one.get("asset_type"),
+						"ticker": one.get("ticker") or base.get("ticker"),
+						"name": one.get("name"),
+						"shares": one.get("shares", base.get("shares")),
+						"avg_price": one.get("avg_price", base.get("avg_price")),
+						"ownership_pct": one.get("ownership_pct"),
+					}
+					fin_holdings2.append(row)
+					at = row.get("asset_type") or "unknown"
+					counts_by_asset_type2[at] = counts_by_asset_type2.get(at, 0) + 1
+			else:
+				if base.get("ticker") or base.get("shares"):
+					fin_holdings2.append(base)
+					at = base.get("asset_type") or ("public_equity" if base.get("ticker") else "unknown")
+					counts_by_asset_type2[at] = counts_by_asset_type2.get(at, 0) + 1
+
+	goals_items: List[RetrieveItem] = []
+	for _id in goal_ids:
+		src = id_to_item2.get(_id)
+		if not src:
+			continue
+		goals_items.append(
+			RetrieveItem(
+				id=src["id"],
+				content=src["content"],
+				layer=src["metadata"].get("layer", "semantic"),
+				type=src["metadata"].get("type", "explicit"),
+				score=float(src.get("score", 0.0)),
+			)
+		)
+
+	finance_agg2 = FinanceAggregate(
+		portfolio=PortfolioSummaryResponse(user_id=body.user_id, holdings=fin_holdings2, counts_by_asset_type=counts_by_asset_type2),
+		goals=[FinanceGoal(text=i.content, source_memory_id=i.id) for i in goals_items],
+	) if (portfolio_ids or goal_ids) else None
+
 	return StructuredRetrieveResponse(
 		emotions=build_items(list(resp.get("emotions", []))),
 		behaviors=build_items(list(resp.get("behaviors", []))),
@@ -350,6 +608,7 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 		relationships=build_items(list(resp.get("relationships", []))),
 		learning_journal=build_items(list(resp.get("learning_journal", []))),
 		other=build_items(list(resp.get("other", []))),
+		finance=finance_agg2,
 	)
 
 
@@ -360,4 +619,119 @@ def forget(body: ForgetRequest) -> dict:
 
 @app.post("/v1/maintenance", response_model=MaintenanceResponse)
 def maintenance(body: MaintenanceRequest) -> MaintenanceResponse:
-	return MaintenanceResponse(jobs_started=body.jobs or ["compaction"], status="running")
+    jobs = body.jobs or ["compaction"]
+    if "compaction" in jobs:
+        try:
+            _run_daily_compaction()
+        except Exception as exc:
+            logger.info("[maint.api] compaction trigger failed: %s", exc)
+    return MaintenanceResponse(jobs_started=jobs, status="running")
+
+
+@app.get("/v1/portfolio/summary", response_model=PortfolioSummaryResponse)
+def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200, ge=1, le=1000)) -> PortfolioSummaryResponse:
+    # Fetch a broad set of finance-related memories and aggregate portfolio metadata
+    # Strategy: pull without query to get all, then filter client-side for metadata.portfolio
+    # Pagination in chunks to cover more items than default limits
+    all_results: List[dict] = []
+    offset = 0
+    batch_limit = min(200, limit)
+    while len(all_results) < limit:
+        batch, _ = search_memories(user_id=user_id, query="", filters={}, limit=batch_limit, offset=offset)
+        if not batch:
+            break
+        all_results.extend(batch)
+        if len(batch) < batch_limit:
+            break
+        offset += batch_limit
+
+    # Aggregate holdings
+    holdings: List[dict] = []
+    counts_by_asset_type: dict[str, int] = {}
+    for item in all_results:
+        meta = item.get("metadata") or {}
+        portfolio_raw = meta.get("portfolio")
+        try:
+            # Handle JSON-string serialized fields
+            if isinstance(portfolio_raw, str):
+                portfolio = json.loads(portfolio_raw)
+            else:
+                portfolio = portfolio_raw
+        except Exception:
+            portfolio = None
+        if not portfolio or not isinstance(portfolio, dict):
+            continue
+
+        base = {
+            "asset_type": None,
+            "ticker": portfolio.get("ticker"),
+            "name": None,
+            "shares": portfolio.get("shares"),
+            "avg_price": portfolio.get("avg_price"),
+            "current_value": portfolio.get("current_value"),
+            "cost_basis": portfolio.get("cost_basis"),
+            "ownership_pct": portfolio.get("ownership_pct"),
+            "position": portfolio.get("position"),
+            "intent": portfolio.get("intent"),
+            "target_price": portfolio.get("target_price"),
+            "stop_loss": portfolio.get("stop_loss"),
+            "time_horizon": portfolio.get("time_horizon"),
+            "notes": portfolio.get("notes"),
+            "source_memory_id": item.get("id"),
+            "updated_at": meta.get("timestamp"),
+        }
+
+        # If holdings array exists, expand it; otherwise treat base as a single holding (if ticker or shares present)
+        hlist = portfolio.get("holdings")
+        if isinstance(hlist, list) and hlist:
+            for h in hlist:
+                if not isinstance(h, dict):
+                    continue
+                row = {
+                    **base,
+                    "asset_type": h.get("asset_type"),
+                    "ticker": h.get("ticker") or base.get("ticker"),
+                    "name": h.get("name"),
+                    "shares": h.get("shares", base.get("shares")),
+                    "avg_price": h.get("avg_price", base.get("avg_price")),
+                    "current_value": h.get("current_value", base.get("current_value")),
+                    "cost_basis": h.get("cost_basis", base.get("cost_basis")),
+                    "ownership_pct": h.get("ownership_pct", base.get("ownership_pct")),
+                    "notes": h.get("notes", base.get("notes")),
+                }
+                holdings.append(row)
+                at = row.get("asset_type") or "unknown"
+                counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+        else:
+            if base.get("ticker") or base.get("shares"):
+                holdings.append(base)
+                at = base.get("asset_type") or ("public_equity" if base.get("ticker") else "unknown")
+                counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+
+    # Sort holdings by ticker then name for stable output
+    holdings.sort(key=lambda x: (str(x.get("ticker") or ""), str(x.get("name") or "")))
+
+    # Shape into response model
+    # Note: Pydantic will coerce the list of dicts into PortfolioHolding items
+    return PortfolioSummaryResponse(user_id=user_id, holdings=holdings[:limit], counts_by_asset_type=counts_by_asset_type)
+
+
+@app.post("/v1/maintenance/compact_all", response_model=MaintenanceResponse)
+def compact_all_users() -> MaintenanceResponse:
+    r = get_redis_client()
+    users: List[str] = []
+    try:
+        if r is not None:
+            users = list(r.smembers("all_users") or [])
+    except Exception as exc:
+        logger.info("[maint.compact_all] failed to read all_users: %s", exc)
+    if not users:
+        logger.info("[maint.compact_all] no users found")
+        return MaintenanceResponse(jobs_started=["compaction-none"], status="running")
+    for uid in sorted(users):
+        try:
+            stats = run_compaction_for_user(uid)
+            logger.info("[maint.compaction.done] user_id=%s (manual) stats=%s", uid, stats)
+        except Exception as exc:
+            logger.info("[maint.compaction.error] user_id=%s (manual) %s", uid, exc)
+    return MaintenanceResponse(jobs_started=["compaction_all"], status="running")

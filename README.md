@@ -83,7 +83,8 @@ pip install -r requirements.txt
 - Required LLM config:
   - `LLM_PROVIDER` = `openai` | `xai` (alias `grok` accepted)
   - If `openai`: `OPENAI_API_KEY` (default model: `gpt-4o` unless `EXTRACTION_MODEL` set)
-  - If `xai`: `XAI_API_KEY` (default model: `grok-4-fast-reasoning` unless `EXTRACTION_MODEL` set). Optional: `XAI_BASE_URL` to override default endpoint.
+  - If `xai`: `XAI_API_KEY` (default model: `grok-4-fast-reasoning` unless `EXTRACTION_MODEL` set). Optional: `XAI_BASE_URL` (default `https://api.x.ai/v1`).
+  - Timeouts: `EXTRACTION_TIMEOUT_MS` default `180000` (3 minutes). xAI calls enforce a minimum of 180 seconds.
 - External ChromaDB (recommended for local):
   - `CHROMA_HOST=localhost`
   - `CHROMA_PORT=8000`
@@ -134,7 +135,7 @@ Stateless AI agents easily lose context across sessions. This project introduces
 ## Tech Stack
 - Backend: Python 3.12+, FastAPI, Uvicorn
 - Vector DB: ChromaDB (localhost:8000) for all layers (incl. short‑term persistence)
-- AI/ML: OpenAI (embeddings, extraction, summarization), LangChain
+- AI/ML: OpenAI and xAI (Grok) for LLMs; LangChain; LangGraph for state machines
 - Cache: Redis (optional; accelerates short‑term retrieval)
 - Scheduling: APScheduler (maintenance jobs)
 - Security: API keys/JWT
@@ -152,6 +153,7 @@ Phase 2 extraction pipeline (LLM-only) now uses a LangGraph state machine:
 - Nodes: worthiness → extraction → end
 - Worthiness: classify if memory-worthy (aggressive recall allowed)
 - Extraction: produce atomic memories with tags and metadata; we normalize outputs (prefix "User ", present tense, preserve temporal phrases) and derive a `next_action` memory when a project provides one.
+Finance/Portfolio-aware extraction (2025‑10‑01): prompts extended to extract finance intent and portfolio structure. New `portfolio` object supports fields like `ticker`, `intent` (buy/sell/hold/watch), `position`, `shares`, `avg_price`, `target_price`, `stop_loss`, `time_horizon`, `concern`, `goal`, `risk_tolerance`, `notes`, and `holdings[]` (public/private equity, ETFs, funds, bonds, crypto, cash). Worthiness rules prioritize stock/trading content; tags include `finance` and `ticker:<SYMBOL>`.
 
 ChromaDB client example (HTTP server on localhost:8000):
 ```python
@@ -313,7 +315,7 @@ Tasks:
 - Deployment: `vite build`; serve static assets from FastAPI at `/static/ui` or via separate Nginx container. Add compose override example.
 
 Deliverables:
-- Playwright E2E suite covering Health, Retrieve (empty & non-empty query), Store, Structured.
+- Playwright E2E suite covering Health, Retrieve (empty and non-empty), Store, Structured.
 - Documented deployment options and CI integration.
 
 Cursor Prompt:
@@ -428,7 +430,87 @@ Dependencies: Phases 1-4.
 
 Deliverables: `services/forget.py`; Tests for pruning accuracy; Scheduled jobs running.
 
-Cursor Prompt: "Implement a forget module with APScheduler jobs for TTL expiration (prioritize short-term cleanup), short-to-long promotion via summarization, long-term compaction, and adaptive implicit pattern pruning using OpenAI prompts."
+#### Maintenance: LangGraph Compaction Graph (Design)
+Objective: Prune, deduplicate, recategorize, and promote/demote memories using a resumable LangGraph pipeline, with finance-aware consolidation.
+
+State:
+- `user_id`, `dry_run`, `page_offset`, `page_size`
+- `candidates: List[Memory]`
+- `clusters_by_bucket: Dict[bucket, List[Memory]]`
+- `dedup_actions`, `recat_actions`, `finance_actions`, `promote_actions`, `prune_actions`, `upserts`, `deletes`
+- `report`
+
+Buckets:
+- `emotions`, `behaviors`, `personal`, `professional`, `habits`, `skills_tools`, `projects`, `relationships`, `learning_journal`, `other`, `finance`
+
+Nodes (in order):
+- `load_candidates`: page memories (age/TTL filters)
+- `ensure_embeddings`: backfill/re-embed changed items
+- `bucketize`: heuristics; mark `uncertain`
+- `recategorize_llm`: LLM pass for `uncertain`/misfiled
+- `deduplicate_bucket` (parallel map): cluster by cosine, select canonical, merge tags/metadata, mark dups
+- `finance_consolidate`: group by `ticker`, consolidate holdings/goals, collapse chatter, preserve sources
+- `ttl_and_promotion`: expire/prune, promote enduring short-term to semantic, demote/snapshot outdated goals
+- `summarize_long_term`: cluster old semantic → long-term summaries; archive originals
+- `write_changes`: upsert edits/new, delete pruned, bump cache namespace (skip if `dry_run`)
+- `paginate_or_end`: next page or `audit_report`
+- `audit_report`: metrics and sample diffs
+
+Parallelism:
+- Parallel over buckets; inside finance, parallel over tickers.
+
+Thresholds (tunable):
+- duplicate: cosine ≥ 0.88
+- promotion window: short-term age ≥ N days and usage_count ≥ M
+- prune low-signal: confidence < 0.3 and usage_count == 0 (except finance)
+
+Finance guardrails:
+- never drop last canonical per ticker; maintain `source_memory_id`s and timestamps
+- coalesce repeated watchlist chatter into one canonical `intent=watch` per ticker
+
+Triggers & Scheduling:
+- Daily at UTC midnight; run only for users active in last 24h
+- On `/v1/store`, add `user_id` to Redis set `recent_users:<UTC_YYYYMMDD>`; scheduler reads set and enqueues graph
+- Fallback (no Redis): metadata check via Chroma where `timestamp` ≥ now−24h
+
+Safety:
+- `dry_run` shows diff previews and counts; max ops per run; per-user rate limits; resumable checkpoints
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_compaction_graph():
+    g = StateGraph(dict)
+    g.add_node("load_candidates", load_candidates)
+    g.add_node("ensure_embeddings", ensure_embeddings)
+    g.add_node("bucketize", bucketize)
+    g.add_node("recategorize_llm", recategorize_llm)
+    g.add_node("dedup_buckets", dedup_buckets_parallel)
+    g.add_node("finance_consolidate", finance_consolidate)
+    g.add_node("ttl_and_promotion", ttl_and_promotion)
+    g.add_node("summarize_long_term", summarize_long_term)
+    g.add_node("write_changes", write_changes)
+    g.add_node("paginate_or_end", paginate_or_end)
+    g.add_node("audit_report", audit_report)
+
+    g.set_entry_point("load_candidates")
+    g.add_edge("load_candidates", "ensure_embeddings")
+    g.add_edge("ensure_embeddings", "bucketize")
+    g.add_edge("bucketize", "recategorize_llm")
+    g.add_edge("recategorize_llm", "dedup_buckets")
+    g.add_edge("dedup_buckets", "finance_consolidate")
+    g.add_edge("finance_consolidate", "ttl_and_promotion")
+    g.add_edge("ttl_and_promotion", "summarize_long_term")
+    g.add_edge("summarize_long_term", "write_changes")
+    g.add_edge("write_changes", "paginate_or_end")
+    g.add_conditional_edges(
+        "paginate_or_end",
+        lambda s: "load_candidates" if s.get("has_more") else "audit_report",
+        {"load_candidates": "load_candidates", "audit_report": "audit_report"},
+    )
+    g.add_edge("audit_report", END)
+    return g
+```
 
 ### Phase 6: Security, Testing, Optimization, and Deployment (2-3 days)
 Objective: Polish for production readiness.
@@ -522,7 +604,13 @@ Deliverables: Test suite; Dockerfile; README updates with run instructions.
 {
   "emotions": [], "behaviors": [], "personal": [], "professional": [],
   "habits": [], "skills_tools": [], "projects": [], "relationships": [],
-  "learning_journal": [], "other": [ { "id": "mem_01", "content": "...", ... } ]
+  "learning_journal": [], "other": [ { "id": "mem_01", "content": "...", ... } ],
+  "finance": {
+    "portfolio": {"user_id": "user-123", "holdings": [
+      {"asset_type": "public_equity", "ticker": "TSLA", "shares": 10}
+    ], "counts_by_asset_type": {"public_equity": 1}},
+    "goals": [ { "text": "User watches TSLA for a pullback.", "source_memory_id": "mem_xyz" } ]
+  }
 }
 ```
 
@@ -590,6 +678,10 @@ curl -s -X POST http://localhost:8080/v1/retrieve/structured \
   - `relevance_score: float`
   - `usage_count: int`
   - `tags: string (JSON-serialized list)`
+  - `project: string (JSON)`
+  - `relationship: string (JSON)`
+  - `learning_journal: string (JSON)`
+  - `portfolio: string (JSON)`
 
 ### Indexing & Filters
 - Filter by `user_id` for isolation; combine with `layer`/`type` as needed.
@@ -611,7 +703,7 @@ curl -s -X POST http://localhost:8080/v1/retrieve/structured \
 ## Scheduler Jobs (APScheduler)
 - `ttl_cleanup` (every 15m): Remove expired short-term docs from ChromaDB; evict cache.
 - `promotion` (daily): Summarize frequently used short-term into long-term; preserve provenance.
-- `compaction` (weekly): Cluster long-term; LLM summarize clusters; archive originals.
+- `compaction` (daily, conditional): Run at UTC midnight only for users who created memories in the last 24 hours. `/v1/store` should add `user_id` to `recent_users:<UTC_YYYYMMDD>` in Redis; the scheduler reads this set and enqueues LangGraph compaction per user. Fallback if Redis unavailable: sample-check via Chroma `timestamp` ≥ now−24h.
 - Concurrency limits: Max 1 job per type; batch size default 500 docs.
 - Rollback: Keep snapshots of affected IDs; on failure, restore originals.
 
@@ -852,6 +944,13 @@ curl -s -X POST http://localhost:8080/v1/store \
   - Chroma v2 `get`: request supported fields (`documents`, `metadatas`); IDs are mapped from the server response.
 
 - 2025-09-15: Enhanced Memory Extraction with Context Awareness. Added context-aware memory extraction that considers existing memories during extraction to avoid duplicates and capture distinct new preferences. Key improvements:
+ - 2025-10-01: Finance portfolio analyzer, provider options, and timeouts
+   - LLM provider configurability: `LLM_PROVIDER=openai|xai`, added `XAI_API_KEY` and optional `XAI_BASE_URL`.
+   - Extraction prompts: added finance/portfolio schema (`portfolio` with `holdings[]`) and worthiness rules prioritizing stock/trading content with `ticker:<SYMBOL>` tags.
+   - Retrieval: `GET /v1/retrieve` and `POST /v1/retrieve/structured` now return a `finance` aggregate (portfolio summary + goals) when applicable.
+   - New endpoint: `GET /v1/portfolio/summary` aggregates holdings (public & private) and counts by asset type.
+   - Timeouts: increased default `EXTRACTION_TIMEOUT_MS` to 180000 (3 minutes); xAI path enforces 180s min; raised httpx timeouts for Chroma heartbeat and CF JWKS.
+   - Scheduler: documented daily-compaction trigger at UTC midnight for users active in the last 24 hours using a Redis activity set.
   - **Memory Context Retrieval**: Created `src/services/memory_context.py` with functions to retrieve relevant existing memories based on conversation topics
   - **Enhanced Prompts**: Updated extraction prompts to handle existing memory context and extract distinct preferences as separate atomic items
   - **Mandatory user_id**: Made `user_id` required for all retrieval operations (GET `/v1/retrieve`)

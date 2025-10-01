@@ -141,7 +141,7 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 							{"role": "user", "content": json.dumps(user_payload)},
 						],
 						response_format=None if expect_array else {"type": "json_object"},
-						timeout=max(timeout_s, 30),
+						timeout=max(timeout_s, 180),
 					)
 					text = resp.choices[0].message.content or ("[]" if expect_array else "{}")
 					logger.info(

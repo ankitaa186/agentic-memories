@@ -55,7 +55,7 @@ class V2ChromaClient:
 		headers = {**self.headers, "Content-Type": "application/json"}
 		
 		try:
-			with httpx.Client(timeout=10.0) as client:
+			with httpx.Client(timeout=180.0) as client:
 				if method.upper() == "GET":
 					resp = client.get(url, headers=headers)
 				elif method.upper() == "POST":
@@ -153,6 +153,19 @@ class V2Collection:
 			"metadatas": coerced_metadatas
 		}
 		return self.client._make_request("POST", f"{self._endpoint_base}/upsert", data)
+
+	def delete(self, ids: Optional[list] = None, where: Optional[Dict[str, Any]] = None):
+		"""Delete items by ids or where filter using v2 API.
+		Exactly one of ids or where should be provided.
+		"""
+		if (ids is None and where is None) or (ids is not None and where is not None):
+			raise ValueError("Provide either ids or where, exclusively")
+		payload: Dict[str, Any] = {}
+		if ids is not None:
+			payload["ids"] = ids
+		if where is not None:
+			payload["where"] = where
+		return self.client._make_request("POST", f"{self._endpoint_base}/delete", payload)
 	
 	def query(self, query_texts: list = None, query_embeddings: list = None, n_results: int = 10, where: Optional[Dict] = None):
 		"""Query collection.

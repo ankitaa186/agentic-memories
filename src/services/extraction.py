@@ -179,6 +179,7 @@ def extract_from_transcript(request: TranscriptRequest) -> ExtractionResult:
 			project = item.get("project")
 			relationship = item.get("relationship")
 			learning_journal = item.get("learning_journal")
+			portfolio = item.get("portfolio")
 
 			embedding = generate_embedding(content)
 			memory = Memory(
@@ -195,6 +196,7 @@ def extract_from_transcript(request: TranscriptRequest) -> ExtractionResult:
 					"project": project,
 					"relationship": relationship,
 					"learning_journal": learning_journal,
+					"portfolio": portfolio,
 					**(request.metadata or {}),
 				},
 			)
