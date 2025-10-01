@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import FastAPI, Query, HTTPException, Header, Cookie, Depends, Request
@@ -20,7 +21,9 @@ from src.schemas import (
 )
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.redis_client import get_redis_client
-from src.config import get_openai_api_key, get_chroma_host, get_chroma_port
+from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider
+from src.config import get_extraction_model_name, get_embedding_model_name
+from src.config import get_xai_base_url
 import httpx
 from src.services.extraction import extract_from_transcript
 from src.services.storage import upsert_memories
@@ -101,10 +104,32 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def require_openai_key() -> None:
-	api_key = get_openai_api_key()
-	if api_key is None or (isinstance(api_key, str) and api_key.strip() == ""):
-		raise RuntimeError("OPENAI_API_KEY is required for server startup.")
+def require_llm_key() -> None:
+	# Provider-aware LLM configuration check
+	if not is_llm_configured():
+		raise RuntimeError("LLM not configured. Set LLM_PROVIDER and corresponding API key.")
+	# Log selected provider and models for observability
+	try:
+		provider = get_llm_provider()
+		extraction_model = get_extraction_model_name()
+		embedding_model = get_embedding_model_name()
+		chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
+		if provider == "openai":
+			key_present = bool(get_openai_api_key())
+			logger.info("[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
+				extraction_model, embedding_model, key_present)
+		elif provider == "xai":
+			# Do not log the API key; only presence and base URL
+			key_present = bool(get_openai_api_key())  # placeholder to avoid unused var if refactor; we won't use it
+			xai_key_present = bool(os.getenv("XAI_API_KEY"))
+			xai_base = get_xai_base_url()
+			logger.info("[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
+				extraction_model, embedding_model, xai_key_present, xai_base)
+		else:
+			logger.info("[startup] LLM provider=%s model=%s embedding_model=%s", provider, extraction_model, embedding_model)
+		logger.info("[startup] Chroma host=%s port=%s", chroma_host, chroma_port)
+	except Exception as _exc:  # pragma: no cover
+		logger.info("[startup] config logging failed: %s", _exc)
 
 
 @app.get("/health")
@@ -139,11 +164,11 @@ def me(identity: Optional[dict] = Depends(get_identity)) -> dict:
 def health_full() -> dict:
 	checks = {}
 
-	# Env check
-	required_envs = ["OPENAI_API_KEY"]
-	openai_key = get_openai_api_key()
-	missing_envs = [k for k in required_envs if (openai_key is None or openai_key.strip() == "")]
-	checks["env"] = {"required": required_envs, "missing": missing_envs}
+	# Env check (provider-aware)
+	provider = get_llm_provider()
+	required_envs = ["OPENAI_API_KEY"] if provider == "openai" else (["XAI_API_KEY"] if provider == "xai" else [])
+	missing_envs = [] if is_llm_configured() else required_envs
+	checks["env"] = {"required": required_envs, "missing": missing_envs, "provider": provider}
 
 	# ChromaDB check (active heartbeat)
 	chroma_ok = False
@@ -183,10 +208,9 @@ def health_full() -> dict:
 
 @app.post("/v1/store", response_model=StoreResponse)
 def store_transcript(body: TranscriptRequest) -> StoreResponse:
-	# Guard: enforce OpenAI key presence (LLM-only extraction)
-	api_key = get_openai_api_key()
-	if api_key is None or (isinstance(api_key, str) and api_key.strip() == ""):
-		raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required")
+	# Guard: enforce LLM configuration
+	if not is_llm_configured():
+		raise HTTPException(status_code=400, detail="LLM is not configured")
 	# Phase 2: Extract memories only (no persistence yet)
 	result = extract_from_transcript(body)
 	# Phase 3: Persist to ChromaDB
@@ -254,9 +278,8 @@ def retrieve(
 # Advanced structured retrieval endpoint
 @app.post("/v1/retrieve/structured", response_model=StructuredRetrieveResponse)
 def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveResponse:
-	api_key = get_openai_api_key()
-	if api_key is None or (isinstance(api_key, str) and api_key.strip() == ""):
-		raise HTTPException(status_code=400, detail="OPENAI_API_KEY is required")
+	if not is_llm_configured():
+		raise HTTPException(status_code=400, detail="LLM is not configured")
 
 	# Pull ALL memories for the user (paginate with empty query)
 	all_results: List[dict] = []

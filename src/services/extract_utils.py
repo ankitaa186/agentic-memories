@@ -7,7 +7,15 @@ import logging
 import os
 import re
 
-from src.config import get_extraction_model_name, get_extraction_retries, get_extraction_timeouts_ms
+from src.config import (
+	get_extraction_model_name,
+	get_extraction_retries,
+	get_extraction_timeouts_ms,
+	get_llm_provider,
+	get_openai_api_key,
+	get_xai_api_key,
+	get_xai_base_url,
+)
 
 
 EXTRACTION_MODEL = get_extraction_model_name()
@@ -80,44 +88,83 @@ def _parse_json_from_text(text: str, expect_array: bool) -> Any:
 
 def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_array: bool = False) -> Optional[Any]:
 	logger = logging.getLogger("extraction")
-	api_key = os.getenv("OPENAI_API_KEY")
-	if not api_key or api_key.strip() == "":
-		return None
+	provider = get_llm_provider()
 	try:
-		from openai import OpenAI  # type: ignore
-
-		client = OpenAI(api_key=api_key)
 		timeout_s = max(1, get_extraction_timeouts_ms() // 1000)
 		retries = max(0, get_extraction_retries())
 		last_exc: Optional[Exception] = None
-		for _ in range(retries + 1):
-			try:
-				resp = client.chat.completions.create(
-					model=EXTRACTION_MODEL,
-					messages=[
-						{"role": "system", "content": system_prompt},
-						{"role": "user", "content": json.dumps(user_payload)},
-					],
-					response_format=None if expect_array else {"type": "json_object"},
-					timeout=timeout_s,
-				)
-				text = resp.choices[0].message.content or ("[]" if expect_array else "{}")
-				logger.info(
-					"LLM call ok | model=%s | expect_array=%s | payload=%s | output=%s",
-					EXTRACTION_MODEL,
-					expect_array,
-					json.dumps(user_payload)[:1000],
-					text[:1000],
-				)
-				return _parse_json_from_text(text, expect_array)
-			except Exception as exc:  # retry
-				last_exc = exc
-				continue
+
+		if provider == "openai":
+			api_key = (get_openai_api_key() or "").strip()
+			if not api_key:
+				return None
+			from openai import OpenAI  # type: ignore
+			client = OpenAI(api_key=api_key)
+			for _ in range(retries + 1):
+				try:
+					resp = client.chat.completions.create(
+						model=EXTRACTION_MODEL,
+						messages=[
+							{"role": "system", "content": system_prompt},
+							{"role": "user", "content": json.dumps(user_payload)},
+						],
+						response_format=None if expect_array else {"type": "json_object"},
+						timeout=timeout_s,
+					)
+					text = resp.choices[0].message.content or ("[]" if expect_array else "{}")
+					logger.info(
+						"LLM call ok | provider=openai model=%s | expect_array=%s | payload=%s | output=%s",
+						EXTRACTION_MODEL,
+						expect_array,
+						json.dumps(user_payload)[:1000],
+						text[:1000],
+					)
+					return _parse_json_from_text(text, expect_array)
+				except Exception as exc:  # retry
+					last_exc = exc
+					continue
+
+		elif provider == "xai":
+			api_key = (get_xai_api_key() or "").strip()
+			if not api_key:
+				return None
+			# xAI chat completions API (OpenAI-compatible-ish with base_url)
+			from openai import OpenAI  # type: ignore
+			client = OpenAI(api_key=api_key, base_url=get_xai_base_url())
+			# Model naming left to EXTRACTION_MODEL (e.g., "grok-4-fast-reasoning")
+			for _ in range(retries + 1):
+				try:
+					resp = client.chat.completions.create(
+						model=EXTRACTION_MODEL,
+						messages=[
+							{"role": "system", "content": system_prompt},
+							{"role": "user", "content": json.dumps(user_payload)},
+						],
+						response_format=None if expect_array else {"type": "json_object"},
+						timeout=max(timeout_s, 30),
+					)
+					text = resp.choices[0].message.content or ("[]" if expect_array else "{}")
+					logger.info(
+						"LLM call ok | provider=xai model=%s | expect_array=%s | payload=%s | output=%s",
+						EXTRACTION_MODEL,
+						expect_array,
+						json.dumps(user_payload)[:1000],
+						text[:1000],
+					)
+					return _parse_json_from_text(text, expect_array)
+				except Exception as exc:  # retry
+					last_exc = exc
+					continue
+		else:
+			logger.error("Unknown LLM provider: %s", provider)
+			return None
+
 		if last_exc:
 			raise last_exc
 	except Exception:
 		logger.exception(
-			"LLM call failed | model=%s | expect_array=%s | payload=%s",
+			"LLM call failed | provider=%s model=%s | expect_array=%s | payload=%s",
+			provider,
 			EXTRACTION_MODEL,
 			expect_array,
 			json.dumps(user_payload)[:1000],

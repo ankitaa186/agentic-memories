@@ -14,6 +14,40 @@ def get_openai_api_key() -> Optional[str]:
 
 
 @lru_cache(maxsize=1)
+def get_xai_api_key() -> Optional[str]:
+    # Use only XAI_API_KEY for xAI provider
+    return os.getenv("XAI_API_KEY")
+
+
+@lru_cache(maxsize=1)
+def get_xai_base_url() -> str:
+    # Default xAI API base URL; allow override for proxies/self-hosted gateways
+    return os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
+
+
+@lru_cache(maxsize=1)
+def get_llm_provider() -> str:
+    val = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    # Normalize alias "grok" to canonical provider name "xai"
+    if val == "grok":
+        return "xai"
+    return val
+
+
+@lru_cache(maxsize=1)
+def is_llm_configured() -> bool:
+    provider = get_llm_provider()
+    if provider == "openai":
+        key = get_openai_api_key() or ""
+        return key.strip() != ""
+    if provider == "xai":
+        key = get_xai_api_key() or ""
+        return key.strip() != ""
+    # Unknown provider → not configured
+    return False
+
+
+@lru_cache(maxsize=1)
 def get_chroma_host() -> str:
 	return os.getenv("CHROMA_HOST", "localhost")
 
@@ -48,7 +82,16 @@ def get_redis_url() -> Optional[str]:
 
 @lru_cache(maxsize=1)
 def get_extraction_model_name() -> str:
-	return os.getenv("EXTRACTION_MODEL", "gpt-4o")
+    # Provider-aware default: OpenAI → gpt-4o, xAI → grok-4-fast-reasoning
+    env_val = os.getenv("EXTRACTION_MODEL")
+    if env_val and env_val.strip() != "":
+        return env_val
+    provider = get_llm_provider()
+    if provider == "openai":
+        return "gpt-4o"
+    if provider in {"xai", "grok"}:  # accept alias "grok" for backward compatibility
+        return "grok-4-fast-reasoning"
+    return "gpt-4o"
 
 
 @lru_cache(maxsize=1)

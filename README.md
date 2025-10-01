@@ -47,9 +47,14 @@ pip install -r requirements.txt
 - ChromaDB server at `http://localhost:8000`
 - (Optional) Redis at `redis://localhost:6379/0`
 
-4) Set OpenAI API key (required)
+4) Configure LLM provider and key (required)
 ```bash
+# Choose provider: openai (default) or xai (Grok)
+export LLM_PROVIDER=openai
 export OPENAI_API_KEY=YOUR_REAL_KEY
+# For xAI:
+# export LLM_PROVIDER=xai
+# export XAI_API_KEY=YOUR_XAI_KEY
 ```
 
 5) Run the API
@@ -75,7 +80,10 @@ pip install -r requirements.txt
 ```
 
 ### Environment variables
-- Required: `OPENAI_API_KEY`
+- Required LLM config:
+  - `LLM_PROVIDER` = `openai` | `xai` (alias `grok` accepted)
+  - If `openai`: `OPENAI_API_KEY` (default model: `gpt-4o` unless `EXTRACTION_MODEL` set)
+  - If `xai`: `XAI_API_KEY` (default model: `grok-4-fast-reasoning` unless `EXTRACTION_MODEL` set). Optional: `XAI_BASE_URL` to override default endpoint.
 - External ChromaDB (recommended for local):
   - `CHROMA_HOST=localhost`
   - `CHROMA_PORT=8000`
@@ -88,7 +96,11 @@ pip install -r requirements.txt
 You can place these in `.env` (the app auto-loads it):
 ```bash
 cp env.example .env
+echo "LLM_PROVIDER=openai" >> .env
 echo "OPENAI_API_KEY=your_key_here" >> .env
+# For xAI:
+# echo "LLM_PROVIDER=xai" >> .env
+# echo "XAI_API_KEY=your_xai_key_here" >> .env
 ```
 
 ### Run locally (without Docker)
@@ -642,6 +654,8 @@ services:
     restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
       - CHROMA_PORT=${CHROMA_PORT:-8000}
       - CHROMA_TENANT=${CHROMA_TENANT:-agentic-memories}

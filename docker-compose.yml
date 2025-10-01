@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
       - CHROMA_PORT=${CHROMA_PORT:-8000}
       - CHROMA_TENANT=agentic-memories
