@@ -48,35 +48,70 @@ class V2ChromaClient:
 		self._base_url = f"{'https' if ssl else 'http'}://{host}:{port}/api/v2"
 		self._collections = {}  # Cache for collections
 	
-	def _make_request(self, method: str, endpoint: str, json_data: Optional[Dict] = None):
-		"""Make HTTP request to v2 API."""
+	def _make_request(self, method: str, endpoint: str, json_data: Optional[Dict] = None, retries: int = 3):
+		"""Make HTTP request to v2 API with retry logic for external Chroma."""
 		import httpx
+		import time
 		url = f"{self._base_url}{endpoint}"
 		headers = {**self.headers, "Content-Type": "application/json"}
 		
-		try:
-			with httpx.Client(timeout=180.0) as client:
-				if method.upper() == "GET":
-					resp = client.get(url, headers=headers)
-				elif method.upper() == "POST":
-					resp = client.post(url, headers=headers, json=json_data)
-				elif method.upper() == "PUT":
-					resp = client.put(url, headers=headers, json=json_data)
-				else:
-					raise ValueError(f"Unsupported method: {method}")
-				
-				resp.raise_for_status()
-				return resp.json() if resp.content else {}
-		except Exception as e:
-			# Include response text for debugging
-			if hasattr(e, 'response') and e.response:
-				error_text = e.response.text
-				raise Exception(f"API request failed: {e} - Response: {error_text}")
-			raise Exception(f"API request failed: {e}")
+		# Longer timeout for external connections
+		timeout = httpx.Timeout(connect=30.0, read=60.0, write=30.0, pool=30.0)
+		
+		last_exception = None
+		for attempt in range(retries + 1):
+			try:
+				with httpx.Client(timeout=timeout) as client:
+					if method.upper() == "GET":
+						resp = client.get(url, headers=headers)
+					elif method.upper() == "POST":
+						resp = client.post(url, headers=headers, json=json_data)
+					elif method.upper() == "PUT":
+						resp = client.put(url, headers=headers, json=json_data)
+					else:
+						raise ValueError(f"Unsupported method: {method}")
+					
+					resp.raise_for_status()
+					return resp.json() if resp.content else {}
+			except (httpx.ConnectTimeout, httpx.ConnectError, httpx.TimeoutException) as e:
+				last_exception = e
+				if attempt < retries:
+					wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+					print(f"Chroma connection failed (attempt {attempt + 1}/{retries + 1}), retrying in {wait_time}s: {e}")
+					time.sleep(wait_time)
+					continue
+				# Final attempt failed
+				raise Exception(f"Chroma database connection failed after {retries + 1} attempts. Last error: {e}")
+			except Exception as e:
+				# Include response text for debugging
+				if hasattr(e, 'response') and e.response:
+					error_text = e.response.text
+					raise Exception(f"API request failed: {e} - Response: {error_text}")
+				raise Exception(f"API request failed: {e}")
+		
+		# This should never be reached, but just in case
+		raise Exception(f"Chroma database connection failed after {retries + 1} attempts. Last error: {last_exception}")
 	
 	def heartbeat(self):
 		"""Call heartbeat via v2 API."""
 		return self._make_request("GET", "/heartbeat")
+	
+	def health_check(self, max_retries: int = 10) -> bool:
+		"""Check if Chroma is healthy and ready, with retries."""
+		import time
+		for attempt in range(max_retries):
+			try:
+				self.heartbeat()
+				print(f"Chroma health check passed on attempt {attempt + 1}")
+				return True
+			except Exception as e:
+				if attempt < max_retries - 1:
+					wait_time = 2 ** min(attempt, 5)  # Cap at 32 seconds
+					print(f"Chroma health check failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
+					time.sleep(wait_time)
+				else:
+					print(f"Chroma health check failed after {max_retries} attempts: {e}")
+		return False
 	
 	def get_or_create_collection(self, name: str):
 		"""Get or create collection using v2 API."""

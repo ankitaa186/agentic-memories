@@ -31,7 +31,7 @@ from src.config import get_xai_base_url
 import httpx
 from src.services.extraction import extract_from_transcript
 from src.services.storage import upsert_memories
-from src.services.retrieval import search_memories
+from src.services.retrieval import search_memories, _standard_collection_name
 from src.services.extract_utils import _call_llm_json
 from src.dependencies.cloudflare_access import verify_cf_access_token, extract_token_from_headers
 from src.dependencies.redis_client import get_redis_client
@@ -132,6 +132,50 @@ async def _log_requests(request: Request, call_next):
     elapsed_ms = int(((_time.perf_counter() - start) * 1000))
     logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
     return response
+
+@app.on_event("startup")
+async def startup_event():
+    """Check Chroma connectivity on startup."""
+    logger.info("Starting Agentic Memories API...")
+    
+    # Log configuration
+    provider = get_llm_provider()
+    logger.info(f"LLM Provider: {provider}")
+    
+    # Check Chroma connectivity
+    try:
+        client = get_chroma_client()
+        if client is None:
+            logger.warning("Chroma client not available - some features may not work")
+        else:
+            logger.info(f"Chroma host: {get_chroma_host()}:{get_chroma_port()}")
+            if client.health_check(max_retries=5):
+                logger.info("Chroma database is healthy and ready")
+
+                # Check for required collections
+                try:
+                    required_collection = _standard_collection_name()
+                    existing_collections = [col.name for col in client.list_collections()]
+
+                    if required_collection not in existing_collections:
+                        error_msg = f"Required ChromaDB collection '{required_collection}' not found. This collection stores memory embeddings and is required for the application to function. Please ensure ChromaDB is properly initialized with the required collections before starting the application."
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg)
+                    else:
+                        logger.info(f"Required collection '{required_collection}' found")
+
+                except RuntimeError as e:
+                    # Re-raise intentional failures (like missing collections)
+                    raise e
+                except Exception as e:
+                    logger.warning(f"Failed to check ChromaDB collections: {e}")
+
+            else:
+                logger.warning("Chroma database is not ready - some features may not work")
+    except Exception as e:
+        logger.warning(f"Failed to check Chroma connectivity: {e}")
+    
+    logger.info("Agentic Memories API startup complete")
 # Auth dependency: validate Cloudflare Access JWT if provided
 def get_identity(
     cf_access_jwt_assertion: Optional[str] = Header(default=None),

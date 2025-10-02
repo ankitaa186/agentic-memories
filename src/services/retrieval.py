@@ -43,6 +43,11 @@ def _get_collection() -> Any:
 	client = get_chroma_client()
 	if client is None:
 		raise RuntimeError("Chroma client not available")
+	
+	# Ensure Chroma is healthy before making requests
+	if not client.health_check():
+		raise RuntimeError("Chroma database is not available or not ready")
+	
 	return client.get_collection(_standard_collection_name())  # type: ignore[attr-defined]
 
 
@@ -84,8 +89,13 @@ def search_memories(
 			logger.info("[retrieve.cache.hit] user_id=%s key=%s count=%s", user_id, cache_key, len(data.get("results", [])))
 			return data["results"], data.get("total", len(data["results"]))
 
-	collection = _get_collection()
-	logger.info("[retrieve.chroma] collection=%s where_keys=%s", getattr(collection, "name", "?"), [])
+	try:
+		collection = _get_collection()
+		logger.info("[retrieve.chroma] collection=%s where_keys=%s", getattr(collection, "name", "?"), [])
+	except RuntimeError as e:
+		# Chroma is not available, return empty results
+		logger.warning("Chroma not available: %s", e)
+		return [], 0
 
 	# Basic metadata filter
 	where: Dict[str, Any] = {"user_id": user_id}

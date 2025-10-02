@@ -53,6 +53,8 @@ if [ ! -f .env ]; then
     printf "OPENAI_API_KEY=%s\n" "$OPENAI_VAL"
     printf "CHROMA_HOST=%s\n" "$CHROMA_HOST_VAL"
     printf "CHROMA_PORT=%s\n" "$CHROMA_PORT_VAL"
+    printf "CHROMA_TENANT=%s\n" "${CHROMA_TENANT:-agentic-memories}"
+    printf "CHROMA_DATABASE=%s\n" "${CHROMA_DATABASE:-memories}"
     printf "REDIS_URL=%s\n" "$REDIS_URL_VAL"
   } > .env
   chmod 600 .env 2>/dev/null || true
@@ -73,26 +75,142 @@ if [ -z "${OPENAI_API_KEY:-}" ]; then
   echo "Warning: OPENAI_API_KEY is not set. The API may fail to call OpenAI until it's configured." >&2
 fi
 
-# Ensure CHROMA defaults for external instance if not provided
-if [ -z "${CHROMA_HOST:-}" ]; then
-  HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++){if($i=="src"){print $(i+1); exit}}}') || true
-  if [ -z "${HOST_IP:-}" ]; then
-    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}') || true
-  fi
-  export CHROMA_HOST="${HOST_IP:-127.0.0.1}"
-else
-  export CHROMA_HOST
-fi
+# Load ChromaDB configuration from .env file
+export CHROMA_HOST="${CHROMA_HOST:-localhost}"
 export CHROMA_PORT="${CHROMA_PORT:-8000}"
+export CHROMA_TENANT="${CHROMA_TENANT:-agentic-memories}"
+export CHROMA_DATABASE="${CHROMA_DATABASE:-memories}"
 
 echo "Using CHROMA_HOST=${CHROMA_HOST} CHROMA_PORT=${CHROMA_PORT}"
+
+# Function to check ChromaDB health
+check_chroma_health() {
+  local max_retries=10
+  local retry_count=0
+
+  echo "Checking ChromaDB health at ${CHROMA_HOST}:${CHROMA_PORT}..."
+
+  while [ $retry_count -lt $max_retries ]; do
+    if curl -f -s "http://${CHROMA_HOST}:${CHROMA_PORT}/api/v2/heartbeat" >/dev/null 2>&1; then
+      echo "ChromaDB is healthy"
+      return 0
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [ $retry_count -lt $max_retries ]; then
+      echo "ChromaDB not ready (attempt $retry_count/$max_retries), retrying in 2s..."
+      sleep 2
+    fi
+  done
+
+  echo "Error: ChromaDB is not available after $max_retries attempts" >&2
+  return 1
+}
+
+# Function to check and create required database and collection
+check_required_collections() {
+  local required_collection="memories_3072"  # Based on text-embedding-3-large (3072 dims)
+  local api_url="http://${CHROMA_HOST}:${CHROMA_PORT}/api/v2"
+
+  echo "Checking ChromaDB database and collections..."
+
+  # First, check if the database exists by listing databases in the tenant
+  local databases_response
+  databases_response=$(curl -s "${api_url}/tenants/${CHROMA_TENANT}/databases" 2>/dev/null)
+
+  local database_exists=false
+  if echo "$databases_response" | grep -q "\"name\":\"${CHROMA_DATABASE}\""; then
+    database_exists=true
+    echo "Database '${CHROMA_DATABASE}' exists"
+  else
+    echo "Database '${CHROMA_DATABASE}' does not exist in tenant '${CHROMA_TENANT}'"
+  fi
+
+  # If database doesn't exist, prompt to create it
+  if [ "$database_exists" = false ]; then
+    echo -n "Create the database '${CHROMA_DATABASE}'? (y/N): "
+    read -r create_db </dev/tty
+    if [[ "$create_db" =~ ^[Yy]$ ]]; then
+      echo "Creating database '${CHROMA_DATABASE}'..."
+      local create_db_response
+      create_db_response=$(curl -s -X POST "${api_url}/tenants/${CHROMA_TENANT}/databases" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"${CHROMA_DATABASE}\"}" 2>/dev/null)
+
+      if [ $? -eq 0 ]; then
+        echo "Database '${CHROMA_DATABASE}' created successfully"
+        database_exists=true
+      else
+        echo "Error: Failed to create database '${CHROMA_DATABASE}'" >&2
+        echo "Response: $create_db_response" >&2
+        return 1
+      fi
+    else
+      echo "Skipping database creation. Exiting."
+      return 1
+    fi
+  fi
+
+  # Now check if the required collection exists
+  local collections_response
+  collections_response=$(curl -s "${api_url}/tenants/${CHROMA_TENANT}/databases/${CHROMA_DATABASE}/collections" 2>/dev/null)
+
+  if echo "$collections_response" | grep -q "\"name\":\"${required_collection}\""; then
+    echo "Required collection '${required_collection}' found"
+    return 0
+  else
+    echo "Collection '${required_collection}' does not exist in database '${CHROMA_DATABASE}'"
+
+    # Prompt user to create collection
+    echo -n "Create the collection '${required_collection}'? (y/N): "
+    read -r create_collection </dev/tty
+    if [[ "$create_collection" =~ ^[Yy]$ ]]; then
+      echo "Creating collection '${required_collection}'..."
+      local create_col_response
+      create_col_response=$(curl -s -X POST "${api_url}/tenants/${CHROMA_TENANT}/databases/${CHROMA_DATABASE}/collections" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"${required_collection}\", \"metadata\": {\"created_by\": \"agentic-memories\"}}" 2>/dev/null)
+
+      if [ $? -eq 0 ] && echo "$create_col_response" | grep -q "\"name\":\"${required_collection}\""; then
+        echo "Collection '${required_collection}' created successfully"
+        return 0
+      else
+        echo "Error: Failed to create collection '${required_collection}'" >&2
+        echo "Response: $create_col_response" >&2
+        return 1
+      fi
+    else
+      echo "Skipping collection creation. Exiting."
+      return 1
+    fi
+  fi
+}
+
+# Check ChromaDB availability and required collections
+# Use localhost for checks since we're running on the host before containers start
+ORIGINAL_CHROMA_HOST="$CHROMA_HOST"
+export CHROMA_HOST=localhost
+if ! check_chroma_health; then
+  exit 1
+fi
+
+if ! check_required_collections; then
+  exit 1
+fi
+
+# Restore original values so docker-compose reads from .env file
+export CHROMA_HOST="$ORIGINAL_CHROMA_HOST"
+unset CHROMA_DATABASE
+unset CHROMA_TENANT
+unset CHROMA_PORT
 
 # Build and start services
 ${COMPOSE_CMD} up -d --build
 
 echo "\n[agentic-memories] Services started with restart policy 'unless-stopped'."
 echo "- API:          http://localhost:8080"
-echo "- ChromaDB:     http://${CHROMA_HOST}:${CHROMA_PORT} (external)"
+echo "- UI:           http://localhost:80"
+echo "- ChromaDB:     http://localhost:8000 (external)"
 echo "- Redis:        localhost:6379"
 
 echo "\nLogs (follow) -> ${COMPOSE_CMD} logs -f"
