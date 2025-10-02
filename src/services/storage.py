@@ -9,6 +9,7 @@ import json
 import logging
 from src.dependencies.chroma import get_chroma_client
 from src.models import Memory
+from src.services.retrieval import _standard_collection_name
 
 
 COLLECTION_NAME = "memories"
@@ -69,18 +70,29 @@ def upsert_memories(user_id: str, memories: List[Memory]) -> List[str]:
 		mem_id = m.id or f"mem_{uuid.uuid4().hex[:12]}"
 		ids.append(mem_id)
 		documents.append(m.content)
-		embeddings.append(m.embedding or [])
+		
+		# Ensure embedding is properly handled
+		embedding = m.embedding or []
+		if not embedding:
+			# Generate embedding if missing
+			try:
+				from src.services.embedding_utils import generate_embedding
+				embedding = generate_embedding(m.content) or []
+			except Exception as exc:
+				logger.warning("[storage.upsert.embedding_error] user_id=%s id=%s error=%s", user_id, mem_id, exc)
+				embedding = []
+		
+		embeddings.append(embedding)
 		metadatas.append(_build_metadata(m))
 	logger.info("[storage.upsert.prepare] user_id=%s ids=%s", user_id, len(ids))
 
-	# Use a collection name that encodes the embedding dimension to avoid mismatch
-	dim = len(embeddings[0]) if embeddings and embeddings[0] else 0
-	collection_name = f"{COLLECTION_NAME}_{dim}" if dim > 0 else COLLECTION_NAME
+	# Use standard collection naming to ensure consistency with retrieval
+	collection_name = _standard_collection_name()
 	collection = init_chroma_collection(collection_name)
 
 	# Chroma upsert
 	collection.upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)  # type: ignore[attr-defined]
-	logger.info("[storage.upsert.done] user_id=%s dim=%s count=%s collection=%s", user_id, dim, len(ids), collection_name)
+	logger.info("[storage.upsert.done] user_id=%s count=%s collection=%s", user_id, len(ids), collection_name)
 	return ids
 
 

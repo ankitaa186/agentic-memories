@@ -43,7 +43,7 @@ Rules:
 
 
 EXTRACTION_PROMPT = """
-Extract atomic, declarative memories as a JSON array (max 10). Each item:
+Extract atomic, declarative memories as a JSON array (max 10000). Each item:
 {
   "content": string,
   "type": "explicit" | "implicit",
@@ -79,9 +79,7 @@ Extract atomic, declarative memories as a JSON array (max 10). Each item:
     "streak_days": number | null,
     "last_activity_date": string | null,
     "recent_practice": string | null
-  } | null
-
-  ,
+  } | null,
 
   "portfolio": {
     "ticker": string | null,

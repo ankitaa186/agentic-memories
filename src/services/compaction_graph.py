@@ -43,20 +43,58 @@ def _reextract_memories(user_id: str, candidates: List[Dict[str, Any]]) -> Dict[
     """
     new_mems: List[Memory] = []
     delete_ids: List[str] = []
+    skipped_count = 0
+    error_count = 0
+    
     for c in candidates:
         mid = c.get("id")
         content = c.get("content", "")
-        if not content:
+        metadata = c.get("metadata", {})
+        
+        # Validate candidate structure
+        if not mid:
+            logger.warning("[graph.reextract.skip] user_id=%s reason=missing_id", user_id)
+            skipped_count += 1
             continue
+            
+        if not content or not content.strip():
+            logger.warning("[graph.reextract.skip] user_id=%s id=%s reason=empty_content", user_id, mid)
+            skipped_count += 1
+            continue
+        
+        # Create extraction request
         req = TranscriptRequest(user_id=user_id, history=[Message(role="user", content=content)])
+        
         try:
             result = extract_from_transcript(req)
-            if result.memories:
-                new_mems.extend(result.memories)
-                delete_ids.append(mid)
+            if result.memories and len(result.memories) > 0:
+                # Validate that new memories have proper structure
+                valid_memories = []
+                for mem in result.memories:
+                    if mem.content and mem.content.strip():
+                        valid_memories.append(mem)
+                    else:
+                        logger.warning("[graph.reextract.skip_memory] user_id=%s id=%s reason=empty_extracted_content", user_id, mid)
+                
+                if valid_memories:
+                    new_mems.extend(valid_memories)
+                    delete_ids.append(mid)
+                    logger.debug("[graph.reextract.success] user_id=%s id=%s extracted=%s", user_id, mid, len(valid_memories))
+                else:
+                    logger.warning("[graph.reextract.skip] user_id=%s id=%s reason=no_valid_memories", user_id, mid)
+                    skipped_count += 1
+            else:
+                logger.warning("[graph.reextract.skip] user_id=%s id=%s reason=no_memories_extracted", user_id, mid)
+                skipped_count += 1
+                
         except Exception as exc:
-            logger.info("[graph.reextract.error] user_id=%s id=%s %s", user_id, mid, exc)
+            logger.error("[graph.reextract.error] user_id=%s id=%s error=%s", user_id, mid, exc)
+            error_count += 1
             continue
+    
+    logger.info("[graph.reextract.summary] user_id=%s processed=%s new_memories=%s delete_ids=%s skipped=%s errors=%s", 
+                user_id, len(candidates), len(new_mems), len(delete_ids), skipped_count, error_count)
+    
     return {"new_memories": new_mems, "delete_ids": delete_ids}
 
 
@@ -96,12 +134,27 @@ def build_compaction_graph() -> StateGraph:
 		_t = _time.perf_counter()
 		cands = _fetch_user_memories(user_id, limit=limit)
 		state["candidates"] = cands
+		
+		# Safety check: if no candidates, skip re-extraction
+		if not cands:
+			logger.info("[graph.load.empty] user_id=%s no_candidates_found", user_id)
+			state["skip_reextract"] = True
+		else:
+			state["skip_reextract"] = False
+			
 		logger.info("[graph.load] user_id=%s loaded=%s latency_ms=%s", user_id, len(cands), int((_time.perf_counter() - _t) * 1000))
 		return state
 
 	def node_reextract(state: Dict[str, Any]) -> Dict[str, Any]:
 		user_id = str(state.get("user_id"))
 		_t = _time.perf_counter()
+		
+		# Skip if no candidates were loaded
+		if state.get("skip_reextract", False):
+			logger.info("[graph.reextract.skip] user_id=%s no_candidates", user_id)
+			state["reextract"] = {"new_memories": [], "delete_ids": []}
+			return state
+		
 		out = _reextract_memories(user_id, state.get("candidates", []))
 		state["reextract"] = out
 		logger.info(
@@ -115,29 +168,67 @@ def build_compaction_graph() -> StateGraph:
 
 	def node_apply(state: Dict[str, Any]) -> Dict[str, Any]:
 		user_id = str(state.get("user_id"))
+		dry_run = state.get("dry_run", False)
 		_t = _time.perf_counter()
 		out = state.get("reextract", {}) or {}
 		new_mems: List[Memory] = list(out.get("new_memories", []))
-		delete_ids: List[str] = list(out.get("delete_ids", []))
-		if new_mems:
-			# Upsert in chunks to avoid payload limits
-			chunk = 500
-			for i in range(0, len(new_mems), chunk):
-				upsert_memories(user_id, new_mems[i:i+chunk])
-		if delete_ids:
-			try:
-				col = _get_collection()
-				col.delete(ids=list(set(delete_ids)))  # type: ignore[attr-defined]
-			except Exception as exc:
-				logger.info("[graph.apply.delete.error] %s", exc)
-		state["metrics"]["applied_upserts"] = len(new_mems)
-		state["metrics"]["applied_deletes"] = len(set(delete_ids))
+		delete_ids: List[str] = list(set(out.get("delete_ids", [])))
+		
+		upserted_count = 0
+		deleted_count = 0
+		
+		if dry_run:
+			logger.info("[graph.apply.dry_run] user_id=%s would_upsert=%s would_delete=%s", 
+					   user_id, len(new_mems), len(delete_ids))
+		else:
+			# Transaction safety: Only proceed if we have both new memories and delete IDs
+			# OR if we only have one type of operation
+			if new_mems and delete_ids:
+				# Both operations: try upsert first, then delete only if upsert succeeds
+				try:
+					# Upsert in chunks to avoid payload limits
+					chunk = 500
+					for i in range(0, len(new_mems), chunk):
+						upsert_memories(user_id, new_mems[i:i+chunk])
+					upserted_count = len(new_mems)
+					
+					# Only delete after successful upsert
+					col = _get_collection()
+					col.delete(ids=delete_ids)  # type: ignore[attr-defined]
+					deleted_count = len(delete_ids)
+					logger.info("[graph.apply.success] user_id=%s upserted=%s deleted=%s", 
+							   user_id, upserted_count, deleted_count)
+				except Exception as exc:
+					logger.error("[graph.apply.error] user_id=%s upserted=%s failed=%s error=%s", 
+								user_id, upserted_count, exc)
+					# Don't delete if upsert failed
+			elif new_mems:
+				# Only upsert
+				try:
+					chunk = 500
+					for i in range(0, len(new_mems), chunk):
+						upsert_memories(user_id, new_mems[i:i+chunk])
+					upserted_count = len(new_mems)
+				except Exception as exc:
+					logger.error("[graph.apply.upsert.error] user_id=%s error=%s", user_id, exc)
+			elif delete_ids:
+				# Only delete
+				try:
+					col = _get_collection()
+					col.delete(ids=delete_ids)  # type: ignore[attr-defined]
+					deleted_count = len(delete_ids)
+				except Exception as exc:
+					logger.error("[graph.apply.delete.error] user_id=%s error=%s", user_id, exc)
+		
+		state["metrics"]["applied_upserts"] = upserted_count
+		state["metrics"]["applied_deletes"] = deleted_count
 		logger.info(
-			"[graph.apply] user_id=%s upserts=%s deletes=%s latency_ms=%s",
+			"[graph.apply] user_id=%s upserts=%s deletes=%s latency_ms=%s dry_run=%s",
 			user_id,
-			len(new_mems),
-			len(set(delete_ids)),
+			upserted_count,
+			deleted_count,
 			int((_time.perf_counter() - _t) * 1000),
+			dry_run,
 		)
 		return state
 

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from src.dependencies.chroma import get_chroma_client
 from src.services.embedding_utils import generate_embedding
+from src.services.retrieval import _standard_collection_name
 
 
 logger = logging.getLogger("agentic_memories.compaction_ops")
@@ -16,8 +17,8 @@ def _get_collection() -> Any:
 	client = get_chroma_client()
 	if client is None:
 		raise RuntimeError("Chroma client not available")
-	# Use base collection name; v2 client resolves by name
-	return client.get_collection("memories")  # type: ignore[attr-defined]
+	# Use standard collection name with proper dimension suffix
+	return client.get_collection(_standard_collection_name())  # type: ignore[attr-defined]
 
 
 def ttl_cleanup() -> int:
@@ -40,7 +41,7 @@ def ttl_cleanup() -> int:
 		return 0
 
 
-def simple_deduplicate(user_id: str, similarity_threshold: float = 0.88, limit: int = 10000) -> Dict[str, int]:
+def simple_deduplicate(user_id: str, similarity_threshold: float = 0.90, limit: int = 10000) -> Dict[str, int]:
 	"""Naive per-user dedup: compare embeddings and remove near-duplicates.
 	Returns stats dict.
 	"""
