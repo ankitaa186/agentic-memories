@@ -1240,7 +1240,7 @@ Connect to externalized storage managed by `agentic-memories-storage` in both de
 #### Implementation (reference)
 ```python
 # src/config.py additions
-TIMESCALE_DSN = os.getenv('TIMESCALE_DSN', 'postgresql://user:pass@localhost:5433/memories')
+TIMESCALE_DSN = os.getenv('TIMESCALE_DSN', 'postgresql://user:pass@localhost:5432/memories')
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
@@ -1271,6 +1271,12 @@ Ownership boundaries:
 | Chroma | `CHROMA_HOST` | `chroma.internal` |
 | Chroma | `CHROMA_PORT` | `8000` |
 | Redis | `REDIS_URL` | `redis://redis.internal:6379/0` |
+
+Standard ports (reference)
+- Postgres/Timescale: 5432
+- Neo4j Bolt: 7687 (HTTP console 7474)
+- Chroma: 8000
+- Redis: 6379
 
 7.1.3 Safe deploy checklist
 - Keep DBs in `agentic-memories-storage`; do not couple app redeploys to DB lifecycle.
