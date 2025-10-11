@@ -60,10 +60,26 @@ Our system will mirror these processes:
 
 ## Part II: Memory Types & Storage Strategy
 
+Canonical migrations live in this repository. Schemas shown here are reference contracts and are implemented as versioned migrations under `migrations/`. External databases are provided by `agentic-memories-storage`, but schema creation and evolution are applied from this project.
+
 ### 2.1 Episodic Memory (Life Events)
+#### Idea
 **Purpose**: Store experiences with full context - when, where, who, what, why, and how it felt.
 
-**Storage Design**:
+Conceptual model:
+- Episodic memories capture situated experiences with rich context (temporal, spatial, social, causal, sensory).
+- They form a narrative graph across time: episodes lead to, influence, or mirror each other.
+- Retrieval should be reconstructive: episodes may be incomplete; plausible gap-filling is allowed but must be labeled as inferred.
+- Forgetting is graceful: detailed episodes compress into semantic summaries when retention drops below thresholds.
+- Privacy is first-class: episodes may carry sensitivity levels that drive encryption, access, and sharing policies.
+
+Signals and scoring:
+- Significance combines emotional intensity, novelty, social weight, consequence, and recency.
+- Replay count and last recalled affect retention and prioritization during consolidation.
+- Causal chains enable narrative arcs (triggered_by, led_to) and improve retrieval coherence.
+
+#### Implementation (reference)
+**Storage Design (TimescaleDB)**:
 ```sql
 -- TimescaleDB: Time-series for temporal sequencing
 CREATE TABLE episodic_memories (
@@ -88,7 +104,48 @@ CREATE TABLE episodic_memories (
 SELECT create_hypertable('episodic_memories', 'event_timestamp');
 ```
 
-**Neo4j Relationships**:
+Recommended indexes and Timescale policies:
+```sql
+-- Access patterns: (user_id, event_timestamp), and GIN on JSONB for flexible queries
+CREATE INDEX IF NOT EXISTS idx_episodic_user_time
+ON episodic_memories (user_id, event_timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_episodic_event_type
+ON episodic_memories (event_type);
+
+-- For JSONB fields used in filtering
+CREATE INDEX IF NOT EXISTS idx_episodic_location_gin
+ON episodic_memories USING GIN (location);
+
+CREATE INDEX IF NOT EXISTS idx_episodic_sensory_gin
+ON episodic_memories USING GIN (sensory_context);
+
+-- Retention and compression (tune to your SLOs and storage budget)
+-- Example: compress after 30 days, retain detailed rows for 365 days
+SELECT add_compression_policy('episodic_memories', INTERVAL '30 days');
+SELECT add_retention_policy('episodic_memories', INTERVAL '365 days', cascade_to_materializations => TRUE);
+```
+
+Constraints and hypertable options:
+```sql
+-- Validate emotional ranges
+ALTER TABLE episodic_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_emotional_valence_range
+    CHECK (emotional_valence IS NULL OR emotional_valence BETWEEN -1.0 AND 1.0),
+  ADD CONSTRAINT IF NOT EXISTS chk_emotional_arousal_range
+    CHECK (emotional_arousal IS NULL OR emotional_arousal BETWEEN 0.0 AND 1.0);
+
+-- Timescale tuning
+SELECT set_chunk_time_interval('episodic_memories', INTERVAL '7 days');
+
+-- Enable compression and configure order/segment keys
+ALTER TABLE episodic_memories
+  SET (timescaledb.compress,
+       timescaledb.compress_orderby = 'event_timestamp DESC',
+       timescaledb.compress_segmentby = 'user_id');
+```
+
+Relationships (Neo4j):
 ```cypher
 // Connect episodic memories to form life narrative
 (e1:Episode {id: 'first_day_job'})-[:LED_TO]->(e2:Episode {id: 'met_mentor'})
@@ -97,9 +154,20 @@ SELECT create_hypertable('episodic_memories', 'event_timestamp');
 ```
 
 ### 2.2 Semantic Memory (Facts & Concepts)
-**Current Implementation**: Already exists but needs enhancement.
+#### Idea
+**Role**: Compact, decontextualized knowledge distilled from episodes and external facts; high-precision retrieval for reasoning and planning.
 
-**Enhanced Schema**:
+Conceptual model:
+- Facts carry confidence that decays unless reinforced (accessed, validated, or re-learned).
+- Link back to source episodes to preserve provenance and enable auditability.
+- Categorization improves retrieval and governance (domain-level access controls).
+- Compression path: older episodic details are summarized into semantic statements to preserve gist without full cost.
+
+Signals:
+- `confidence`, `learned_date`, `last_accessed`, `access_count`, `decay_rate`, `reinforcement_threshold` guide consolidation/forgetting.
+
+#### Implementation (reference)
+**Enhanced Schema (Postgres)**:
 ```sql
 -- PostgreSQL: Structured facts with confidence decay
 CREATE TABLE semantic_memories (
@@ -118,9 +186,49 @@ CREATE TABLE semantic_memories (
 );
 ```
 
-### 2.3 Procedural Memory (How-To Knowledge)
-**New Addition**: Store learned behaviors and skills.
+Indexes and constraints:
+```sql
+CREATE INDEX IF NOT EXISTS idx_semantic_user_category
+ON semantic_memories (user_id, category, subcategory);
 
+CREATE INDEX IF NOT EXISTS idx_semantic_content_gin
+ON semantic_memories USING GIN (to_tsvector('english', content));
+
+-- JSONB arrays often benefit from GIN if frequently filtered
+CREATE INDEX IF NOT EXISTS idx_semantic_source_episodes_gin
+ON semantic_memories USING GIN (source_episodes);
+
+-- Keep access statistics fresh
+CREATE INDEX IF NOT EXISTS idx_semantic_last_accessed
+ON semantic_memories (last_accessed DESC);
+```
+
+Constraints and FKs (optional):
+```sql
+-- Ensure category strings are bounded
+ALTER TABLE semantic_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_category_len CHECK (char_length(category) <= 64),
+  ADD CONSTRAINT IF NOT EXISTS chk_subcategory_len CHECK (char_length(subcategory) <= 64);
+
+-- Optional FK to episodes by UUID if cross-DB FK is available; otherwise enforce at app level
+-- ALTER TABLE semantic_memories
+--   ADD CONSTRAINT fk_source_episodes_uuid
+--   FOREIGN KEY (source_episodes) REFERENCES episodic_memories(id) DEFERRABLE INITIALLY DEFERRED;
+```
+
+### 2.3 Procedural Memory (How-To Knowledge)
+#### Idea
+**Role**: Represent learnable skills and action recipes, applied under specific contexts, with measurable proficiency growth.
+
+Conceptual model:
+- Procedures are sequences of steps with acceptable variations; they are activated by context triggers.
+- Proficiency evolves through deliberate practice and feedback; retrieval supports step-by-step guidance.
+- Consolidation abstracts common patterns across successful executions; forgetting demotes rarely used skills.
+
+Signals:
+- `proficiency_level`, `practice_count`, `last_performed`, `success_rate` inform coaching, scheduling practice, and prediction.
+
+#### Implementation (reference)
 ```sql
 CREATE TABLE procedural_memories (
     id UUID PRIMARY KEY,
@@ -137,9 +245,39 @@ CREATE TABLE procedural_memories (
 );
 ```
 
-### 2.4 Emotional Memory (Feeling Patterns)
-**Purpose**: Maintain emotional continuity and understand patterns.
+Indexes:
+```sql
+CREATE INDEX IF NOT EXISTS idx_procedural_user_skill
+ON procedural_memories (user_id, skill_name);
 
+CREATE INDEX IF NOT EXISTS idx_procedural_category
+ON procedural_memories (skill_category);
+```
+
+Constraints:
+```sql
+ALTER TABLE procedural_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_proficiency_range
+    CHECK (proficiency_level BETWEEN 0.0 AND 1.0),
+  ADD CONSTRAINT IF NOT EXISTS chk_practice_nonneg
+    CHECK (practice_count IS NULL OR practice_count >= 0),
+  ADD CONSTRAINT IF NOT EXISTS chk_success_rate_range
+    CHECK (success_rate IS NULL OR success_rate BETWEEN 0.0 AND 1.0);
+```
+
+### 2.4 Emotional Memory (Feeling Patterns)
+#### Idea
+**Purpose**: Maintain emotional continuity, track trajectories, and understand triggers, coping strategies, and resolutions.
+
+Conceptual model:
+- Momentary emotional states form time-series; patterns emerge across triggers, contexts, and interventions.
+- Emotional continuity bridges episodes, enriching recall and prediction (e.g., anticipatory anxiety before events).
+- Privacy sensitivity is high; access and processing respect consent and encryption policies.
+
+Signals:
+- `emotion_vector`, `intensity`, `duration`, `triggers`, `coping_strategies`, `resolution`, linked episodes.
+
+#### Implementation (reference)
 ```sql
 -- TimescaleDB: Continuous emotional state tracking
 CREATE TABLE emotional_memories (
@@ -167,9 +305,51 @@ CREATE TABLE emotional_patterns (
 );
 ```
 
-### 2.5 Somatic Memory (Body Awareness)
-**Purpose**: Track physical patterns and embodied experiences.
+Recommended indexes and Timescale policies:
+```sql
+-- Emotional time-series queries by user and timestamp
+CREATE INDEX IF NOT EXISTS idx_emotions_user_time
+ON emotional_memories (user_id, timestamp DESC);
 
+-- Optional GIN index for triggers JSONB
+CREATE INDEX IF NOT EXISTS idx_emotions_triggers_gin
+ON emotional_memories USING GIN (triggers);
+
+-- Compress after 14 days, retain 180 days
+SELECT add_compression_policy('emotional_memories', INTERVAL '14 days');
+SELECT add_retention_policy('emotional_memories', INTERVAL '180 days');
+```
+
+Constraints and hypertable options:
+```sql
+-- Validate intensity range and duration non-negative
+ALTER TABLE emotional_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_intensity_range
+    CHECK (intensity IS NULL OR intensity BETWEEN 0.0 AND 1.0),
+  ADD CONSTRAINT IF NOT EXISTS chk_duration_positive
+    CHECK (duration IS NULL OR duration >= INTERVAL '0');
+
+SELECT set_chunk_time_interval('emotional_memories', INTERVAL '3 days');
+
+ALTER TABLE emotional_memories
+  SET (timescaledb.compress,
+       timescaledb.compress_orderby = 'timestamp DESC',
+       timescaledb.compress_segmentby = 'user_id');
+```
+
+### 2.5 Somatic Memory (Body Awareness)
+#### Idea
+**Purpose**: Track embodied states and physical patterns (energy, tension, pain), and relate them to emotions and behaviors.
+
+Conceptual model:
+- Somatic readings form a complementary signal to emotional and episodic data for grounding and prediction.
+- Patterns (e.g., afternoon slump) inform proactive suggestions (breaks, hydration, posture changes).
+- Privacy and health data handling require stricter policies and optional opt-in.
+
+Signals:
+- `body_state`, `activity_level`, `sleep_quality`, `health_markers`, `physical_sensations`, `linked_emotions`.
+
+#### Implementation (reference)
 ```sql
 CREATE TABLE somatic_memories (
     id UUID PRIMARY KEY,
@@ -185,9 +365,31 @@ CREATE TABLE somatic_memories (
 );
 ```
 
-### 2.6 Identity Memory (Self-Model)
-**Purpose**: Maintain coherent sense of self.
+Constraints and indexes:
+```sql
+ALTER TABLE somatic_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_activity_nonneg
+    CHECK (activity_level IS NULL OR activity_level >= 0),
+  ADD CONSTRAINT IF NOT EXISTS chk_sleep_quality_range
+    CHECK (sleep_quality IS NULL OR sleep_quality BETWEEN 0.0 AND 1.0);
 
+CREATE INDEX IF NOT EXISTS idx_somatic_user_time
+ON somatic_memories (user_id, timestamp DESC);
+```
+
+### 2.6 Identity Memory (Self-Model)
+#### Idea
+**Purpose**: Maintain a coherent, evolving self-model (values, roles, traits, aspirations, conflicts) to guide decisions and narrative.
+
+Conceptual model:
+- Identity integrates across memories to stabilize preferences and long-term goals while allowing growth and contradictions.
+- It mediates predictions and narrative coherence, and informs consent defaults.
+- Updates are slow-moving and require stronger evidence.
+
+Signals:
+- `core_values`, `self_concept`, `ideal_self`, `feared_self`, `life_roles`, `personality_traits`, `growth_edges`, `contradictions`.
+
+#### Implementation (reference)
 ```sql
 CREATE TABLE identity_memories (
     user_id VARCHAR(64) PRIMARY KEY,
@@ -203,12 +405,26 @@ CREATE TABLE identity_memories (
 );
 ```
 
+Constraints:
+```sql
+ALTER TABLE identity_memories
+  ADD CONSTRAINT IF NOT EXISTS chk_user_id_len CHECK (char_length(user_id) <= 64);
+```
+
 ---
 
 ## Part III: Memory Processing Pipeline
 
 ### 3.1 Ingestion & Encoding
+#### Idea
+Transform raw user experiences (text/media/context) into multi-type memory representations by extracting temporal anchors, emotional coloring, significance, relationships, and predictions. Emphasize reconstructive fidelity over verbatim capture, and preserve provenance for auditability.
 
+Key principles:
+- Multimodal processing (text-first; media optional) with explicit temporal and emotional grounding.
+- Significance scoring drives consolidation priority and retrieval ranking.
+- Memory-type classification yields episodic, semantic, procedural, emotional, and somatic components.
+
+#### Implementation (reference)
 ```python
 # Enhanced extraction pipeline
 class MemoryEncoder:
@@ -245,8 +461,42 @@ class MemoryEncoder:
         }
 ```
 
-### 3.2 Storage Synchronization
+Worked example: Encoding an experience
+```json
+{
+  "user_id": "u_123",
+  "timestamp": "2025-10-10T17:45:00Z",
+  "content": "Met my new manager for a 1:1. Felt nervous at first, then optimistic after discussing growth goals.",
+  "context": {
+    "location": {"place": "HQ - 5F", "coordinates": [37.789, -122.401]},
+    "participants": ["new_manager"],
+    "mood": {"nervous": 0.6, "optimistic": 0.7}
+  }
+}
+```
 
+Intermediate artifacts (illustrative):
+- Temporal anchors: 2025-10-10 17:45Z; weekday=Fri; work-hours.
+- Emotional tone: primary=anticipation/relief; arousal≈0.5; valence≈+0.3.
+- Significance score≈0.62 (manager 1:1; career impact; emotional shift).
+- Memory types: episodic (meeting), semantic (manager name, goals), emotional (state change), procedural (agenda template).
+
+Outputs (abbreviated):
+```json
+{
+  "episodic": {"event_type": "routine", "participants": ["new_manager"], "significance_score": 0.62},
+  "semantic": [{"content": "Growth goals discussed", "confidence": 0.82}],
+  "emotional": {"valence": 0.3, "arousal": 0.5, "trajectory": ["nervous" -> "optimistic"]},
+  "procedural": [{"skill_name": "run_1_1", "steps": ["prepare agenda", "set goals"]}],
+  "relationships": {"led_to": ["schedule_followup"]}
+}
+```
+
+### 3.2 Storage Synchronization
+#### Idea
+Persist encoded memories across specialized stores in a single orchestrated flow with idempotency, partial-failure handling, and caching for recency. Maintain graph links to enable narrative and causal traversal.
+
+#### Implementation (reference)
 ```python
 class MemoryStorageOrchestrator:
     def store_memory(self, encoded_memory):
@@ -281,7 +531,10 @@ class MemoryStorageOrchestrator:
 ```
 
 ### 3.3 Consolidation Process (Sleep-like)
+#### Idea
+Nightly jobs replay significant memories, extract patterns, integrate new knowledge, prune redundancy, generate insights, update predictions, and compress old episodic details into semantic summaries while respecting consent and retention policies.
 
+#### Implementation (reference)
 ```python
 class MemoryConsolidator:
     def nightly_consolidation(self, user_id):
@@ -313,8 +566,23 @@ class MemoryConsolidator:
         self.compress_old_episodes(user_id)
 ```
 
-### 3.4 Retrieval & Reconstruction
+Worked example: Nightly consolidation (illustrative)
+```text
+Inputs: user_id=u_123, last 24h episodic/emotional updates
+1) Identify significant memories (top-k by significance_score) and replay → increment replay_count
+2) Extract patterns (e.g., "Monday morning anxiety"; co-occurrence of manager 1:1 and optimism)
+3) Integrate knowledge (promote stable facts to semantic; update access_count/last_accessed)
+4) Prune redundant memories (dedupe near-identical episodes; keep highest significance)
+5) Generate insights ("Performance improves after goal-setting 1:1s") and persist
+6) Update predictions (emotions/needs/behaviors for next day)
+7) Compress old episodic details into semantic summaries when criteria met
+```
 
+### 3.4 Retrieval & Reconstruction
+#### Idea
+Hybrid retrieval blends temporal search, semantic vector similarity, and graph traversal. Reconstruction fills plausible gaps (clearly labeled) and produces a coherent narrative aligned with current context and identity.
+
+#### Implementation (reference)
 ```python
 class MemoryRetriever:
     def retrieve_memory(self, query, user_id, context):
@@ -367,8 +635,21 @@ class MemoryRetriever:
         return base_memory
 ```
 
-### 3.5 Forgetting Mechanism
+Worked example: Episodic retrieval and reconstruction
+```text
+Query: "our first 1:1 with my new manager"
+1) Timescale search (user_id, time-range last 30 days) → temporal candidates
+2) Chroma similarity search (top_k=8) → semantic candidates
+3) Neo4j traversal (SIMILAR_TO, LED_TO) → related episodes
+4) Rank: w1*temporal + w2*semantic + w3*graph + w4*significance
+5) Reconstruct: infer weather from time/place; infer emotion if missing; generate short narrative paragraph for coherence
+```
 
+### 3.5 Forgetting Mechanism
+#### Idea
+Apply a principled forgetting curve to reduce detail over time while preserving essence via semantic compression. Rehearsal and significance attenuate decay; encryption and consent are upheld during archival.
+
+#### Implementation (reference)
 ```python
 class ForgettingEngine:
     def apply_forgetting_curve(self, user_id):
@@ -404,12 +685,23 @@ class ForgettingEngine:
             self.update_memory(memory)
 ```
 
+Numerical example (Ebbinghaus-style)
+```text
+Given significance=0.5, replay_count=0
+• After 1 day → retention≈0.5
+• After 7 days → retention≈0.2 → compress episodic details into semantic essence
+With rehearsals (r=5) at 7 days → retention > 0.4 → no compression yet, confidence decay deferred
+```
+
 ---
 
 ## Part IV: Cognitive Processing Layer
 
 ### 4.1 Pattern Recognition
+#### Idea
+Discover recurring structures across behavioral, emotional, social, temporal, and causal dimensions to inform predictions, interventions, and narrative themes. Balance explainability with predictive power.
 
+#### Implementation (reference)
 ```python
 class PatternRecognizer:
     def identify_patterns(self, user_id):
@@ -448,7 +740,10 @@ class PatternRecognizer:
 ```
 
 ### 4.2 Predictive Engine
+#### Idea
+Forecast near-term emotions, needs, behaviors, decision points, and risks using current context and historical patterns; produce actionable suggestions with calibrated confidence.
 
+#### Implementation (reference)
 ```python
 class PredictiveEngine:
     def generate_predictions(self, user_id, horizon='day'):
@@ -474,7 +769,10 @@ class PredictiveEngine:
 ```
 
 ### 4.3 Narrative Construction
+#### Idea
+Construct coherent life chapters, themes, turning points, and character development from episodic memories to provide meaning-making and continuity.
 
+#### Implementation (reference)
 ```python
 class NarrativeEngine:
     def construct_life_narrative(self, user_id):
@@ -528,36 +826,31 @@ class NarrativeEngine:
 ---
 
 ## Part V: Implementation Roadmap
+#### Idea
+Deliver incrementally in phases with clear acceptance criteria, using externalized storage (`agentic-memories-storage`) and feature flags for progressive rollout. Optimize for local reproducibility and safe production enablement.
 
 ### Phase 1: Foundation (Weeks 1-2)
-**Goal**: Set up multi-database architecture
+**Goal**: Wire app to externalized storage (no DB provisioning here)
 
 **Tasks**:
-1. **Set up TimescaleDB**
-   ```bash
-   # Docker setup
-   docker run -d --name timescaledb \
-     -p 5433:5432 \
-     -e POSTGRES_PASSWORD=password \
-     timescale/timescaledb:latest-pg14
-   ```
+1. **Configure dependency endpoints**
+   - Set `TIMESCALE_DSN`, `NEO4J_URI`, `CHROMA_HOST`, `CHROMA_PORT`, `REDIS_URL` via environment.
+   - Keep feature flags off by default; enable per phase.
 
-2. **Set up Neo4j**
-   ```bash
-   docker run -d --name neo4j \
-     -p 7474:7474 -p 7687:7687 \
-     -e NEO4J_AUTH=neo4j/password \
-     neo4j:latest
-   ```
+2. **Verify `agentic-memories-storage` deployment**
+   - Confirm services are reachable from the API container/host.
+   - External DBs only; no DB containers here.
 
-3. **Create database schemas**
-   ```python
-   # migrations/001_create_episodic_memories.sql
-   # migrations/002_create_emotional_memories.sql
-   # migrations/003_create_procedural_memories.sql
-   ```
+3. **Create/validate database schemas (from this repo)**
+   - Author migrations under `migrations/` for episodic/emotional (Timescale), semantic/procedural/identity (Postgres), graph nodes/relations (Neo4j), and vector collections (Chroma).
+   - Include idempotent up/down scripts and baseline version.
+   - Validate indexes, compression, and retention policies reflect Part II.
 
-4. **Build storage abstraction layer**
+4. **Implement dependency health checks**
+   - `/health` aggregates Timescale/Postgres, Neo4j, Chroma, and Redis checks with latencies.
+   - Fail-fast when critical dependencies are required by enabled features.
+
+5. **Build storage abstraction layer**
    ```python
    # src/storage/orchestrator.py
    class StorageOrchestrator:
@@ -583,6 +876,20 @@ class NarrativeEngine:
            # Significance scoring
            pass
    ```
+   Migrations:
+   - `migrations/001_timescale_episodic.sql` (table + hypertable + indexes + policies)
+   - `migrations/002_postgres_semantic.sql` (table + GIN indexes)
+   - `migrations/003_postgres_procedural.sql` (table + indexes)
+   - `migrations/004_timescale_emotional.sql` (table + indexes + policies)
+   - `migrations/005_postgres_identity.sql` (table)
+   - `migrations/006_neo4j_graph.cql` (episode/relationship types)
+   - `migrations/007_chroma_collections.py` (collection bootstrap)
+   Acceptance:
+   - Migrations apply idempotently against clean external DBs; down scripts revert.
+   - Feature flags remain off until services are ready.
+   Acceptance:
+   - Unit tests: episodic creation computes significance; semantic extraction links to episodes.
+   - Structured logs emitted on store; correlation_id propagated.
 
 2. **Emotional Memory Service**
    ```python
@@ -620,6 +927,9 @@ class NarrativeEngine:
            # Temporal patterns
            pass
    ```
+   Acceptance:
+   - Pattern detection returns at least one synthetic pattern against fixtures.
+   - Prediction outputs include suggestions and confidence.
 
 2. **Predictive Engine**
    ```python
@@ -646,6 +956,9 @@ class NarrativeEngine:
            # Knowledge integration
            pass
    ```
+   Acceptance:
+   - Nightly job dry-run produces insights and compresses eligible episodes in fixtures.
+   - Forgetting reduces confidence per curve; rehearsals mitigate decay.
 
 2. **Forgetting Engine**
    ```python
@@ -672,6 +985,9 @@ class NarrativeEngine:
            # Arc construction
            pass
    ```
+   Acceptance:
+   - Narrative includes chapters, themes, turning points for sample user.
+   - Identity updates are idempotent and audited.
 
 2. **Identity Service**
    ```python
@@ -706,6 +1022,9 @@ class NarrativeEngine:
        # Life narrative construction
        pass
    ```
+   Acceptance:
+   - E2E smoke passes with external storage; p95 retrieval < 400ms in local load test.
+   - Error schemas returned for validation/consent/dependency failures.
 
 2. **Testing Suite**
    ```python
@@ -720,7 +1039,10 @@ class NarrativeEngine:
 ## Part VI: API Contracts
 
 ### 6.1 New Endpoints
+#### Idea
+Provide composable endpoints for storing experiences, retrieving episodic memories with reconstruction, building narratives, and predicting near-term states. Maintain clear contracts, validation, and error semantics; support pagination and feature-flagged expansion.
 
+#### Implementation (reference)
 ```yaml
 # Store experience (multimodal input)
 POST /v1/store/experience
@@ -803,7 +1125,10 @@ Response:
 ```
 
 ### 6.2 Enhanced Existing Endpoints
+#### Idea
+Enhance current endpoints to include experience markers and retrieval reconstruction options without breaking existing clients, enabling gradual rollout.
 
+#### Implementation (reference)
 ```yaml
 # Enhanced store with memory type detection
 POST /v1/store
@@ -837,12 +1162,82 @@ Response:
   reconstructed_details: object
 ```
 
+Examples (provider-agnostic)
+
+```http
+POST /v1/store/experience
+Content-Type: application/json
+
+{
+  "user_id": "u_123",
+  "timestamp": "2025-10-10T17:45:00Z",
+  "content": "Met my new manager for a 1:1...",
+  "context": {"location": {"place": "HQ - 5F"}, "participants": ["new_manager"]}
+}
+
+HTTP/1.1 200 OK
+{
+  "episode_id": "9b2c2c2a-...",
+  "memories_created": {"episodic": 1, "semantic": 2, "emotional": 1, "procedural": 1}
+}
+```
+
+Error schema examples
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "timestamp must be ISO 8601",
+    "details": {"field": "timestamp"}
+  },
+  "correlation_id": "req_abc123"
+}
+```
+
+```json
+{
+  "error": {
+    "code": "CONSENT_DENIED",
+    "message": "Explicit consent required for analyze_patterns",
+    "details": {"operation": "analyze_patterns"}
+  },
+  "correlation_id": "req_def456"
+}
+```
+
+```json
+{
+  "error": {
+    "code": "DEPENDENCY_UNAVAILABLE",
+    "message": "Chroma unavailable",
+    "details": {"service": "chroma", "host": "chroma.internal", "port": 8000}
+  },
+  "correlation_id": "req_xyz789"
+}
+```
+
+Pagination example
+
+```http
+GET /v1/retrieve/episodic?user_id=u_123&query=manager&limit=20&cursor=eyJvZmZzZXQiOjIwfQ==
+
+HTTP/1.1 200 OK
+{
+  "episodes": [/* ... up to 20 ... */],
+  "next_cursor": "eyJvZmZzZXQiOjQwfQ=="
+}
+```
+
 ---
 
 ## Part VII: Technical Specifications
 
 ### 7.1 Database Connections
+#### Idea
+Connect to externalized storage managed by `agentic-memories-storage` in both dev and prod. Keep app configuration minimal and environment-driven; use feature flags for progressive enablement and safe rollouts.
 
+#### Implementation (reference)
 ```python
 # src/config.py additions
 TIMESCALE_DSN = os.getenv('TIMESCALE_DSN', 'postgresql://user:pass@localhost:5433/memories')
@@ -856,6 +1251,32 @@ EMOTIONAL_TRACKING_ENABLED = os.getenv('EMOTIONAL_TRACKING_ENABLED', 'false') ==
 NARRATIVE_ENGINE_ENABLED = os.getenv('NARRATIVE_ENGINE_ENABLED', 'false') == 'true'
 PREDICTIVE_ENGINE_ENABLED = os.getenv('PREDICTIVE_ENGINE_ENABLED', 'false') == 'true'
 ```
+
+7.1.1 External storage dependency (dev and prod)
+
+All stateful databases are provided by the external `agentic-memories-storage` stack in both development and production. This application does not deploy or manage those databases; it connects via environment variables.
+
+Ownership boundaries:
+- Database lifecycle, backups, retention/compression policies: storage stack.
+- This service: schemas-as-contracts (documented here) and feature-flagged usage.
+
+7.1.2 Environment variable matrix (examples)
+
+| Concern | Variable | Example |
+| --- | --- | --- |
+| Timescale/Postgres | `TIMESCALE_DSN` | `postgresql://user:pass@timescale.internal:5432/memories` |
+| Neo4j | `NEO4J_URI` | `bolt://neo4j.internal:7687` |
+| Neo4j | `NEO4J_USER` | `neo4j` |
+| Neo4j | `NEO4J_PASSWORD` | `password` |
+| Chroma | `CHROMA_HOST` | `chroma.internal` |
+| Chroma | `CHROMA_PORT` | `8000` |
+| Redis | `REDIS_URL` | `redis://redis.internal:6379/0` |
+
+7.1.3 Safe deploy checklist
+- Keep DBs in `agentic-memories-storage`; do not couple app redeploys to DB lifecycle.
+- Avoid destructive commands (e.g., removing volumes) in the storage stack.
+- Keep environment variable names stable; rotate secrets via secret management.
+- Validate dependency connectivity in health checks before serving traffic.
 
 ### 7.2 Memory Scoring Algorithms
 
@@ -890,7 +1311,10 @@ def emotional_decay(initial_intensity, time_elapsed):
 ```
 
 ### 7.3 LLM Prompts for Memory Processing
+#### Idea
+Use consistent prompt templates to extract structured memory components, construct narratives, and generate predictions. Emphasize provider-agnostic structure and deterministic IDs for idempotency.
 
+#### Implementation (reference)
 ```python
 EXPERIENCE_EXTRACTION_PROMPT = """
 You are a memory encoding system. Extract the following from the user's experience:
@@ -972,8 +1396,17 @@ Provide confidence scores and reasoning.
 """
 ```
 
-### 7.4 Performance Optimizations
+7.3.1 Embeddings and reliability (provider-agnostic)
 
+- Embedding expectations: document vector dimension and distance metric (e.g., cosine). Ensure the vector-store in `agentic-memories-storage` is configured accordingly.
+- Idempotency: use stable deterministic IDs for upserts (e.g., episode_id) to make writes idempotent.
+- Reliability: retry with exponential backoff for transient LLM/vector errors and log correlation IDs for traceability.
+
+### 7.4 Performance Optimizations
+#### Idea
+Layered caching (local LRU, Redis), batch operations, and backpressure maintain p95 targets under load while controlling costs. Prefer idempotent writes and bounded queues.
+
+#### Implementation (reference)
 ```python
 # Caching strategy
 class MemoryCache:
@@ -1016,6 +1449,11 @@ class BatchProcessor:
 ---
 
 ## Part VIII: Migration Strategy
+#### Idea
+Clean start: no data migration is planned. Datastores are provisioned empty by `agentic-memories-storage`. Bootstrapping consists of schema creation owned by the storage stack and feature-flagged enablement in this service.
+
+#### Implementation (reference)
+The following examples are reference patterns only and are NOT in scope for this clean-start plan.
 
 ### 8.1 Data Migration Plan
 
@@ -1076,6 +1514,10 @@ class LegacyAdapter:
 ---
 
 ## Part IX: Testing Strategy
+#### Idea
+Adopt a pragmatic test pyramid: fast unit tests for scoring and extraction logic; integration tests exercising external dependencies (via fakes or test instances); and targeted performance checks to guard latency SLOs. Use deterministic fixtures and correlation IDs for traceability.
+
+#### Implementation (reference)
 
 ### 9.1 Unit Tests
 
@@ -1187,7 +1629,10 @@ class TestPerformance:
 ## Part X: Monitoring & Observability
 
 ### 10.1 Metrics
+#### Idea
+Measure core operations (store, retrieve, consolidate, forget) with clear SLOs and actionable alerting. Prefer low-cardinality labels and track both success and failure paths.
 
+#### Implementation (reference)
 ```yaml
 # Prometheus metrics
 memory_operations_total:
@@ -1215,8 +1660,28 @@ forgetting_rate:
   labels: [memory_type]
 ```
 
-### 10.2 Logging
+Operational SLOs and alerting thresholds (guidance)
+- Retrieval p95 latency: < 400ms (warn at 350ms sustained 5m).
+- Consolidation batch duration: < 30m/user (warn at 25m).
+- Error rate: < 1% (warn at 0.5% over 10m).
+- Cache hit rate: > 80% (warn if < 70%).
 
+Health and diagnostics checklist
+- Verify connectivity at startup and in `/health`:
+  - Timescale/Postgres: open connection and simple `SELECT 1`.
+  - Neo4j: open bolt session and `RETURN 1`.
+  - Chroma: ping collection list.
+  - Redis: `PING`.
+- Emit one aggregated health payload with per-dependency status and latencies.
+
+Backup/DR pointers
+- Backups, restore procedures, and retention schedules are defined and executed in `agentic-memories-storage`. This service should expose on-demand export endpoints only if required by product policy.
+
+### 10.2 Logging
+#### Idea
+Adopt structured, contextual logs with correlation IDs and dependency latency/error categories for fast triage. Avoid sensitive content in logs.
+
+#### Implementation (reference)
 ```python
 # Structured logging
 import structlog
@@ -1243,8 +1708,15 @@ def store_episodic_memory(episode):
     )
 ```
 
-### 10.3 Dashboards
+Correlation and traceability
+- Include `correlation_id` (request-scope) across logs and outbound calls.
+- Log dependency latencies and error categories to accelerate incident triage.
 
+### 10.3 Dashboards
+#### Idea
+Provide a small set of high-signal dashboards for product health, memory operations, and system health, aligned to SLOs and error budgets.
+
+#### Implementation (reference)
 ```yaml
 # Grafana dashboard config
 Digital Soul Health:
