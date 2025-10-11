@@ -76,6 +76,31 @@ def get_redis_url() -> Optional[str]:
 
 
 # =============================
+# External databases (storage)
+# =============================
+
+
+@lru_cache(maxsize=1)
+def get_timescale_dsn() -> Optional[str]:
+	return os.getenv("TIMESCALE_DSN", "postgresql://user:pass@localhost:5432/memories")
+
+
+@lru_cache(maxsize=1)
+def get_neo4j_uri() -> Optional[str]:
+	return os.getenv("NEO4J_URI", "bolt://localhost:7687")
+
+
+@lru_cache(maxsize=1)
+def get_neo4j_user() -> Optional[str]:
+	return os.getenv("NEO4J_USER", "neo4j")
+
+
+@lru_cache(maxsize=1)
+def get_neo4j_password() -> Optional[str]:
+	return os.getenv("NEO4J_PASSWORD", "password")
+
+
+# =============================
 # Extraction-related settings
 # =============================
 
