@@ -214,7 +214,9 @@ class PortfolioService:
                         holding_data.get('notes'),
                         memory_id
                     ))
-                # Connection is in autocommit mode, no need for explicit commit
+                
+                # Commit the transaction
+                self.timescale_conn.commit()
                 
                 # Create Neo4j node and relationships (async, fire-and-forget)
                 self._create_holding_graph_node(holding_id, user_id, ticker, asset_name)
@@ -222,9 +224,10 @@ class PortfolioService:
                 return holding_id
                 
         except Exception as e:
-            print(f"Error in _upsert_single_holding: {e}")
+            # Rollback on error
             if self.timescale_conn:
                 self.timescale_conn.rollback()
+            print(f"Error in _upsert_single_holding: {e}")
             return None
     
     def _create_holding_graph_node(self, holding_id: str, user_id: str, ticker: Optional[str], asset_name: Optional[str]) -> None:
@@ -315,8 +318,10 @@ class PortfolioService:
                     user_id, total_value, cash_value, equity_value,
                     holdings  # Store full holdings JSON
                 ))
-                # Connection is in autocommit mode, no need for explicit commit
-                return True
+            
+            # Commit the transaction
+            self.timescale_conn.commit()
+            return True
                 
         except Exception as e:
             print(f"Error creating portfolio snapshot: {e}")

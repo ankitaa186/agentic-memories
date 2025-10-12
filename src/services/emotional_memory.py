@@ -159,8 +159,11 @@ class EmotionalMemoryService:
                     memory.duration_minutes,
                     json.dumps(memory.metadata) if memory.metadata else None
                 ))
-                # Connection is in autocommit mode, no need for explicit commit
+            # Commit the transaction
+            self.timescale_conn.commit()
         except Exception as e:
+            # Rollback on error
+            self.timescale_conn.rollback()
             print(f"Error storing emotional memory in TimescaleDB: {e}")
             raise
     
@@ -387,8 +390,13 @@ class EmotionalMemoryService:
                         pattern.triggers,
                         pattern.metadata
                     ))
+            
+            # Commit the transaction
+            self.timescale_conn.commit()
                     
         except Exception as e:
+            # Rollback on error
+            self.timescale_conn.rollback()
             print(f"Error storing emotional pattern: {e}")
     
     def get_emotional_state_history(self, user_id: str, hours: int = 24) -> List[EmotionalMemory]:

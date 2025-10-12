@@ -8,7 +8,7 @@ Stores in PostgreSQL for structured skill data.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -115,8 +115,8 @@ class ProceduralMemoryService:
         # Store in ChromaDB for semantic search
         self._store_in_chroma(memory)
         
-        # Record initial progression
-        self._record_skill_progression(user_id, skill_name, proficiency_level, timestamp)
+        # Record initial progression (now with explicit parameters)
+        self._record_skill_progression(user_id, skill_name, proficiency_level, timestamp, None, None, None)
         
         return skill_id
     
@@ -125,65 +125,76 @@ class ProceduralMemoryService:
         if not self.timescale_conn:
             raise Exception("Database connection not available")
         
-        with self.timescale_conn.cursor() as cur:
-            # Check if skill already exists
-            cur.execute("""
-                SELECT id, practice_count, success_rate FROM procedural_memories 
-                WHERE user_id = %s AND skill_name = %s
-            """, (memory.user_id, memory.skill_name))
-            
-            existing = cur.fetchone()
-            
-            if existing:
-                # Update existing skill
-                new_practice_count = existing['practice_count'] + 1
+        try:
+            import json
+            with self.timescale_conn.cursor() as cur:
+                # Check if skill already exists
                 cur.execute("""
-                    UPDATE procedural_memories SET
-                        proficiency_level = %s,
-                        steps = %s,
-                        prerequisites = %s,
-                        last_practiced = %s,
-                        practice_count = %s,
-                        context = %s,
-                        tags = %s,
-                        metadata = %s
-                    WHERE id = %s
-                """, (
-                    memory.proficiency_level,
-                    memory.steps,
-                    memory.prerequisites,
-                    memory.last_practiced,
-                    new_practice_count,
-                    memory.context,
-                    memory.tags,
-                    memory.metadata,
-                    existing['id']
-                ))
-            else:
-                # Insert new skill
-                cur.execute("""
-                    INSERT INTO procedural_memories (
-                        id, user_id, skill_name, proficiency_level, steps,
-                        prerequisites, last_practiced, practice_count, success_rate,
-                        difficulty_rating, context, tags, metadata
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                """, (
-                    memory.id,
-                    memory.user_id,
-                    memory.skill_name,
-                    memory.proficiency_level,
-                    memory.steps,
-                    memory.prerequisites,
-                    memory.last_practiced,
-                    memory.practice_count,
-                    memory.success_rate,
-                    memory.difficulty_rating,
-                    memory.context,
-                    memory.tags,
-                    memory.metadata
-                ))
+                    SELECT id, practice_count, success_rate FROM procedural_memories 
+                    WHERE user_id = %s AND skill_name = %s
+                """, (memory.user_id, memory.skill_name))
+                
+                existing = cur.fetchone()
+                
+                if existing:
+                    # Update existing skill
+                    new_practice_count = existing['practice_count'] + 1
+                    cur.execute("""
+                        UPDATE procedural_memories SET
+                            proficiency_level = %s,
+                            steps = %s,
+                            prerequisites = %s,
+                            last_practiced = %s,
+                            practice_count = %s,
+                            context = %s,
+                            tags = %s,
+                            metadata = %s
+                        WHERE id = %s
+                    """, (
+                        memory.proficiency_level,
+                        json.dumps(memory.steps) if memory.steps else None,
+                        json.dumps(memory.prerequisites) if memory.prerequisites else None,
+                        memory.last_practiced,
+                        new_practice_count,
+                        memory.context,
+                        memory.tags,
+                        json.dumps(memory.metadata) if memory.metadata else None,
+                        existing['id']
+                    ))
+                else:
+                    # Insert new skill
+                    cur.execute("""
+                        INSERT INTO procedural_memories (
+                            id, user_id, skill_name, proficiency_level, steps,
+                            prerequisites, last_practiced, practice_count, success_rate,
+                            difficulty_rating, context, tags, metadata
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                    """, (
+                        memory.id,
+                        memory.user_id,
+                        memory.skill_name,
+                        memory.proficiency_level,
+                        json.dumps(memory.steps) if memory.steps else None,
+                        json.dumps(memory.prerequisites) if memory.prerequisites else None,
+                        memory.last_practiced,
+                        memory.practice_count,
+                        memory.success_rate,
+                        memory.difficulty_rating,
+                        memory.context,
+                        memory.tags,
+                        json.dumps(memory.metadata) if memory.metadata else None,
+                    ))
+            
+            # Commit the transaction
+            self.timescale_conn.commit()
+            
+        except Exception as e:
+            # Rollback on error
+            self.timescale_conn.rollback()
+            print(f"Error storing procedural memory: {e}")
+            raise
     
     def _store_skill_relationships(self, memory: ProceduralMemory) -> None:
         """Store skill relationships in Neo4j"""
@@ -278,15 +289,20 @@ class ProceduralMemoryService:
             print(f"Error storing procedural memory in ChromaDB: {e}")
     
     def _record_skill_progression(self, user_id: str, skill_name: str, 
-                                proficiency_level: str, timestamp: datetime) -> None:
+                                proficiency_level: str, timestamp: datetime,
+                                session_duration: Optional[int] = None,
+                                success_rate: Optional[float] = None,
+                                notes: Optional[str] = None) -> None:
         """Record skill progression in TimescaleDB"""
         if not self.timescale_conn:
             return
         
         try:
+            import json
             progression_id = str(uuid.uuid4())
             
             with self.timescale_conn.cursor() as cur:
+                metadata = {"recorded_at": timestamp.isoformat()}
                 cur.execute("""
                     INSERT INTO skill_progressions (
                         id, user_id, skill_name, timestamp, proficiency_level,
@@ -300,13 +316,18 @@ class ProceduralMemoryService:
                     skill_name,
                     timestamp,
                     proficiency_level,
-                    None,  # practice_session_duration
-                    None,  # success_rate
-                    None,  # notes
-                    {"recorded_at": timestamp.isoformat()}
+                    session_duration,
+                    success_rate,
+                    notes,
+                    json.dumps(metadata),
                 ))
+            
+            # Commit the transaction
+            self.timescale_conn.commit()
                 
         except Exception as e:
+            # Rollback on error
+            self.timescale_conn.rollback()
             print(f"Error recording skill progression: {e}")
     
     def practice_skill(self, user_id: str, skill_name: str, 
