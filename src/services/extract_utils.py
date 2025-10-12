@@ -87,8 +87,29 @@ def _parse_json_from_text(text: str, expect_array: bool) -> Any:
 
 
 def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_array: bool = False) -> Optional[Any]:
+	from src.services.tracing import get_current_trace
+	
 	logger = logging.getLogger("extraction")
 	provider = get_llm_provider()
+	
+	# Start Langfuse generation tracking if trace exists
+	trace = get_current_trace()
+	generation = None
+	
+	if trace:
+		try:
+			generation = trace.generation(
+				name=f"llm_extraction_{provider}",
+				model=EXTRACTION_MODEL,
+				input=[
+					{"role": "system", "content": system_prompt[:500]},
+					{"role": "user", "content": str(user_payload)[:500]}
+				],
+				metadata={"expect_array": expect_array, "provider": provider}
+			)
+		except Exception as e:
+			logger.debug(f"Failed to start Langfuse generation: {e}")
+	
 	try:
 		timeout_s = max(1, get_extraction_timeouts_ms() // 1000)
 		retries = max(0, get_extraction_retries())
@@ -119,6 +140,20 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 						json.dumps(user_payload)[:1000],
 						text[:1000],
 					)
+					
+					# End Langfuse generation with success
+					if generation:
+						try:
+							generation.end(
+								output=text[:500],
+								usage={
+									"prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
+									"completion_tokens": resp.usage.completion_tokens if resp.usage else 0
+								}
+							)
+						except Exception as e:
+							logger.debug(f"Failed to end Langfuse generation: {e}")
+					
 					return _parse_json_from_text(text, expect_array)
 				except Exception as exc:  # retry
 					last_exc = exc
@@ -151,6 +186,20 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 						json.dumps(user_payload)[:1000],
 						text[:1000],
 					)
+					
+					# End Langfuse generation with success
+					if generation:
+						try:
+							generation.end(
+								output=text[:500],
+								usage={
+									"prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
+									"completion_tokens": resp.usage.completion_tokens if resp.usage else 0
+								}
+							)
+						except Exception as e:
+							logger.debug(f"Failed to end Langfuse generation: {e}")
+					
 					return _parse_json_from_text(text, expect_array)
 				except Exception as exc:  # retry
 					last_exc = exc

@@ -1,0 +1,585 @@
+"""
+Hybrid Retrieval and Ranking Service
+
+Combines multiple retrieval strategies (semantic, temporal, emotional, procedural)
+with intelligent ranking and fusion algorithms.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Tuple, Any, Union
+from dataclasses import dataclass
+from enum import Enum
+
+from src.dependencies.timescale import get_timescale_conn
+from src.dependencies.neo4j_client import get_neo4j_driver
+from src.dependencies.chroma import get_chroma_client
+from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
+from src.services.emotional_memory import EmotionalMemory, EmotionalMemoryService
+from src.services.procedural_memory import ProceduralMemory, ProceduralMemoryService
+from src.services.embedding_utils import get_embeddings
+
+
+class RetrievalStrategy(Enum):
+    """Retrieval strategy types"""
+    SEMANTIC = "semantic"
+    TEMPORAL = "temporal"
+    EMOTIONAL = "emotional"
+    PROCEDURAL = "procedural"
+    HYBRID = "hybrid"
+
+
+@dataclass
+class RetrievalResult:
+    """Retrieval result with ranking information"""
+    memory_id: str
+    memory_type: str  # "episodic", "emotional", "procedural", "semantic"
+    content: str
+    relevance_score: float  # 0.0 to 1.0
+    recency_score: float    # 0.0 to 1.0
+    importance_score: float # 0.0 to 1.0
+    emotional_relevance: Optional[float] = None
+    temporal_relevance: Optional[float] = None
+    semantic_similarity: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class RetrievalQuery:
+    """Retrieval query with context and preferences"""
+    user_id: str
+    query_text: Optional[str] = None
+    memory_types: Optional[List[str]] = None  # ["episodic", "emotional", "procedural"]
+    time_range: Optional[Tuple[datetime, datetime]] = None
+    emotional_context: Optional[Dict[str, float]] = None  # {"valence": 0.5, "arousal": 0.3}
+    importance_threshold: Optional[float] = None
+    limit: int = 10
+    strategy: RetrievalStrategy = RetrievalStrategy.HYBRID
+
+
+class HybridRetrievalService:
+    """Service for hybrid memory retrieval and ranking"""
+    
+    def __init__(self):
+        self.timescale_conn = get_timescale_conn()
+        self.neo4j_driver = get_neo4j_driver()
+        self.chroma_client = get_chroma_client()
+        self.episodic_service = EpisodicMemoryService()
+        self.emotional_service = EmotionalMemoryService()
+        self.procedural_service = ProceduralMemoryService()
+    
+    def retrieve_memories(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """
+        Retrieve memories using hybrid approach
+        
+        Args:
+            query: RetrievalQuery object with search parameters
+            
+        Returns:
+            List[RetrievalResult]: Ranked list of memories
+        """
+        all_results = []
+        
+        # 1. Semantic retrieval (if query text provided)
+        if query.query_text:
+            semantic_results = self._semantic_retrieval(query)
+            all_results.extend(semantic_results)
+        
+        # 2. Temporal retrieval (if time range provided)
+        if query.time_range:
+            temporal_results = self._temporal_retrieval(query)
+            all_results.extend(temporal_results)
+        
+        # 3. Emotional retrieval (if emotional context provided)
+        if query.emotional_context:
+            emotional_results = self._emotional_retrieval(query)
+            all_results.extend(emotional_results)
+        
+        # 4. Procedural retrieval (if procedural memories requested)
+        if not query.memory_types or "procedural" in query.memory_types:
+            procedural_results = self._procedural_retrieval(query)
+            all_results.extend(procedural_results)
+        
+        # 5. Deduplicate and rank results
+        unique_results = self._deduplicate_results(all_results)
+        ranked_results = self._rank_results(unique_results, query)
+        
+        # 6. Apply filters and limits
+        filtered_results = self._apply_filters(ranked_results, query)
+        
+        return filtered_results[:query.limit]
+    
+    def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Perform semantic search across all memory types"""
+        results = []
+        
+        if not query.query_text or not self.chroma_client:
+            return results
+        
+        try:
+            # Get query embeddings
+            query_embeddings = get_embeddings([query.query_text])
+            if not query_embeddings:
+                return results
+            
+            # Use the standard unified collection used by /v1/store
+            from src.services.retrieval import _standard_collection_name
+            collection_name = _standard_collection_name()
+            try:
+                collection = self.chroma_client.get_collection(collection_name)
+                search_results = collection.query(
+                    query_embeddings=query_embeddings,
+                    n_results=20,
+                    where={"user_id": query.user_id}
+                )
+                if search_results and search_results.get('ids') and search_results['ids'][0]:
+                    for i, memory_id in enumerate(search_results['ids'][0]):
+                        distance = search_results['distances'][0][i] if search_results.get('distances') else 0.0
+                        similarity = 1.0 - distance
+                        result = RetrievalResult(
+                            memory_id=memory_id,
+                            memory_type="semantic",
+                            content=search_results['documents'][0][i],
+                            relevance_score=similarity,
+                            recency_score=0.5,
+                            importance_score=0.5,
+                            semantic_similarity=similarity,
+                            metadata=search_results['metadatas'][0][i]
+                        )
+                        results.append(result)
+            except Exception as e:
+                print(f"Error searching collection {collection_name}: {e}")
+        
+        except Exception as e:
+            print(f"Error in semantic retrieval: {e}")
+        
+        return results
+    
+    def _temporal_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Retrieve memories by time range"""
+        results = []
+        
+        if not query.time_range or not self.timescale_conn:
+            return results
+        
+        start_time, end_time = query.time_range
+        
+        try:
+            with self.timescale_conn.cursor() as cur:
+                # Search episodic memories
+                cur.execute("""
+                    SELECT id, content, event_timestamp, importance_score, emotional_valence, emotional_arousal
+                    FROM episodic_memories
+                    WHERE user_id = %s AND event_timestamp BETWEEN %s AND %s
+                    ORDER BY event_timestamp DESC
+                """, (query.user_id, start_time, end_time))
+                
+                episodic_rows = cur.fetchall()
+                
+                for row in episodic_rows:
+                    # Calculate temporal relevance (closer to query time = higher score)
+                    time_diff = abs((row['event_timestamp'] - start_time).total_seconds())
+                    max_diff = (end_time - start_time).total_seconds()
+                    temporal_relevance = 1.0 - (time_diff / max_diff) if max_diff > 0 else 1.0
+                    
+                    result = RetrievalResult(
+                        memory_id=row['id'],
+                        memory_type="episodic",
+                        content=row['content'],
+                        relevance_score=temporal_relevance,
+                        recency_score=self._calculate_recency_score(row['event_timestamp']),
+                        importance_score=row['importance_score'] or 0.5,
+                        temporal_relevance=temporal_relevance,
+                        metadata={
+                            "timestamp": row['event_timestamp'].isoformat(),
+                            "emotional_valence": row['emotional_valence'],
+                            "emotional_arousal": row['emotional_arousal']
+                        }
+                    )
+                    results.append(result)
+                
+                # Search emotional memories
+                cur.execute("""
+                    SELECT id, context, timestamp, valence, arousal, intensity
+                    FROM emotional_memories
+                    WHERE user_id = %s AND timestamp BETWEEN %s AND %s
+                    ORDER BY timestamp DESC
+                """, (query.user_id, start_time, end_time))
+                
+                emotional_rows = cur.fetchall()
+                
+                for row in emotional_rows:
+                    time_diff = abs((row['timestamp'] - start_time).total_seconds())
+                    max_diff = (end_time - start_time).total_seconds()
+                    temporal_relevance = 1.0 - (time_diff / max_diff) if max_diff > 0 else 1.0
+                    
+                    result = RetrievalResult(
+                        memory_id=row['id'],
+                        memory_type="emotional",
+                        content=row['context'] or "",
+                        relevance_score=temporal_relevance,
+                        recency_score=self._calculate_recency_score(row['timestamp']),
+                        importance_score=row['intensity'] or 0.5,
+                        temporal_relevance=temporal_relevance,
+                        metadata={
+                            "timestamp": row['timestamp'].isoformat(),
+                            "valence": row['valence'],
+                            "arousal": row['arousal'],
+                            "intensity": row['intensity']
+                        }
+                    )
+                    results.append(result)
+                    
+        except Exception as e:
+            print(f"Error in temporal retrieval: {e}")
+        
+        return results
+    
+    def _emotional_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Retrieve memories based on emotional context"""
+        results = []
+        
+        if not query.emotional_context or not self.timescale_conn:
+            return results
+        
+        try:
+            target_valence = query.emotional_context.get('valence', 0.0)
+            target_arousal = query.emotional_context.get('arousal', 0.5)
+            
+            with self.timescale_conn.cursor() as cur:
+                # Search emotional memories with similar emotional state
+                cur.execute("""
+                    SELECT id, context, timestamp, valence, arousal, intensity, emotional_state
+                    FROM emotional_memories
+                    WHERE user_id = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50
+                """, (query.user_id,))
+                
+                emotional_rows = cur.fetchall()
+                
+                for row in emotional_rows:
+                    # Calculate emotional similarity
+                    valence_diff = abs(row['valence'] - target_valence)
+                    arousal_diff = abs(row['arousal'] - target_arousal)
+                    emotional_similarity = 1.0 - (valence_diff + arousal_diff) / 2.0
+                    
+                    if emotional_similarity > 0.3:  # Threshold for emotional relevance
+                        result = RetrievalResult(
+                            memory_id=row['id'],
+                            memory_type="emotional",
+                            content=row['context'] or "",
+                            relevance_score=emotional_similarity,
+                            recency_score=self._calculate_recency_score(row['timestamp']),
+                            importance_score=row['intensity'] or 0.5,
+                            emotional_relevance=emotional_similarity,
+                            metadata={
+                                "timestamp": row['timestamp'].isoformat(),
+                                "valence": row['valence'],
+                                "arousal": row['arousal'],
+                                "intensity": row['intensity'],
+                                "emotional_state": row['emotional_state']
+                            }
+                        )
+                        results.append(result)
+                
+                # Search episodic memories with emotional context
+                cur.execute("""
+                    SELECT id, content, event_timestamp, emotional_valence, emotional_arousal, importance_score
+                    FROM episodic_memories
+                    WHERE user_id = %s 
+                    AND emotional_valence IS NOT NULL 
+                    AND emotional_arousal IS NOT NULL
+                    ORDER BY event_timestamp DESC
+                    LIMIT 50
+                """, (query.user_id,))
+                
+                episodic_rows = cur.fetchall()
+                
+                for row in episodic_rows:
+                    valence_diff = abs(row['emotional_valence'] - target_valence)
+                    arousal_diff = abs(row['emotional_arousal'] - target_arousal)
+                    emotional_similarity = 1.0 - (valence_diff + arousal_diff) / 2.0
+                    
+                    if emotional_similarity > 0.3:
+                        result = RetrievalResult(
+                            memory_id=row['id'],
+                            memory_type="episodic",
+                            content=row['content'],
+                            relevance_score=emotional_similarity,
+                            recency_score=self._calculate_recency_score(row['event_timestamp']),
+                            importance_score=row['importance_score'] or 0.5,
+                            emotional_relevance=emotional_similarity,
+                            metadata={
+                                "timestamp": row['event_timestamp'].isoformat(),
+                                "valence": row['emotional_valence'],
+                                "arousal": row['emotional_arousal']
+                            }
+                        )
+                        results.append(result)
+                        
+        except Exception as e:
+            print(f"Error in emotional retrieval: {e}")
+        
+        return results
+    
+    def _procedural_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Retrieve procedural memories"""
+        results = []
+        
+        try:
+            # Get user's skills
+            skills = self.procedural_service.get_skills(query.user_id)
+            
+            for skill in skills:
+                # Calculate relevance based on recent practice and success
+                recency_score = self._calculate_recency_score(skill.last_practiced) if skill.last_practiced else 0.0
+                importance_score = skill.success_rate or 0.5
+                
+                # Create searchable content
+                content = f"{skill.skill_name}: {' '.join(skill.steps)}"
+                if skill.context:
+                    content += f" (Context: {skill.context})"
+                
+                result = RetrievalResult(
+                    memory_id=skill.id,
+                    memory_type="procedural",
+                    content=content,
+                    relevance_score=0.7,  # Base relevance for skills
+                    recency_score=recency_score,
+                    importance_score=importance_score,
+                    metadata={
+                        "skill_name": skill.skill_name,
+                        "proficiency_level": skill.proficiency_level,
+                        "practice_count": skill.practice_count,
+                        "success_rate": skill.success_rate,
+                        "last_practiced": skill.last_practiced.isoformat() if skill.last_practiced else None,
+                        "context": skill.context,
+                        "tags": skill.tags
+                    }
+                )
+                results.append(result)
+                
+        except Exception as e:
+            print(f"Error in procedural retrieval: {e}")
+        
+        return results
+    
+    def _calculate_recency_score(self, timestamp: datetime) -> float:
+        """Calculate recency score based on timestamp"""
+        if not timestamp:
+            return 0.0
+        
+        now = datetime.now(timezone.utc)
+        time_diff = (now - timestamp).total_seconds()
+        
+        # Exponential decay: more recent = higher score
+        # Score drops to 0.5 after 7 days, 0.1 after 30 days
+        decay_rate = 0.1  # Adjust for desired decay curve
+        recency_score = 1.0 / (1.0 + decay_rate * time_diff / 86400)  # 86400 seconds = 1 day
+        
+        return min(recency_score, 1.0)
+    
+    def _deduplicate_results(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
+        """Remove duplicate results based on memory_id"""
+        seen_ids = set()
+        unique_results = []
+        
+        for result in results:
+            if result.memory_id not in seen_ids:
+                seen_ids.add(result.memory_id)
+                unique_results.append(result)
+        
+        return unique_results
+    
+    def _rank_results(self, results: List[RetrievalResult], query: RetrievalQuery) -> List[RetrievalResult]:
+        """Rank results using hybrid scoring"""
+        for result in results:
+            # Calculate composite score
+            composite_score = self._calculate_composite_score(result, query)
+            result.relevance_score = composite_score
+        
+        # Sort by composite score
+        results.sort(key=lambda x: x.relevance_score, reverse=True)
+        
+        return results
+    
+    def _calculate_composite_score(self, result: RetrievalResult, query: RetrievalQuery) -> float:
+        """Calculate composite relevance score"""
+        # Base weights
+        semantic_weight = 0.4
+        temporal_weight = 0.3
+        importance_weight = 0.2
+        emotional_weight = 0.1
+        
+        # Adjust weights based on query strategy
+        if query.strategy == RetrievalStrategy.SEMANTIC:
+            semantic_weight = 0.7
+            temporal_weight = 0.1
+            importance_weight = 0.1
+            emotional_weight = 0.1
+        elif query.strategy == RetrievalStrategy.TEMPORAL:
+            semantic_weight = 0.1
+            temporal_weight = 0.7
+            importance_weight = 0.1
+            emotional_weight = 0.1
+        elif query.strategy == RetrievalStrategy.EMOTIONAL:
+            semantic_weight = 0.1
+            temporal_weight = 0.1
+            importance_weight = 0.1
+            emotional_weight = 0.7
+        
+        # Calculate weighted score
+        score = 0.0
+        
+        # Semantic similarity
+        if result.semantic_similarity is not None:
+            score += semantic_weight * result.semantic_similarity
+        else:
+            score += semantic_weight * 0.5  # Default if no semantic score
+        
+        # Temporal relevance
+        if result.temporal_relevance is not None:
+            score += temporal_weight * result.temporal_relevance
+        else:
+            score += temporal_weight * result.recency_score
+        
+        # Importance
+        score += importance_weight * result.importance_score
+        
+        # Emotional relevance
+        if result.emotional_relevance is not None:
+            score += emotional_weight * result.emotional_relevance
+        else:
+            score += emotional_weight * 0.5  # Default if no emotional score
+        
+        return min(score, 1.0)
+    
+    def _apply_filters(self, results: List[RetrievalResult], query: RetrievalQuery) -> List[RetrievalResult]:
+        """Apply filters to results"""
+        filtered_results = results
+        
+        # Filter by memory types
+        if query.memory_types:
+            filtered_results = [r for r in filtered_results if r.memory_type in query.memory_types]
+        
+        # Filter by importance threshold
+        if query.importance_threshold is not None:
+            filtered_results = [r for r in filtered_results if r.importance_score >= query.importance_threshold]
+        
+        return filtered_results
+    
+    def get_memory_context(self, user_id: str, memory_id: str, 
+                          context_window: int = 5) -> List[RetrievalResult]:
+        """
+        Get contextual memories around a specific memory
+        
+        Args:
+            user_id: User ID
+            memory_id: Target memory ID
+            context_window: Number of memories before/after to retrieve
+            
+        Returns:
+            List[RetrievalResult]: Contextual memories
+        """
+        try:
+            # Get the target memory timestamp
+            target_timestamp = None
+            
+            with self.timescale_conn.cursor() as cur:
+                # Try episodic memories first
+                cur.execute("""
+                    SELECT event_timestamp FROM episodic_memories 
+                    WHERE id = %s AND user_id = %s
+                """, (memory_id, user_id))
+                
+                row = cur.fetchone()
+                if row:
+                    target_timestamp = row['event_timestamp']
+                else:
+                    # Try emotional memories
+                    cur.execute("""
+                        SELECT timestamp FROM emotional_memories 
+                        WHERE id = %s AND user_id = %s
+                    """, (memory_id, user_id))
+                    
+                    row = cur.fetchone()
+                    if row:
+                        target_timestamp = row['timestamp']
+            
+            if not target_timestamp:
+                return []
+            
+            # Get memories around the target timestamp
+            time_range = timedelta(hours=24)  # 24-hour window
+            start_time = target_timestamp - time_range
+            end_time = target_timestamp + time_range
+            
+            context_query = RetrievalQuery(
+                user_id=user_id,
+                time_range=(start_time, end_time),
+                limit=context_window * 2
+            )
+            
+            context_results = self.retrieve_memories(context_query)
+            
+            # Sort by temporal proximity to target
+            context_results.sort(key=lambda x: abs(
+                datetime.fromisoformat(x.metadata.get('timestamp', '')) - target_timestamp
+            ) if x.metadata and x.metadata.get('timestamp') else float('inf')
+            )
+            
+            return context_results[:context_window]
+            
+        except Exception as e:
+            print(f"Error getting memory context: {e}")
+            return []
+    
+    def get_related_memories(self, user_id: str, memory_id: str, 
+                           similarity_threshold: float = 0.7) -> List[RetrievalResult]:
+        """
+        Get memories related to a specific memory using graph relationships
+        
+        Args:
+            user_id: User ID
+            memory_id: Target memory ID
+            similarity_threshold: Minimum similarity threshold
+            
+        Returns:
+            List[RetrievalResult]: Related memories
+        """
+        if not self.neo4j_driver:
+            return []
+        
+        try:
+            with self.neo4j_driver.session() as session:
+                # Find related memories through graph relationships
+                result = session.run("""
+                    MATCH (m:Episode {id: $memory_id})-[:RELATED_TO*1..2]-(related)
+                    WHERE related.id <> $memory_id
+                    RETURN related.id as id, related.content as content, 
+                           related.timestamp as timestamp, related.importance_score as importance_score
+                    LIMIT 20
+                """, {"memory_id": memory_id})
+                
+                related_results = []
+                for record in result:
+                    related_results.append(RetrievalResult(
+                        memory_id=record["id"],
+                        memory_type="episodic",
+                        content=record["content"],
+                        relevance_score=0.8,  # High relevance for graph relationships
+                        recency_score=self._calculate_recency_score(
+                            datetime.fromisoformat(record["timestamp"])
+                        ),
+                        importance_score=record["importance_score"] or 0.5,
+                        metadata={"related_to": memory_id}
+                    ))
+                
+                return related_results
+                
+        except Exception as e:
+            print(f"Error getting related memories: {e}")
+            return []

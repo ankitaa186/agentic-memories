@@ -142,3 +142,19 @@ class FinanceAggregate(BaseModel):
 RetrieveResponse.model_rebuild()
 StructuredRetrieveResponse.model_rebuild()
 
+
+# Narrative request/response
+class NarrativeRequest(BaseModel):
+    user_id: str
+    query: Optional[str] = None
+    start_time: Optional[str] = None  # ISO8601
+    end_time: Optional[str] = None    # ISO8601
+    limit: int = Field(default=25, ge=1, le=50)
+
+
+class NarrativeResponse(BaseModel):
+    user_id: str
+    narrative: str
+    summary: Optional[str] = None
+    sources: List[dict] = Field(default_factory=list)
+

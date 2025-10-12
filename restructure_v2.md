@@ -411,6 +411,142 @@ ALTER TABLE identity_memories
   ADD CONSTRAINT IF NOT EXISTS chk_user_id_len CHECK (char_length(user_id) <= 64);
 ```
 
+### 2.7 Portfolio Memory (Financial Tracking)
+#### Idea
+**Purpose**: Maintain structured financial state with holdings, transactions, goals, and risk preferences while preserving temporal history for performance analysis and predictive insights.
+
+Conceptual model:
+- Portfolio holdings are first-class entities with time-series value tracking, not just metadata in semantic memories.
+- Transactions form an immutable ledger; current positions are derived views.
+- Goals and risk preferences influence predictive suggestions and alerts.
+- Privacy is paramount; encryption and consent are mandatory for financial data.
+
+Signals:
+- `ticker`, `asset_type`, `shares`, `avg_price`, `current_value`, `intent`, `time_horizon`, `risk_tolerance`, `goals`, `concerns`.
+
+#### Implementation (reference)
+**Storage Design (PostgreSQL for holdings, TimescaleDB for snapshots)**:
+```sql
+-- PostgreSQL: Current portfolio holdings
+CREATE TABLE portfolio_holdings (
+    id UUID PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    ticker VARCHAR(16), -- Can be NULL for private equity
+    asset_name VARCHAR(256), -- For private equity/unlisted assets
+    asset_type VARCHAR(32) NOT NULL, -- 'public_equity', 'private_equity', 'etf', 'mutual_fund', 'cash', 'bond', 'crypto', 'other'
+    shares FLOAT, -- NULL for non-share-based assets
+    avg_price FLOAT,
+    current_price FLOAT,
+    current_value FLOAT,
+    cost_basis FLOAT,
+    ownership_pct FLOAT, -- For private equity
+    position VARCHAR(16), -- 'long', 'short'
+    intent VARCHAR(16), -- 'buy', 'sell', 'hold', 'watch'
+    time_horizon VARCHAR(16), -- 'days', 'weeks', 'months', 'years'
+    target_price FLOAT,
+    stop_loss FLOAT,
+    notes TEXT,
+    first_acquired TIMESTAMPTZ NOT NULL,
+    last_updated TIMESTAMPTZ NOT NULL,
+    source_memory_id VARCHAR(64), -- Link back to originating memory
+    CONSTRAINT chk_asset_type CHECK (asset_type IN ('public_equity', 'private_equity', 'etf', 'mutual_fund', 'cash', 'bond', 'crypto', 'other')),
+    CONSTRAINT chk_position CHECK (position IS NULL OR position IN ('long', 'short')),
+    CONSTRAINT chk_intent CHECK (intent IS NULL OR intent IN ('buy', 'sell', 'hold', 'watch')),
+    CONSTRAINT chk_time_horizon CHECK (time_horizon IS NULL OR time_horizon IN ('days', 'weeks', 'months', 'years'))
+);
+
+-- Portfolio transactions ledger (immutable)
+CREATE TABLE portfolio_transactions (
+    id UUID PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    ticker VARCHAR(16),
+    asset_name VARCHAR(256),
+    asset_type VARCHAR(32) NOT NULL,
+    transaction_type VARCHAR(16) NOT NULL, -- 'buy', 'sell', 'dividend', 'split', 'transfer'
+    shares FLOAT,
+    price FLOAT,
+    total_value FLOAT,
+    fees FLOAT DEFAULT 0,
+    transaction_date TIMESTAMPTZ NOT NULL,
+    notes TEXT,
+    source_memory_id VARCHAR(64),
+    CONSTRAINT chk_transaction_type CHECK (transaction_type IN ('buy', 'sell', 'dividend', 'split', 'transfer'))
+);
+
+-- Portfolio goals and risk preferences
+CREATE TABLE portfolio_preferences (
+    user_id VARCHAR(64) PRIMARY KEY,
+    risk_tolerance VARCHAR(16), -- 'low', 'medium', 'high'
+    investment_goals JSONB[], -- [{goal: 'retirement', target_amount: 1000000, target_date: '2045-01-01'}]
+    sector_preferences JSONB, -- {tech: 0.3, healthcare: 0.2, energy: 0.1}
+    constraints JSONB, -- {max_single_position: 0.15, min_cash_reserve: 10000}
+    last_updated TIMESTAMPTZ NOT NULL,
+    CONSTRAINT chk_risk_tolerance CHECK (risk_tolerance IS NULL OR risk_tolerance IN ('low', 'medium', 'high'))
+);
+
+-- TimescaleDB: Portfolio value snapshots over time
+CREATE TABLE portfolio_snapshots (
+    user_id VARCHAR(64) NOT NULL,
+    snapshot_timestamp TIMESTAMPTZ NOT NULL,
+    total_value FLOAT NOT NULL,
+    cash_value FLOAT,
+    equity_value FLOAT,
+    holdings_snapshot JSONB, -- Full holdings array at this point in time
+    returns_1d FLOAT,
+    returns_7d FLOAT,
+    returns_30d FLOAT,
+    returns_ytd FLOAT
+);
+
+SELECT create_hypertable('portfolio_snapshots', 'snapshot_timestamp');
+```
+
+Indexes and constraints:
+```sql
+-- Holdings indexes
+CREATE INDEX IF NOT EXISTS idx_holdings_user_ticker
+ON portfolio_holdings (user_id, ticker);
+
+CREATE INDEX IF NOT EXISTS idx_holdings_user_asset_type
+ON portfolio_holdings (user_id, asset_type);
+
+CREATE INDEX IF NOT EXISTS idx_holdings_user_intent
+ON portfolio_holdings (user_id, intent) WHERE intent IN ('buy', 'watch');
+
+CREATE INDEX IF NOT EXISTS idx_holdings_last_updated
+ON portfolio_holdings (last_updated DESC);
+
+-- Transactions indexes
+CREATE INDEX IF NOT EXISTS idx_transactions_user_date
+ON portfolio_transactions (user_id, transaction_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_ticker
+ON portfolio_transactions (ticker, transaction_date DESC);
+
+-- Snapshots indexes (TimescaleDB)
+CREATE INDEX IF NOT EXISTS idx_snapshots_user_time
+ON portfolio_snapshots (user_id, snapshot_timestamp DESC);
+
+-- Compression and retention for snapshots
+SELECT add_compression_policy('portfolio_snapshots', INTERVAL '90 days');
+SELECT add_retention_policy('portfolio_snapshots', INTERVAL '5 years');
+
+SELECT set_chunk_time_interval('portfolio_snapshots', INTERVAL '30 days');
+
+ALTER TABLE portfolio_snapshots
+  SET (timescaledb.compress,
+       timescaledb.compress_orderby = 'snapshot_timestamp DESC',
+       timescaledb.compress_segmentby = 'user_id');
+```
+
+Neo4j relationships (portfolio correlations):
+```cypher
+// Track correlations and dependencies
+(h1:Holding {ticker: 'AAPL'})-[:CORRELATED_WITH {coefficient: 0.85}]->(h2:Holding {ticker: 'MSFT'})
+(h1)-[:IN_SECTOR {sector: 'Technology'}]->(s:Sector {name: 'Technology'})
+(h1)-[:AFFECTS {impact: 'high'}]->(g:Goal {name: 'Retirement Fund'})
+```
+
 ---
 
 ## Part III: Memory Processing Pipeline

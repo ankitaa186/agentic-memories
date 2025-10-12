@@ -22,14 +22,19 @@ from src.schemas import (
     PortfolioSummaryResponse,
     FinanceAggregate,
     FinanceGoal,
+    NarrativeRequest,
+    NarrativeResponse,
 )
 from src.dependencies.chroma import get_chroma_client
+from src.dependencies.timescale import ping_timescale
+from src.dependencies.neo4j_client import ping_neo4j
 from src.dependencies.redis_client import get_redis_client
 from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled
 from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url
 import httpx
 from src.services.extraction import extract_from_transcript
+from src.services.reconstruction import ReconstructionService
 from src.services.storage import upsert_memories
 from src.services.retrieval import search_memories, _standard_collection_name
 from src.services.extract_utils import _call_llm_json
@@ -112,6 +117,9 @@ if not _root.handlers:
     _root_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     _root.addHandler(_root_handler)
     _root.setLevel(_level)
+
+# Services
+_reconstruction = ReconstructionService()
 
 # Request/response logging middleware (minimal, no bodies)
 import time as _time
@@ -321,6 +329,26 @@ def health_full() -> dict:
 		chroma_error = str(exc)
 	checks["chroma"] = {"ok": chroma_ok, "error": chroma_error}
 
+	# Timescale/Postgres check
+	ts_ok = False
+	ts_error: Optional[str] = None
+	try:
+		ts_ok, ts_error = ping_timescale()
+	except Exception as exc:  # pragma: no cover
+		ts_ok = False
+		ts_error = str(exc)
+	checks["timescale"] = {"ok": ts_ok, "error": ts_error}
+
+	# Neo4j check
+	neo_ok = False
+	neo_error: Optional[str] = None
+	try:
+		neo_ok, neo_error = ping_neo4j()
+	except Exception as exc:  # pragma: no cover
+		neo_ok = False
+		neo_error = str(exc)
+	checks["neo4j"] = {"ok": neo_ok, "error": neo_error}
+
 	# Redis check (optional)
 	redis_ok = None
 	redis_error: Optional[str] = None
@@ -335,7 +363,47 @@ def health_full() -> dict:
 		redis_error = str(exc)
 	checks["redis"] = {"ok": redis_ok, "error": redis_error}
 
-	overall_ok = chroma_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
+	# Portfolio tables check (Postgres)
+	portfolio_ok = False
+	portfolio_error: Optional[str] = None
+	portfolio_tables = []
+	try:
+		from src.dependencies.timescale import get_timescale_conn
+		conn = get_timescale_conn()
+		if conn:
+			with conn.cursor() as cur:
+				cur.execute("""
+					SELECT table_name FROM information_schema.tables
+					WHERE table_schema = 'public'
+					AND table_name IN ('portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences')
+					ORDER BY table_name
+				""")
+				portfolio_tables = [row['table_name'] for row in cur.fetchall()]
+				portfolio_ok = len(portfolio_tables) == 3
+				if not portfolio_ok:
+					portfolio_error = f"Missing tables: {set(['portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences']) - set(portfolio_tables)}"
+	except Exception as exc:
+		portfolio_error = str(exc)
+	checks["portfolio"] = {"ok": portfolio_ok, "error": portfolio_error, "tables": portfolio_tables}
+
+	# Langfuse check (optional - tracing)
+	langfuse_ok = None
+	langfuse_error: Optional[str] = None
+	try:
+		from src.dependencies.langfuse_client import ping_langfuse
+		from src.config import is_langfuse_enabled
+		if is_langfuse_enabled():
+			langfuse_ok = ping_langfuse()
+			if not langfuse_ok:
+				langfuse_error = "Client initialization failed"
+		else:
+			langfuse_ok = None  # not configured
+	except Exception as exc:
+		langfuse_ok = False
+		langfuse_error = str(exc)
+	checks["langfuse"] = {"ok": langfuse_ok, "error": langfuse_error, "enabled": is_langfuse_enabled()}
+
+	overall_ok = chroma_ok and ts_ok and neo_ok and portfolio_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
 	return {
 		"status": "ok" if overall_ok else "degraded",
 		"time": datetime.now(timezone.utc).isoformat(),
@@ -345,6 +413,18 @@ def health_full() -> dict:
 
 @app.post("/v1/store", response_model=StoreResponse)
 def store_transcript(body: TranscriptRequest) -> StoreResponse:
+	from src.services.tracing import start_trace
+	
+	# Start trace for this request
+	trace = start_trace(
+		name="store_transcript",
+		user_id=body.user_id,
+		metadata={
+			"history_length": len(body.history),
+			"endpoint": "/v1/store"
+		}
+	)
+	
 	# Guard: enforce LLM configuration
 	if not is_llm_configured():
 		raise HTTPException(status_code=400, detail="LLM is not configured")
@@ -352,6 +432,22 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 	result = extract_from_transcript(body)
 	# Phase 3: Persist to ChromaDB
 	ids = upsert_memories(body.user_id, result.memories)
+	
+	# Phase 4: Extract and persist portfolio data to dedicated tables
+	try:
+		from src.services.portfolio_service import PortfolioService
+		portfolio_service = PortfolioService()
+		for i, memory in enumerate(result.memories):
+			portfolio_meta = memory.metadata.get('portfolio')
+			if portfolio_meta:
+				portfolio_service.upsert_holding_from_memory(
+					user_id=body.user_id,
+					portfolio_metadata=portfolio_meta,
+					memory_id=ids[i]
+				)
+	except Exception as exc:
+		logger.warning("[store.portfolio] Failed to persist portfolio data: %s", exc)
+	
 	# Bump Redis namespace for this user to invalidate short-term caches
 	try:
 		redis = get_redis_client()
@@ -377,7 +473,7 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 		)
 		for i, m in enumerate(result.memories)
 	]
-	return StoreResponse(
+	response = StoreResponse(
 		memories_created=len(ids), 
 		ids=ids, 
 		summary=result.summary, 
@@ -386,6 +482,15 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 		updates_made=result.updates_made,
 		existing_memories_checked=result.existing_memories_checked
 	)
+	
+	# Update trace with output
+	if trace:
+		try:
+			trace.update(output={"memories_created": len(ids)})
+		except Exception:
+			pass
+	
+	return response
 
 
 @app.get("/v1/retrieve", response_model=RetrieveResponse)
@@ -397,6 +502,19 @@ def retrieve(
 	limit: int = Query(default=10, ge=1, le=50),
 	offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
+	from src.services.tracing import start_trace
+	
+	# Start trace for this request
+	trace = start_trace(
+		name="retrieve_memories",
+		user_id=user_id,
+		metadata={
+			"query": query[:100] if query else None,
+			"limit": limit,
+			"endpoint": "/v1/retrieve"
+		}
+	)
+	
 	filters: dict = {}
 	if layer:
 		filters["layer"] = layer
@@ -483,12 +601,33 @@ def retrieve(
 		goals=goals,
 	) if (fin_holdings or goals) else None
 
-	return RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total}, finance=finance_agg)
+	response = RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total}, finance=finance_agg)
+	
+	# Update trace with output
+	if trace:
+		try:
+			trace.update(output={"results_count": len(items), "total": total})
+		except Exception:
+			pass
+	
+	return response
 
 
 # Advanced structured retrieval endpoint
 @app.post("/v1/retrieve/structured", response_model=StructuredRetrieveResponse)
 def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveResponse:
+	from src.services.tracing import start_trace
+	
+	# Start trace for this request
+	trace = start_trace(
+		name="retrieve_structured",
+		user_id=body.user_id,
+		metadata={
+			"limit": body.limit,
+			"endpoint": "/v1/retrieve/structured"
+		}
+	)
+	
 	if not is_llm_configured():
 		raise HTTPException(status_code=400, detail="LLM is not configured")
 
@@ -641,7 +780,7 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 		goals=[FinanceGoal(text=i.content, source_memory_id=i.id) for i in goals_items],
 	) if (portfolio_ids or goal_ids) else None
 
-	return StructuredRetrieveResponse(
+	response = StructuredRetrieveResponse(
 		emotions=build_items(list(resp.get("emotions", []))),
 		behaviors=build_items(list(resp.get("behaviors", []))),
 		personal=build_items(list(resp.get("personal", []))),
@@ -654,6 +793,61 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 		other=build_items(list(resp.get("other", []))),
 		finance=finance_agg2,
 	)
+	
+	# Update trace with output
+	if trace:
+		try:
+			total_items = sum(len(build_items(list(resp.get(k, [])))) for k in ["emotions", "behaviors", "personal", "professional", "habits", "skills_tools", "projects", "relationships", "learning_journal", "other"])
+			trace.update(output={"total_structured_items": total_items})
+		except Exception:
+			pass
+	
+	return response
+
+
+# Narrative endpoint
+@app.post("/v1/narrative", response_model=NarrativeResponse)
+def narrative(body: NarrativeRequest) -> NarrativeResponse:
+    from src.services.tracing import start_trace
+    
+    # Start trace for this request
+    trace = start_trace(
+        name="narrative_generation",
+        user_id=body.user_id,
+        metadata={
+            "query": body.query[:100] if body.query else None,
+            "limit": body.limit,
+            "endpoint": "/v1/narrative"
+        }
+    )
+    
+    start = None
+    end = None
+    try:
+        if body.start_time:
+            start = datetime.fromisoformat(body.start_time)
+        if body.end_time:
+            end = datetime.fromisoformat(body.end_time)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ISO8601 for start_time/end_time")
+
+    ntv = _reconstruction.build_narrative(
+        user_id=body.user_id,
+        query=body.query,
+        time_range=(start, end) if start and end else None,
+        limit=body.limit,
+    )
+    
+    response = NarrativeResponse(user_id=ntv.user_id, narrative=ntv.text, summary=ntv.summary, sources=ntv.sources)
+    
+    # Update trace with output
+    if trace:
+        try:
+            trace.update(output={"sources_count": len(ntv.sources)})
+        except Exception:
+            pass
+    
+    return response
 
 
 @app.post("/v1/forget")
@@ -674,9 +868,73 @@ def maintenance(body: MaintenanceRequest) -> MaintenanceResponse:
 
 @app.get("/v1/portfolio/summary", response_model=PortfolioSummaryResponse)
 def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200, ge=1, le=1000)) -> PortfolioSummaryResponse:
-    # Fetch a broad set of finance-related memories and aggregate portfolio metadata
-    # Strategy: pull without query to get all, then filter client-side for metadata.portfolio
-    # Pagination in chunks to cover more items than default limits
+    from src.services.tracing import start_trace
+    
+    # Start trace for this request
+    trace = start_trace(
+        name="portfolio_summary",
+        user_id=user_id,
+        metadata={
+            "limit": limit,
+            "endpoint": "/v1/portfolio/summary"
+        }
+    )
+    
+    # NEW: Fetch from dedicated portfolio_holdings table (primary source)
+    holdings: List[dict] = []
+    counts_by_asset_type: dict[str, int] = {}
+    
+    try:
+        from src.services.portfolio_service import PortfolioService
+        portfolio_service = PortfolioService()
+        db_holdings = portfolio_service.get_holdings(user_id)
+        
+        # Convert DB holdings to response format
+        for h in db_holdings[:limit]:
+            holding_dict = {
+                "asset_type": h.get("asset_type"),
+                "ticker": h.get("ticker"),
+                "name": h.get("asset_name"),
+                "shares": h.get("shares"),
+                "avg_price": h.get("avg_price"),
+                "current_price": h.get("current_price"),
+                "current_value": h.get("current_value"),
+                "cost_basis": h.get("cost_basis"),
+                "ownership_pct": h.get("ownership_pct"),
+                "position": h.get("position"),
+                "intent": h.get("intent"),
+                "target_price": h.get("target_price"),
+                "stop_loss": h.get("stop_loss"),
+                "time_horizon": h.get("time_horizon"),
+                "notes": h.get("notes"),
+                "source_memory_id": h.get("source_memory_id"),
+                "updated_at": h.get("last_updated")
+            }
+            holdings.append(holding_dict)
+            at = holding_dict.get("asset_type") or "unknown"
+            counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+        
+        # Sort by last_updated for most recent first
+        holdings.sort(key=lambda x: x.get("updated_at") or datetime.min, reverse=True)
+        
+        response = PortfolioSummaryResponse(
+            user_id=user_id,
+            holdings=holdings[:limit],
+            counts_by_asset_type=counts_by_asset_type
+        )
+        
+        # Update trace with output
+        if trace:
+            try:
+                trace.update(output={"holdings_count": len(holdings), "source": "postgres"})
+            except Exception:
+                pass
+        
+        return response
+    except Exception as exc:
+        logger.warning("[portfolio.summary] Failed to fetch from DB, falling back to ChromaDB: %s", exc)
+    
+    # FALLBACK: Fetch from ChromaDB metadata (legacy/backup)
     all_results: List[dict] = []
     offset = 0
     batch_limit = min(200, limit)
@@ -689,7 +947,7 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
             break
         offset += batch_limit
 
-    # Aggregate holdings
+    # Aggregate holdings from ChromaDB
     holdings: List[dict] = []
     counts_by_asset_type: dict[str, int] = {}
     for item in all_results:
@@ -757,7 +1015,16 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
 
     # Shape into response model
     # Note: Pydantic will coerce the list of dicts into PortfolioHolding items
-    return PortfolioSummaryResponse(user_id=user_id, holdings=holdings[:limit], counts_by_asset_type=counts_by_asset_type)
+    response = PortfolioSummaryResponse(user_id=user_id, holdings=holdings[:limit], counts_by_asset_type=counts_by_asset_type)
+    
+    # Update trace with output
+    if trace:
+        try:
+            trace.update(output={"holdings_count": len(holdings), "source": "chromadb_fallback"})
+        except Exception:
+            pass
+    
+    return response
 
 
 @app.post("/v1/maintenance/compact_all", response_model=MaintenanceResponse)

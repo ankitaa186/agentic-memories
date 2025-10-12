@@ -220,3 +220,24 @@ def is_scheduled_maintenance_enabled() -> bool:
 			return True
 		return alias.strip().lower() in {"1", "true", "yes", "on"}
 	return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Langfuse Configuration
+def get_langfuse_public_key() -> str:
+	"""Get Langfuse public key from environment."""
+	return os.getenv("LANGFUSE_PUBLIC_KEY", "")
+
+
+def get_langfuse_secret_key() -> str:
+	"""Get Langfuse secret key from environment."""
+	return os.getenv("LANGFUSE_SECRET_KEY", "")
+
+
+def get_langfuse_host() -> str:
+	"""Get Langfuse host URL from environment."""
+	return os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com")
+
+
+def is_langfuse_enabled() -> bool:
+	"""Check if Langfuse tracing is enabled."""
+	return bool(get_langfuse_public_key() and get_langfuse_secret_key())

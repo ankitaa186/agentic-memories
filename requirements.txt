@@ -11,3 +11,6 @@ pytest==8.3.2
 langgraph==0.2.25
 langgraph-checkpoint==1.0.12
 python-jose[cryptography]==3.3.0
+psycopg[binary]==3.2.1
+neo4j==5.23.1
+langfuse==2.36.0

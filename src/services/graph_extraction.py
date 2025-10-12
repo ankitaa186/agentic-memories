@@ -17,18 +17,30 @@ def build_extraction_graph() -> StateGraph:
 	graph = StateGraph(dict)
 
 	def node_worthiness(state: Dict[str, Any]) -> Dict[str, Any]:
+		from src.services.tracing import start_span, end_span
+		
+		span = start_span("worthiness_check", input={"history_count": len(state["history"])})
+		
 		payload = {"history": state["history"][-6:]}
 		resp = _call_llm_json(WORTHINESS_PROMPT, payload)
 		state["worthy"] = bool(resp and resp.get("worthy", False))
 		state["worthy_raw"] = resp
+		
+		end_span(output={"worthy": state["worthy"]})
 		return state
 
 	def decide_next(state: Dict[str, Any]) -> str:
 		return "extract" if state.get("worthy") else END
 
 	def node_extract(state: Dict[str, Any]) -> Dict[str, Any]:
+		from src.services.tracing import start_span, end_span
+		
 		# Get existing memories for context
 		existing_memories = state.get("existing_memories", [])
+		
+		span = start_span("memory_extraction", 
+		                 input={"existing_memories_count": len(existing_memories)})
+		
 		existing_context = format_memories_for_llm_context(existing_memories)
 		
 		# Create enhanced payload with existing memory context
@@ -42,6 +54,8 @@ def build_extraction_graph() -> StateGraph:
 		
 		items = _call_llm_json(enhanced_prompt, payload, expect_array=True) or []
 		state["items"] = items
+		
+		end_span(output={"items_extracted": len(items)})
 		return state
 
 	graph.add_node("worth", node_worthiness)
