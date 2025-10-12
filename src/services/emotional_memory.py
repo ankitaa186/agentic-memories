@@ -136,6 +136,7 @@ class EmotionalMemoryService:
             raise Exception("TimescaleDB connection not available")
         
         with self.timescale_conn.cursor() as cur:
+            import json
             cur.execute("""
                 INSERT INTO emotional_memories (
                     id, user_id, timestamp, emotional_state, valence, arousal,
@@ -155,8 +156,11 @@ class EmotionalMemoryService:
                 memory.trigger_event,
                 memory.intensity,
                 memory.duration_minutes,
-                memory.metadata
+                json.dumps(memory.metadata) if memory.metadata else None
             ))
+        
+        # Commit the transaction
+        self.timescale_conn.commit()
     
     def _store_in_chroma(self, memory: EmotionalMemory) -> None:
         """Store emotional memory in ChromaDB for semantic search"""
@@ -190,7 +194,7 @@ class EmotionalMemoryService:
                 name=self.collection_name
             )
             
-            collection.add(
+            collection.upsert(
                 embeddings=embeddings,
                 documents=[search_text],
                 metadatas=[metadata],

@@ -60,8 +60,14 @@ def generate_embedding(text: str) -> Optional[List[float]]:
 					pass
 			
 			return embedding
-		except Exception:
+		except Exception as e:
 			# Fall back to deterministic embedding on any error during Phase 2
+			from src.services.tracing import trace_error
+			trace_error(e, metadata={
+				"model": EMBEDDING_MODEL,
+				"context": "embedding_generation",
+				"fallback": True
+			})
 			pass
 
 	# Deterministic fallback: map text to a small vector using hash

@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
     emotional_arousal FLOAT,
     sensory_context JSONB,
     causal_chain JSONB,
-    significance_score FLOAT,
+    importance_score FLOAT,
+    tags TEXT[],
+    metadata JSONB,
     replay_count INT DEFAULT 0,
     last_recalled TIMESTAMPTZ,
     decay_factor FLOAT DEFAULT 1.0

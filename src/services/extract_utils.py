@@ -210,7 +210,7 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 
 		if last_exc:
 			raise last_exc
-	except Exception:
+	except Exception as exc:
 		logger.exception(
 			"LLM call failed | provider=%s model=%s | expect_array=%s | payload=%s",
 			provider,
@@ -218,6 +218,14 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 			expect_array,
 			json.dumps(user_payload)[:1000],
 		)
+		# Trace the error for debugging
+		from src.services.tracing import trace_error
+		trace_error(exc, metadata={
+			"provider": provider,
+			"model": EXTRACTION_MODEL,
+			"expect_array": expect_array,
+			"context": "llm_extraction"
+		})
 		return None
 
 

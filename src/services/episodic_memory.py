@@ -73,6 +73,8 @@ class EpisodicMemoryService:
     
     def _store_in_timescale(self, memory: EpisodicMemory) -> None:
         """Store memory in TimescaleDB"""
+        import json
+        
         if not self.timescale_conn:
             raise Exception("TimescaleDB connection not available")
         
@@ -91,14 +93,17 @@ class EpisodicMemoryService:
                 memory.event_timestamp,
                 memory.event_type,
                 memory.content,
-                memory.location,
-                memory.participants,
+                json.dumps(memory.location) if memory.location else None,
+                memory.participants if memory.participants else None,  # TEXT[] array, not JSON
                 memory.emotional_valence,
                 memory.emotional_arousal,
                 memory.importance_score,
-                memory.tags,
-                memory.metadata
+                memory.tags if memory.tags else None,  # TEXT[] array, not JSON
+                json.dumps(memory.metadata) if memory.metadata else None
             ))
+        
+        # Commit the transaction
+        self.timescale_conn.commit()
     
     def _store_in_neo4j(self, memory: EpisodicMemory) -> None:
         """Store memory relationships in Neo4j"""
@@ -161,7 +166,7 @@ class EpisodicMemoryService:
             name=self.collection_name
         )
         
-        collection.add(
+        collection.upsert(
             embeddings=embeddings,
             documents=[memory.content],
             metadatas=[metadata],

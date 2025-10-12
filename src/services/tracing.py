@@ -21,18 +21,23 @@ def start_trace(name: str, user_id: str, metadata: Optional[Dict[str, Any]] = No
 	Returns:
 		Trace object if Langfuse is enabled, None otherwise.
 	"""
+	import logging
 	from src.dependencies.langfuse_client import get_langfuse_client
+	
+	logger = logging.getLogger("agentic_memories.tracing")
 	
 	client = get_langfuse_client()
 	if not client:
+		logger.warning("[tracing] Langfuse client not available")
 		return None
 	
 	try:
 		trace = client.trace(name=name, user_id=user_id, metadata=metadata or {})
 		_current_trace.set(trace)
+		logger.info("[tracing] Started trace: name=%s user_id=%s trace_id=%s", name, user_id, trace.id)
 		return trace
 	except Exception as e:
-		print(f"Failed to start trace: {e}")
+		logger.error("[tracing] Failed to start trace: %s", e, exc_info=True)
 		return None
 
 
@@ -46,7 +51,7 @@ def get_current_trace() -> Optional[Any]:
 
 
 def start_span(name: str, metadata: Optional[Dict[str, Any]] = None, input: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-	"""Start a new span within the current trace.
+	"""Start a new span within the current trace or parent span.
 	
 	Args:
 		name: Name of the span (e.g., "worthiness_check")
@@ -56,16 +61,31 @@ def start_span(name: str, metadata: Optional[Dict[str, Any]] = None, input: Opti
 	Returns:
 		Span object if trace exists, None otherwise.
 	"""
+	import logging
+	logger = logging.getLogger("agentic_memories.tracing")
+	
 	trace = get_current_trace()
 	if not trace:
 		return None
 	
 	try:
-		span = trace.span(name=name, metadata=metadata or {}, input=input)
-		_current_span.set(span)
+		# Get current parent span (if any) to create nested hierarchy
+		parent_span = _current_span.get()
+		
+		# Create span as child of parent span, or directly under trace
+		if parent_span:
+			span = parent_span.span(name=name, metadata=metadata or {}, input=input)
+			logger.debug("[tracing] Started nested span: %s (parent: %s)", name, parent_span.id if hasattr(parent_span, 'id') else 'unknown')
+		else:
+			span = trace.span(name=name, metadata=metadata or {}, input=input)
+			logger.debug("[tracing] Started top-level span: %s", name)
+		
+		# Don't overwrite parent span - we'll manage the stack manually
+		# _current_span.set(span)
+		
 		return span
 	except Exception as e:
-		print(f"Failed to start span: {e}")
+		logger.error("[tracing] Failed to start span: %s", e, exc_info=True)
 		return None
 
 

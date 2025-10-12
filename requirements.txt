@@ -10,6 +10,8 @@ python-dotenv==1.0.1
 pytest==8.3.2
 langgraph==0.2.25
 langgraph-checkpoint==1.0.12
+langchain-core==0.3.0
+langchain==0.3.0
 python-jose[cryptography]==3.3.0
 psycopg[binary]==3.2.1
 neo4j==5.23.1

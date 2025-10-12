@@ -413,40 +413,18 @@ def health_full() -> dict:
 
 @app.post("/v1/store", response_model=StoreResponse)
 def store_transcript(body: TranscriptRequest) -> StoreResponse:
-	from src.services.tracing import start_trace
-	
-	# Start trace for this request
-	trace = start_trace(
-		name="store_transcript",
-		user_id=body.user_id,
-		metadata={
-			"history_length": len(body.history),
-			"endpoint": "/v1/store"
-		}
-	)
-	
 	# Guard: enforce LLM configuration
 	if not is_llm_configured():
 		raise HTTPException(status_code=400, detail="LLM is not configured")
-	# Phase 2: Extract memories only (no persistence yet)
-	result = extract_from_transcript(body)
-	# Phase 3: Persist to ChromaDB
-	ids = upsert_memories(body.user_id, result.memories)
 	
-	# Phase 4: Extract and persist portfolio data to dedicated tables
-	try:
-		from src.services.portfolio_service import PortfolioService
-		portfolio_service = PortfolioService()
-		for i, memory in enumerate(result.memories):
-			portfolio_meta = memory.metadata.get('portfolio')
-			if portfolio_meta:
-				portfolio_service.upsert_holding_from_memory(
-					user_id=body.user_id,
-					portfolio_metadata=portfolio_meta,
-					memory_id=ids[i]
-				)
-	except Exception as exc:
-		logger.warning("[store.portfolio] Failed to persist portfolio data: %s", exc)
+	# Use unified ingestion graph (replaces old extraction + routing)
+	from src.services.unified_ingestion_graph import run_unified_ingestion
+	
+	final_state = run_unified_ingestion(body)
+	
+	# Extract results from final state
+	memories = final_state.get("memories", [])
+	ids = final_state.get("memory_ids", [])
 	
 	# Bump Redis namespace for this user to invalidate short-term caches
 	try:
@@ -471,24 +449,42 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 			timestamp=m.timestamp,
 			metadata=m.metadata,
 		)
-		for i, m in enumerate(result.memories)
+		for i, m in enumerate(memories)
 	]
+	
+	# Get storage results
+	storage_results = final_state.get("storage_results", {})
+	
+	# Build summary
+	summary_parts = []
+	if len(memories) > 0:
+		layers = set(m.layer for m in memories)
+		types = set(m.type for m in memories)
+		summary_parts.append(f"Extracted {len(memories)} memories ({', '.join(types)}) across layers: {', '.join(layers)}.")
+	
+	if storage_results.get("episodic_stored", 0) > 0:
+		summary_parts.append(f"{storage_results['episodic_stored']} episodic")
+	if storage_results.get("emotional_stored", 0) > 0:
+		summary_parts.append(f"{storage_results['emotional_stored']} emotional")
+	if storage_results.get("procedural_stored", 0) > 0:
+		summary_parts.append(f"{storage_results['procedural_stored']} procedural")
+	if storage_results.get("portfolio_stored", 0) > 0:
+		summary_parts.append(f"{storage_results['portfolio_stored']} portfolio")
+	
+	if len(summary_parts) > 1:
+		summary = summary_parts[0] + " Stored: " + ", ".join(summary_parts[1:]) + "."
+	else:
+		summary = summary_parts[0] if summary_parts else "No memories extracted."
+	
 	response = StoreResponse(
 		memories_created=len(ids), 
 		ids=ids, 
-		summary=result.summary, 
+		summary=summary, 
 		memories=items,
-		duplicates_avoided=result.duplicates_avoided,
-		updates_made=result.updates_made,
-		existing_memories_checked=result.existing_memories_checked
+		duplicates_avoided=0,
+		updates_made=0,
+		existing_memories_checked=len(final_state.get("existing_memories", []))
 	)
-	
-	# Update trace with output
-	if trace:
-		try:
-			trace.update(output={"memories_created": len(ids)})
-		except Exception:
-			pass
 	
 	return response
 

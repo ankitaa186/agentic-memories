@@ -80,6 +80,17 @@ class HybridRetrievalService:
         Returns:
             List[RetrievalResult]: Ranked list of memories
         """
+        from src.services.tracing import start_span, end_span
+        
+        span = start_span("hybrid_retrieval", input={
+            "user_id": query.user_id,
+            "has_query": bool(query.query_text),
+            "has_time_range": query.time_range is not None,
+            "has_emotional_context": query.emotional_context is not None,
+            "strategy": query.strategy.value,
+            "limit": query.limit
+        })
+        
         all_results = []
         
         # 1. Semantic retrieval (if query text provided)
@@ -108,8 +119,15 @@ class HybridRetrievalService:
         
         # 6. Apply filters and limits
         filtered_results = self._apply_filters(ranked_results, query)
+        final_results = filtered_results[:query.limit]
         
-        return filtered_results[:query.limit]
+        end_span(output={
+            "total_raw_results": len(all_results),
+            "unique_results": len(unique_results),
+            "final_count": len(final_results)
+        })
+        
+        return final_results
     
     def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
         """Perform semantic search across all memory types"""
