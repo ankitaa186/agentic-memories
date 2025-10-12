@@ -214,8 +214,7 @@ class PortfolioService:
                         holding_data.get('notes'),
                         memory_id
                     ))
-                
-                self.timescale_conn.commit()
+                # Connection is in autocommit mode, no need for explicit commit
                 
                 # Create Neo4j node and relationships (async, fire-and-forget)
                 self._create_holding_graph_node(holding_id, user_id, ticker, asset_name)
@@ -316,8 +315,7 @@ class PortfolioService:
                     user_id, total_value, cash_value, equity_value,
                     holdings  # Store full holdings JSON
                 ))
-                
-                self.timescale_conn.commit()
+                # Connection is in autocommit mode, no need for explicit commit
                 return True
                 
         except Exception as e:

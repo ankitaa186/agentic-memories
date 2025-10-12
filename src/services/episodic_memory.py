@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
-from src.dependencies.timescale import get_timescale_conn
+from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 from src.services.embedding_utils import get_embeddings
@@ -75,35 +75,42 @@ class EpisodicMemoryService:
         """Store memory in TimescaleDB"""
         import json
         
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             raise Exception("TimescaleDB connection not available")
         
-        with self.timescale_conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO episodic_memories (
-                    id, user_id, event_timestamp, event_type, content,
-                    location, participants, emotional_valence, emotional_arousal,
-                    importance_score, tags, metadata
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """, (
-                memory.id,
-                memory.user_id,
-                memory.event_timestamp,
-                memory.event_type,
-                memory.content,
-                json.dumps(memory.location) if memory.location else None,
-                memory.participants if memory.participants else None,  # TEXT[] array, not JSON
-                memory.emotional_valence,
-                memory.emotional_arousal,
-                memory.importance_score,
-                memory.tags if memory.tags else None,  # TEXT[] array, not JSON
-                json.dumps(memory.metadata) if memory.metadata else None
-            ))
-        
-        # Commit the transaction
-        self.timescale_conn.commit()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO episodic_memories (
+                        id, user_id, event_timestamp, event_type, content,
+                        location, participants, emotional_valence, emotional_arousal,
+                        importance_score, tags, metadata
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                """, (
+                    memory.id,
+                    memory.user_id,
+                    memory.event_timestamp,
+                    memory.event_type,
+                    memory.content,
+                    json.dumps(memory.location) if memory.location else None,
+                    memory.participants if memory.participants else None,  # TEXT[] array, not JSON
+                    memory.emotional_valence,
+                    memory.emotional_arousal,
+                    memory.importance_score,
+                    memory.tags if memory.tags else None,  # TEXT[] array, not JSON
+                    json.dumps(memory.metadata) if memory.metadata else None
+                ))
+            conn.commit()  # Explicit commit
+            release_timescale_conn(conn)  # Return to pool
+        except Exception as e:
+            if conn:
+                conn.rollback()  # Rollback on error
+                release_timescale_conn(conn)
+            print(f"Error storing episodic memory in TimescaleDB: {e}")
+            raise
     
     def _store_in_neo4j(self, memory: EpisodicMemory) -> None:
         """Store memory relationships in Neo4j"""

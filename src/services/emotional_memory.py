@@ -135,32 +135,34 @@ class EmotionalMemoryService:
         if not self.timescale_conn:
             raise Exception("TimescaleDB connection not available")
         
-        with self.timescale_conn.cursor() as cur:
-            import json
-            cur.execute("""
-                INSERT INTO emotional_memories (
-                    id, user_id, timestamp, emotional_state, valence, arousal,
-                    dominance, context, trigger_event, intensity, duration_minutes, metadata
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """, (
-                memory.id,
-                memory.user_id,
-                memory.timestamp,
-                memory.emotional_state,
-                memory.valence,
-                memory.arousal,
-                memory.dominance,
-                memory.context,
-                memory.trigger_event,
-                memory.intensity,
-                memory.duration_minutes,
-                json.dumps(memory.metadata) if memory.metadata else None
-            ))
-        
-        # Commit the transaction
-        self.timescale_conn.commit()
+        try:
+            with self.timescale_conn.cursor() as cur:
+                import json
+                cur.execute("""
+                    INSERT INTO emotional_memories (
+                        id, user_id, timestamp, emotional_state, valence, arousal,
+                        dominance, context, trigger_event, intensity, duration_minutes, metadata
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                """, (
+                    memory.id,
+                    memory.user_id,
+                    memory.timestamp,
+                    memory.emotional_state,
+                    memory.valence,
+                    memory.arousal,
+                    memory.dominance,
+                    memory.context,
+                    memory.trigger_event,
+                    memory.intensity,
+                    memory.duration_minutes,
+                    json.dumps(memory.metadata) if memory.metadata else None
+                ))
+                # Connection is in autocommit mode, no need for explicit commit
+        except Exception as e:
+            print(f"Error storing emotional memory in TimescaleDB: {e}")
+            raise
     
     def _store_in_chroma(self, memory: EmotionalMemory) -> None:
         """Store emotional memory in ChromaDB for semantic search"""
