@@ -44,7 +44,7 @@ else:
     from src.services.prompts import EXTRACTION_PROMPT
     print("ℹ️  Using EXTRACTION_PROMPT (baseline)")
 
-FIXTURE = Path(__file__).parent / "fixtures" / "sample_extraction.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "basic_extraction.jsonl"
 
 
 def load_test_data():
@@ -79,10 +79,14 @@ def test_prompt_extraction(test_case):
     # Convert history to dict format for the LLM call
     history_dicts = [{"role": m["role"], "content": m["content"]} for m in history]
 
+    # Optional: existing memories context for dedup/update tests
+    existing = test_case.get("existing", [])
+    existing_context = "\n".join(existing) if isinstance(existing, list) else (existing or "")
+
     # Create payload (last 6 messages)
     payload = {
         "history": history_dicts[-6:],
-        "existing_memories_context": ""  # No existing memories for this test
+        "existing_memories_context": existing_context
     }
 
     # Create the prompt that would be used

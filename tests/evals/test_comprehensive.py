@@ -115,10 +115,12 @@ def run_test_suite(
             # Convert history to dict format for the LLM call
             history_dicts = [{"role": m["role"], "content": m["content"]} for m in history]
             
-            # Call LLM for extraction
+            # Call LLM for extraction (include existing memories if provided)
+            existing = test_case.get("existing", [])
+            existing_context = "\n".join(existing) if isinstance(existing, list) else (existing or "")
             payload = {
                 "history": history_dicts,
-                "existing_memories_context": ""
+                "existing_memories_context": existing_context
             }
             
             items = _call_llm_json(prompt, payload, expect_array=True) or []
@@ -265,8 +267,8 @@ def main():
     suites = [
         {
             "name": "Basic",
-            "fixture": "sample_extraction.jsonl",
-            "description": "Original 20-case test set"
+            "fixture": "basic_extraction.jsonl",
+            "description": "Original 20-case test set (enhanced)"
         },
         {
             "name": "Comprehensive", 
@@ -277,6 +279,21 @@ def main():
             "name": "Edge Cases",
             "fixture": "edge_cases_extraction.jsonl", 
             "description": "40 challenging inputs"
+        },
+        {
+            "name": "Dedup Existing",
+            "fixture": "dedup_existing.jsonl",
+            "description": "Existing memories dedup & update handling"
+        },
+        {
+            "name": "Updates & State",
+            "fixture": "updates_state.jsonl",
+            "description": "Switches, flips, job changes, skill progression"
+        },
+        {
+            "name": "Temporal & Recurring",
+            "fixture": "temporal_recurring.jsonl",
+            "description": "Recurring events, relative dates, time zones"
         }
     ]
     

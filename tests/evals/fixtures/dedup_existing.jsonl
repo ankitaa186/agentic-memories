@@ -1,0 +1,7 @@
+{"user_id":"d001","existing":["User loves science fiction books."],"history":[{"role":"user","content":"I'm a huge sci-fi fan"}],"gold":[],"category":"dedup_exact","description":"Paraphrase duplicate should be suppressed"}
+{"user_id":"d002","existing":["User works at Google."],"history":[{"role":"user","content":"I work at Google as a SWE"}],"gold":[],"category":"dedup_exact","description":"Same employer, normalized should be deduped"}
+{"user_id":"d003","existing":["User prefers working from home."],"history":[{"role":"user","content":"I prefer WFH; office drains me"}],"gold":[],"category":"dedup_paraphrase","description":"Paraphrase duplicate"}
+{"user_id":"d004","existing":["User runs 3 times a week."],"history":[{"role":"user","content":"I used to run 3x/week but now it's 5x/week"}],"gold":[{"content":"User runs 5 times a week.","type":"explicit","layer":"semantic","tags":["habits","exercise"]}],"category":"update_vs_duplicate","description":"Update should replace prior habit"}
+{"user_id":"d005","existing":["User enjoys fantasy novels."],"history":[{"role":"user","content":"I also enjoy sci-fi novels"}],"gold":[{"content":"User enjoys science fiction novels.","type":"explicit","layer":"semantic","tags":["preferences","books"]}],"category":"new_vs_existing","description":"New distinct preference should be extracted"}
+
+
