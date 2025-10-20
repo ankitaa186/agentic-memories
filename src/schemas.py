@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -157,4 +157,29 @@ class NarrativeResponse(BaseModel):
     narrative: str
     summary: Optional[str] = None
     sources: List[dict] = Field(default_factory=list)
+
+
+class HookConsentRequest(BaseModel):
+    user_id: str
+    tokens: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    seed_messages: Optional[List[Dict[str, Any]]] = None
+    seed_events: Optional[List[Dict[str, Any]]] = None
+
+
+class HookConsentResponse(BaseModel):
+    hook: str
+    user_id: str
+    status: Literal["stored", "revoked"]
+    scopes: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HookWebhookEvent(BaseModel):
+    user_id: str
+    event_id: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    headers: Dict[str, Any] = Field(default_factory=dict)
 

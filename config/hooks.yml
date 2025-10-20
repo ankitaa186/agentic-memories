@@ -1,0 +1,30 @@
+enabled: true
+hooks:
+  - name: gmail
+    kind: gmail
+    enabled: true
+    poll_interval_seconds: 180
+    error_backoff_seconds: 30
+    scopes:
+      - https://www.googleapis.com/auth/gmail.readonly
+  - name: google_calendar
+    kind: google_calendar
+    enabled: true
+    poll_interval_seconds: 300
+    error_backoff_seconds: 30
+    scopes:
+      - https://www.googleapis.com/auth/calendar.readonly
+  - name: imap
+    kind: imap
+    enabled: false
+    poll_interval_seconds: 300
+    config:
+      host: imap.example.com
+      port: 993
+      folder: INBOX
+  - name: caldav
+    kind: caldav
+    enabled: false
+    poll_interval_seconds: 300
+    config:
+      url: https://calendar.example.com/calendars/user/calendar.ics

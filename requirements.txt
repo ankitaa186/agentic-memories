@@ -8,6 +8,7 @@ apscheduler==3.10.4
 httpx==0.27.0
 python-dotenv==1.0.1
 pytest==8.3.2
+pytest-asyncio==0.24.0
 langgraph==0.2.25
 langgraph-checkpoint==1.0.12
 langchain-core==0.3.0
@@ -17,3 +18,4 @@ psycopg[binary]
 psycopg-pool==3.2.1
 neo4j==5.23.1
 langfuse==2.36.0
+pyyaml==6.0.2

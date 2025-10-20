@@ -9,21 +9,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from os import getenv
 
 from src.schemas import (
-	ForgetRequest,
-	MaintenanceRequest,
-	MaintenanceResponse,
-	RetrieveItem,
-	RetrieveResponse,
-	StoreResponse,
-	StoreMemoryItem,
-	TranscriptRequest,
-	StructuredRetrieveRequest,
-	StructuredRetrieveResponse,
+        ForgetRequest,
+        MaintenanceRequest,
+        MaintenanceResponse,
+        RetrieveItem,
+        RetrieveResponse,
+        StoreResponse,
+        StoreMemoryItem,
+        TranscriptRequest,
+        StructuredRetrieveRequest,
+        StructuredRetrieveResponse,
     PortfolioSummaryResponse,
     FinanceAggregate,
     FinanceGoal,
     NarrativeRequest,
     NarrativeResponse,
+    HookConsentRequest,
+    HookConsentResponse,
+    HookWebhookEvent,
 )
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import ping_timescale
@@ -46,10 +49,13 @@ except Exception:
     BackgroundScheduler = None  # type: ignore
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
+from src.hooks.manager import HookManager
+from src.hooks.base import WebhookEnvelope
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0")
 # Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
 _scheduler: Optional[BackgroundScheduler] = None
+_hook_manager: Optional[HookManager] = None
 
 def _run_daily_compaction() -> None:
     r = get_redis_client()
@@ -97,6 +103,15 @@ def _start_scheduler() -> None:
                 logger.info("[sched] APScheduler not installed; scheduled jobs disabled")
     except Exception as exc:
         logger.info("[sched] failed to start: %s", exc)
+
+
+def _get_hook_manager_or_503() -> HookManager:
+    if _hook_manager is None:
+        raise HTTPException(status_code=503, detail="Hook manager not initialized")
+    if not _hook_manager.config.enabled:
+        raise HTTPException(status_code=503, detail="Hook integrations disabled")
+    return _hook_manager
+
 
 @app.on_event("startup")
 def _on_startup() -> None:
@@ -187,6 +202,16 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Failed to check Chroma connectivity: {e}")
     
+    global _hook_manager
+    if _hook_manager is None:
+        try:
+            manager = HookManager()
+            await manager.start()
+            _hook_manager = manager
+            logger.info("[hooks] manager started | enabled=%s", manager.config.enabled)
+        except Exception as exc:
+            logger.warning("[hooks] failed to start manager: %s", exc)
+
     logger.info("Agentic Memories API startup complete")
 # Auth dependency: validate Cloudflare Access JWT if provided
 def get_identity(
@@ -309,9 +334,99 @@ def me(identity: Optional[dict] = Depends(get_identity)) -> dict:
     }
 
 
+@app.get("/v1/hooks")
+async def list_hooks() -> dict:
+    manager = _get_hook_manager_or_503()
+    hooks = [
+        {
+            "name": name,
+            "kind": settings.kind,
+            "enabled": settings.enabled,
+            "scopes": settings.scopes,
+        }
+        for name, settings in manager.list_hooks().items()
+    ]
+    return {"hooks": hooks}
+
+
+@app.post("/v1/hooks/{hook_name}/consent", response_model=HookConsentResponse)
+async def grant_hook_consent(hook_name: str, request: HookConsentRequest) -> HookConsentResponse:
+    manager = _get_hook_manager_or_503()
+    hooks = manager.list_hooks()
+    settings = hooks.get(hook_name)
+    if settings is None:
+        raise HTTPException(status_code=404, detail="Unknown hook")
+    existing = manager.get_consent(hook_name, request.user_id) or {}
+    payload = dict(existing)
+    if request.tokens:
+        payload["tokens"] = request.tokens
+    if request.config:
+        combined = dict(payload.get("config") or {})
+        combined.update(request.config)
+        payload["config"] = combined
+    if request.metadata:
+        combined_meta = dict(payload.get("metadata") or {})
+        combined_meta.update(request.metadata)
+        payload["metadata"] = combined_meta
+    if request.seed_messages:
+        seeds = list(payload.get("seed_messages") or [])
+        seeds.extend(request.seed_messages)
+        payload["seed_messages"] = seeds
+    if request.seed_events:
+        seeds = list(payload.get("seed_events") or [])
+        seeds.extend(request.seed_events)
+        payload["seed_events"] = seeds
+    manager.save_consent(hook_name, request.user_id, payload)
+    meta_flags = {
+        "has_tokens": bool(payload.get("tokens")),
+        "has_config": bool(payload.get("config")),
+    }
+    return HookConsentResponse(
+        hook=hook_name,
+        user_id=request.user_id,
+        status="stored",
+        scopes=settings.scopes,
+        metadata=meta_flags,
+    )
+
+
+@app.delete("/v1/hooks/{hook_name}/consent", response_model=HookConsentResponse)
+async def revoke_hook_consent(hook_name: str, user_id: str = Query(...)) -> HookConsentResponse:
+    manager = _get_hook_manager_or_503()
+    hooks = manager.list_hooks()
+    settings = hooks.get(hook_name)
+    if settings is None:
+        raise HTTPException(status_code=404, detail="Unknown hook")
+    manager.delete_consent(hook_name, user_id)
+    return HookConsentResponse(
+        hook=hook_name,
+        user_id=user_id,
+        status="revoked",
+        scopes=settings.scopes,
+        metadata={},
+    )
+
+
+@app.post("/v1/hooks/{hook_name}/events")
+async def handle_hook_event(hook_name: str, event: HookWebhookEvent) -> dict:
+    manager = _get_hook_manager_or_503()
+    hooks = manager.list_hooks()
+    if hook_name not in hooks:
+        raise HTTPException(status_code=404, detail="Unknown hook")
+    envelope = WebhookEnvelope(
+        user_id=event.user_id,
+        event_id=event.event_id,
+        payload=event.payload,
+        occurred_at=event.occurred_at,
+        headers=event.headers,
+    )
+    accepted = await manager.handle_webhook(hook_name, envelope)
+    return {"accepted": accepted}
+
+
 @app.get("/health/full")
 def health_full() -> dict:
-	checks = {}
+        checks = {}
 
 	# Env check (provider-aware)
 	provider = get_llm_provider()
@@ -1046,3 +1161,15 @@ def compact_all_users() -> MaintenanceResponse:
         except Exception as exc:
             logger.info("[maint.compaction.error] user_id=%s (manual) %s", uid, exc)
     return MaintenanceResponse(jobs_started=["compaction_all"], status="running")
+
+
+@app.on_event("shutdown")
+async def _shutdown_hooks() -> None:
+    global _hook_manager
+    if _hook_manager is not None:
+        try:
+            await _hook_manager.stop()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("[hooks] shutdown error: %s", exc)
+        finally:
+            _hook_manager = None
