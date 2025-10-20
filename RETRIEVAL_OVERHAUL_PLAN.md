@@ -184,3 +184,22 @@
 - Average latency increase capped at ≤20% despite added orchestration, with caching mitigating hot-path queries.
 - Narrative outputs rated as persona-consistent in ≥80% of evaluation sessions.
 
+---
+
+## Comparative Critique vs. External Memory Systems
+
+### Alignment with Mem0 Patterns
+- **Strengths:** The plan’s persona-aware routing echoes Mem0’s scoped recall (per-user/per-channel) and importance weighting, ensuring contextual retrieval without flooding clients. Introducing `persona_context` and `granularity` mirrors Mem0’s configurable recency/importance sliders, promoting a comfortable migration path for teams familiar with Mem0-style controls.
+- **Gaps:** Mem0 emphasizes lightweight summaries embedded directly in conversational turns, whereas our summarization pipeline relies on nightly “digital sleep” jobs. Without an on-demand summarization capability, we risk lagging behind Mem0’s responsiveness to rapidly evolving contexts. Additionally, Mem0’s shard-level pruning and user-tunable forgetting policies are only partially addressed here via summary freshness heuristics.
+- **Opportunities:** Borrow Mem0’s feedback-driven scoring adjustments by exposing fine-grained persona-level weighting overrides to clients, and consider incremental summary updates triggered by interaction volume instead of fixed schedules.
+
+### Alignment with Supermemory Patterns
+- **Strengths:** The multi-tier summary ladder and explainability layer follow Supermemory’s cascade retrieval philosophy (fast approximate search → re-rank → narrative). The inclusion of persona audit trails strengthens traceability, similar to Supermemory’s emphasis on consistent story arcs.
+- **Gaps:** Supermemory leans heavily on automated consistency maintenance (e.g., contradiction detection, automatic re-summarization) and uses retrieval-time re-ranking informed by global knowledge graphs. Our plan defers graph-aware traversal and doesn’t yet specify contradiction detection, leaving potential coherence gaps when personas overlap. Moreover, Supermemory’s proactive prompts derived from trend analysis are only hinted at in future backlogs.
+- **Opportunities:** Accelerate integration with the Neo4j knowledge lattice during Phase 3 to enable path-aware re-ranking, and schedule contradiction detection checks alongside summary generation. Explore proactive persona nudges by leveraging the evaluation loop to identify declining engagement or mood imbalances, mirroring Supermemory’s outreach triggers.
+
+### Overall Critique
+- **Execution Risk:** The phased approach concentrates significant change in Phase 3, creating a large bang release. Consider incremental client opt-in earlier (e.g., beta flag after Phase 1) to collect real-world telemetry sooner.
+- **Observability:** While explainability is called out, the plan should specify concrete logging schemas and dashboards that map persona decisions to downstream satisfaction metrics, ensuring parity with the telemetry sophistication seen in Mem0/Supermemory.
+- **Scalability:** Both reference systems rely on aggressive caching and vector index optimizations; the plan mentions caching but lacks detail on index tuning or sharding strategies. Adding capacity planning tasks would reduce operational surprises.
+
