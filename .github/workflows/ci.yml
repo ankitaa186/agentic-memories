@@ -33,7 +33,12 @@ jobs:
         run: python .github/scripts/sync_env_from_example.py
 
       - name: Build Docker image
-        run: docker build --file Dockerfile --tag agentic-memories-ci .
+        run: |
+          docker build \
+            --file Dockerfile \
+            --tag agentic-memories:ci \
+            --tag agentic-memories:${{ github.sha }} \
+            .
 
       - name: Install dependencies
         run: make install

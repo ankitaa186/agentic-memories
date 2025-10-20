@@ -342,13 +342,20 @@ Follow these steps to configure the same settings securely when running the app 
              python-version: '3.11'
          - name: Populate environment from env.example
            run: python .github/scripts/sync_env_from_example.py
+         - name: Build Docker image
+           run: |
+             docker build \
+               --file Dockerfile \
+               --tag agentic-memories:ci \
+               --tag agentic-memories:${{ github.sha }} \
+               .
          - run: make install
          - run: make test
    ```
 
    The helper script reads `env.example`, copies existing defaults into the job environment, and fails only when a required secret is missing (for example, `OPENAI_API_KEY` when `LLM_PROVIDER=openai`). Optional placeholders trigger GitHub workflow warnings so you can decide whether to supply the value as a secret or leave the feature disabled.
 
-4. **Verify the workflow picks up the values.** Run the workflow once (e.g., push a branch or dispatch it manually) and inspect the job logs. You should see commands that rely on the secrets succeed (the logs will redact the actual secret values).
+4. **Verify the workflow picks up the values.** Run the workflow once (e.g., push a branch or dispatch it manually) and inspect the job logs. You should see the Docker build (tagged as `agentic-memories:ci` and `agentic-memories:<commit-sha>`) complete before dependency installation, followed by commands that rely on the secrets succeeding (the logs will redact the actual secret values).
 5. **Understand the runtime precedence.** When the workflow runs, the configuration module loads values in this order:
    1. GitHub-provided environment variables (from the `env:` block or shell exports).
    2. `.env` file entries, if a `.env` is present in the repository. Because the loader calls `load_dotenv(override=True)`, any `.env` values will replace the GitHub-provided ones. This is intentional so developers can override settings locally without editing CI secrets.
