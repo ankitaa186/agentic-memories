@@ -110,7 +110,7 @@ class PortfolioHolding(BaseModel):
 	intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
 	target_price: Optional[float] = None
 	stop_loss: Optional[float] = None
-	time_horizon: Optional[Literal["days", "weeks", "months", "years"]] = None
+	time_horizon: Optional[str] = None  # Freeform: "days", "weeks", "months", "years", "short-term", "long-term", etc.
 	notes: Optional[str] = None
 	source_memory_id: Optional[str] = None
 	updated_at: Optional[datetime] = None
@@ -126,7 +126,7 @@ class FinanceGoal(BaseModel):
     text: str
     tickers: List[str] = Field(default_factory=list)
     intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
-    time_horizon: Optional[Literal["days", "weeks", "months", "years"]] = None
+    time_horizon: Optional[str] = None  # Freeform: "days", "weeks", "months", "years", "short-term", "long-term", etc.
     target_price: Optional[float] = None
     risk_tolerance: Optional[Literal["low", "medium", "high"]] = None
     concern: Optional[str] = None
