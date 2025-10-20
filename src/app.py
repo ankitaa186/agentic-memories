@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 import os
 from typing import List, Optional
@@ -44,7 +44,7 @@ try:
     from apscheduler.schedulers.background import BackgroundScheduler
 except Exception:
     BackgroundScheduler = None  # type: ignore
-from datetime import datetime as _dt, timezone as _tz
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0")
@@ -56,10 +56,14 @@ def _run_daily_compaction() -> None:
     if r is None:
         logger.info("[maint.compaction] skipped: redis unavailable")
         return
-    # Look at yesterday's activity set
-    day_key = (_dt.now(_tz.utc)).strftime("%Y%m%d")
-    # Run for yesterday too in case of clock skew
+    # Look at yesterday's activity set (the day we intend to compact)
+    now = _dt.now(_tz.utc)
+    day_key = (now - _td(days=1)).strftime("%Y%m%d")
     keys = [f"recent_users:{day_key}"]
+    # Also include today's key so retries pick up any missed users
+    today_key = now.strftime("%Y%m%d")
+    if today_key != day_key:
+        keys.append(f"recent_users:{today_key}")
     users: set[str] = set()
     for k in keys:
         try:

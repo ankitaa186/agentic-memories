@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
-from src.dependencies.timescale import get_timescale_conn
+from psycopg import Connection
+
+from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.neo4j_client import get_neo4j_driver
 
 
@@ -41,11 +43,10 @@ class PortfolioHolding:
 
 class PortfolioService:
     """Service for managing portfolio holdings and financial tracking"""
-    
+
     def __init__(self):
-        self.timescale_conn = get_timescale_conn()
         self.neo4j_driver = get_neo4j_driver()
-    
+
     def upsert_holding_from_memory(self, user_id: str, portfolio_metadata: Dict[str, Any], memory_id: str) -> Optional[str]:
         """
         Upsert portfolio holding from memory metadata
@@ -67,6 +68,11 @@ class PortfolioService:
             end_span(output={"success": False, "reason": "invalid_metadata"})
             return None
         
+        conn = get_timescale_conn()
+        if not conn:
+            end_span(output={"success": False, "reason": "timescale_unavailable"})
+            return None
+
         try:
             # Extract base portfolio data
             ticker = portfolio_metadata.get('ticker')
@@ -77,9 +83,10 @@ class PortfolioService:
             if holdings_array and isinstance(holdings_array, list):
                 # Process each holding in the snapshot
                 for holding_data in holdings_array:
-                    self._upsert_single_holding(user_id, holding_data, memory_id)
+                    self._upsert_single_holding(conn, user_id, holding_data, memory_id)
+                end_span(output={"holding_id": None, "success": True, "processed_multiple": True})
                 return None  # Multiple holdings processed
-            
+
             # Single holding case
             holding = PortfolioHolding(
                 user_id=user_id,
@@ -99,21 +106,23 @@ class PortfolioService:
                 notes=portfolio_metadata.get('notes') or portfolio_metadata.get('concern') or portfolio_metadata.get('goal'),
                 source_memory_id=memory_id
             )
-            
-            result = self._upsert_single_holding(user_id, holding.__dict__, memory_id)
+
+            result = self._upsert_single_holding(conn, user_id, holding.__dict__, memory_id)
             end_span(output={"holding_id": result, "success": bool(result)})
             return result
-            
+
         except Exception as e:
             print(f"Error upserting portfolio holding: {e}")
             end_span(output={"success": False, "error": str(e)}, level="ERROR")
             return None
-    
-    def _upsert_single_holding(self, user_id: str, holding_data: Dict[str, Any], memory_id: str) -> Optional[str]:
+        finally:
+            release_timescale_conn(conn)
+
+    def _upsert_single_holding(self, conn: Connection, user_id: str, holding_data: Dict[str, Any], memory_id: str) -> Optional[str]:
         """Insert or update a single holding"""
-        if not self.timescale_conn:
+        if not conn:
             return None
-        
+
         try:
             ticker = holding_data.get('ticker')
             asset_name = holding_data.get('asset_name') or holding_data.get('name')
@@ -123,7 +132,7 @@ class PortfolioService:
                 holding_data['shares'] = None
                 holding_data['asset_type'] = holding_data.get('asset_type', 'public_equity' if ticker else 'other')
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Check if holding exists (by user_id + ticker/asset_name)
                 if ticker:
                     cur.execute("""
@@ -214,22 +223,22 @@ class PortfolioService:
                         holding_data.get('notes'),
                         memory_id
                     ))
-                
+
                 # Commit the transaction
-                self.timescale_conn.commit()
-                
+                conn.commit()
+
                 # Create Neo4j node and relationships (async, fire-and-forget)
                 self._create_holding_graph_node(holding_id, user_id, ticker, asset_name)
-                
+
                 return holding_id
-                
+
         except Exception as e:
             # Rollback on error
-            if self.timescale_conn:
-                self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             print(f"Error in _upsert_single_holding: {e}")
             return None
-    
+
     def _create_holding_graph_node(self, holding_id: str, user_id: str, ticker: Optional[str], asset_name: Optional[str]) -> None:
         """Create Neo4j node for holding (non-blocking)"""
         if not self.neo4j_driver or not (ticker or asset_name):
@@ -263,11 +272,12 @@ class PortfolioService:
         Returns:
             List of holding dictionaries
         """
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
-        
+
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 if intent_filter:
                     cur.execute("""
                         SELECT * FROM portfolio_holdings
@@ -282,12 +292,17 @@ class PortfolioService:
                     """, (user_id,))
                 
                 rows = cur.fetchall()
+                conn.commit()
                 return [dict(row) for row in rows]
-                
+
         except Exception as e:
             print(f"Error retrieving holdings: {e}")
+            if conn:
+                conn.rollback()
             return []
-    
+        finally:
+            release_timescale_conn(conn)
+
     def create_snapshot(self, user_id: str) -> bool:
         """
         Create a portfolio value snapshot
@@ -298,9 +313,10 @@ class PortfolioService:
         Returns:
             True if successful, False otherwise
         """
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return False
-        
+
         try:
             holdings = self.get_holdings(user_id)
             
@@ -308,7 +324,7 @@ class PortfolioService:
             cash_value = sum(h.get('current_value', 0) or 0 for h in holdings if h.get('asset_type') == 'cash')
             equity_value = sum(h.get('current_value', 0) or 0 for h in holdings if h.get('asset_type') in ('public_equity', 'private_equity', 'etf', 'mutual_fund'))
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO portfolio_snapshots (
                         user_id, snapshot_timestamp, total_value,
@@ -318,14 +334,16 @@ class PortfolioService:
                     user_id, total_value, cash_value, equity_value,
                     holdings  # Store full holdings JSON
                 ))
-            
+
             # Commit the transaction
-            self.timescale_conn.commit()
+            conn.commit()
             return True
-                
+
         except Exception as e:
             print(f"Error creating portfolio snapshot: {e}")
-            if self.timescale_conn:
-                self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             return False
+        finally:
+            release_timescale_conn(conn)
 
