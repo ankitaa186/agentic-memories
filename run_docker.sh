@@ -198,11 +198,30 @@ if ! check_required_collections; then
   exit 1
 fi
 
-# Restore original values so docker-compose reads from .env file
-export CHROMA_HOST="$ORIGINAL_CHROMA_HOST"
-unset CHROMA_DATABASE
-unset CHROMA_TENANT
+# Unset all env vars so docker-compose reads fresh from .env file
+# This ensures the container gets the right values, not inherited shell vars
+unset OPENAI_API_KEY
+unset XAI_API_KEY
+unset LLM_PROVIDER
+unset EXTRACTION_MODEL_OPENAI
+unset EXTRACTION_MODEL_XAI
+unset XAI_BASE_URL
+unset CHROMA_HOST
 unset CHROMA_PORT
+unset CHROMA_TENANT
+unset CHROMA_DATABASE
+unset REDIS_URL
+unset TIMESCALE_DSN
+unset NEO4J_URI
+unset NEO4J_USER
+unset NEO4J_PASSWORD
+unset CF_ACCESS_AUD
+unset CF_ACCESS_TEAM_DOMAIN
+unset SCHEDULED_MAINTENANCE_ENABLED
+unset LANGFUSE_PUBLIC_KEY
+unset LANGFUSE_SECRET_KEY
+unset LANGFUSE_HOST
+unset VITE_API_BASE_URL
 
 # Build and start services
 ${COMPOSE_CMD} up -d --build
