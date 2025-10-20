@@ -139,9 +139,12 @@ prompt_for_db_connection() {
     # Construct DSNs
     export TIMESCALE_DSN="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}"
     
-    # Export for Neo4j and ChromaDB usage
-    export NEO4J_URI NEO4J_USER NEO4J_PASSWORD
-    export CHROMA_HOST CHROMA_PORT
+	# Export for Neo4j and ChromaDB usage
+	export NEO4J_URI NEO4J_USER NEO4J_PASSWORD
+	export CHROMA_HOST CHROMA_PORT
+	# Ensure defaults for Chroma (v2 servers expect tenant/database)
+	export CHROMA_TENANT=${CHROMA_TENANT:-agentic-memories}
+	export CHROMA_DATABASE=${CHROMA_DATABASE:-memories}
     
     echo ""
     log_info "Testing connections..."
@@ -209,8 +212,11 @@ check_env() {
             log_info "Please check your connection details and try again"
             return 1
         fi
-    fi
-    log_success "Database connection verified"
+	fi
+	# Always ensure CHROMA_TENANT/DATABASE have defaults for subsequent steps
+	export CHROMA_TENANT=${CHROMA_TENANT:-agentic-memories}
+	export CHROMA_DATABASE=${CHROMA_DATABASE:-memories}
+	log_success "Database connection verified"
     return 0
 }
 
