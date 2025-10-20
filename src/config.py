@@ -107,16 +107,22 @@ def get_neo4j_password() -> Optional[str]:
 
 @lru_cache(maxsize=1)
 def get_extraction_model_name() -> str:
-    # Provider-aware default: OpenAI → gpt-4o, xAI → grok-4-fast-reasoning
+    # Provider-aware default: OpenAI → gpt-5, xAI → grok-4-fast-reasoning
     env_val = os.getenv("EXTRACTION_MODEL")
     if env_val and env_val.strip() != "":
         return env_val
     provider = get_llm_provider()
     if provider == "openai":
-        return "gpt-4o"
+        env_val = os.getenv("EXTRACTION_MODEL_OPENAI")
+        if env_val and env_val.strip() != "":
+            return env_val
+        return "gpt-5"
     if provider in {"xai", "grok"}:  # accept alias "grok" for backward compatibility
+        env_val = os.getenv("EXTRACTION_MODEL_XAI")
+        if env_val and env_val.strip() != "":
+            return env_val
         return "grok-4-fast-reasoning"
-    return "gpt-4o"
+    return "gpt-5"
 
 
 @lru_cache(maxsize=1)

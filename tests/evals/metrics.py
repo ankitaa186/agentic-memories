@@ -60,7 +60,7 @@ def evaluate_extraction_comprehensive(
     include_token_metrics: bool = True
 ) -> Dict[str, Any]:
     """
-    Comprehensive evaluation of extraction results.
+    Comprehensive evaluation of extraction results with Digital Soul vision alignment.
     
     Args:
         results: List of extraction results with:
@@ -71,7 +71,7 @@ def evaluate_extraction_comprehensive(
             - model: (optional) Model name
             
     Returns:
-        Dict with comprehensive metrics including quality and cost
+        Dict with comprehensive metrics including quality, cost, and vision-aligned features
     """
     all_gold = []
     all_pred = []
@@ -85,6 +85,24 @@ def evaluate_extraction_comprehensive(
     type_correct = 0
     type_total = 0
     confidence_by_correctness = {"correct": [], "incorrect": []}
+    
+    # Vision-aligned metrics
+    emotional_context_present = 0
+    emotional_context_expected = 0
+    episodic_context_present = 0
+    episodic_context_expected = 0
+    behavioral_pattern_present = 0
+    behavioral_pattern_expected = 0
+    skill_context_present = 0
+    skill_context_expected = 0
+    consolidation_hints_present = 0
+    consolidation_hints_expected = 0
+    entities_present = 0
+    entities_expected = 0
+    
+    # Emotional accuracy tracking
+    emotional_valence_errors = []
+    importance_scores = []
     
     for result in results:
         gold = result.get("gold", [])
@@ -107,6 +125,20 @@ def evaluate_extraction_comprehensive(
         # Detailed quality metrics (if structured data available)
         if gold and isinstance(gold[0], dict) and predicted and isinstance(predicted[0], dict):
             for g in gold:
+                # Track what vision-aligned features are expected
+                if "emotional_context" in g:
+                    emotional_context_expected += 1
+                if "episodic_context" in g:
+                    episodic_context_expected += 1
+                if "behavioral_pattern" in g:
+                    behavioral_pattern_expected += 1
+                if "skill_context" in g:
+                    skill_context_expected += 1
+                if "consolidation_hints" in g:
+                    consolidation_hints_expected += 1
+                if "entities" in g:
+                    entities_expected += 1
+                
                 # Find matching prediction
                 g_content = canonicalize(g["content"])
                 for p in predicted:
@@ -124,6 +156,37 @@ def evaluate_extraction_comprehensive(
                         # Confidence calibration
                         confidence = p.get("confidence", 0.0)
                         confidence_by_correctness["correct"].append(confidence)
+                        
+                        # Vision-aligned feature detection
+                        if "emotional_context" in g and "emotional_context" in p:
+                            emotional_context_present += 1
+                            # Track emotional accuracy
+                            g_val = g["emotional_context"].get("valence")
+                            p_val = p["emotional_context"].get("valence")
+                            if g_val is not None and p_val is not None:
+                                emotional_valence_errors.append(abs(g_val - p_val))
+                            
+                            # Track importance scoring
+                            g_imp = g["emotional_context"].get("importance")
+                            p_imp = p["emotional_context"].get("importance")
+                            if g_imp is not None and p_imp is not None:
+                                importance_scores.append(abs(g_imp - p_imp))
+                        
+                        if "episodic_context" in g and "episodic_context" in p:
+                            episodic_context_present += 1
+                        
+                        if "behavioral_pattern" in g and "behavioral_pattern" in p:
+                            behavioral_pattern_present += 1
+                        
+                        if "skill_context" in g and "skill_context" in p:
+                            skill_context_present += 1
+                        
+                        if "consolidation_hints" in g and "consolidation_hints" in p:
+                            consolidation_hints_present += 1
+                        
+                        if "entities" in g and "entities" in p:
+                            entities_present += 1
+                        
                         break
             
             # Track incorrect predictions
@@ -157,6 +220,28 @@ def evaluate_extraction_comprehensive(
         metrics["avg_confidence_correct"] = sum(confidence_by_correctness["correct"]) / len(confidence_by_correctness["correct"])
     if confidence_by_correctness["incorrect"]:
         metrics["avg_confidence_incorrect"] = sum(confidence_by_correctness["incorrect"]) / len(confidence_by_correctness["incorrect"])
+    
+    # Vision-aligned metrics (Digital Soul features)
+    if emotional_context_expected > 0:
+        metrics["emotional_context_recall"] = emotional_context_present / emotional_context_expected
+    if episodic_context_expected > 0:
+        metrics["episodic_context_recall"] = episodic_context_present / episodic_context_expected
+    if behavioral_pattern_expected > 0:
+        metrics["behavioral_pattern_recall"] = behavioral_pattern_present / behavioral_pattern_expected
+    if skill_context_expected > 0:
+        metrics["skill_context_recall"] = skill_context_present / skill_context_expected
+    if consolidation_hints_expected > 0:
+        metrics["consolidation_hints_recall"] = consolidation_hints_present / consolidation_hints_expected
+    if entities_expected > 0:
+        metrics["entities_recall"] = entities_present / entities_expected
+    
+    # Emotional accuracy metrics
+    if emotional_valence_errors:
+        metrics["avg_emotional_valence_error"] = sum(emotional_valence_errors) / len(emotional_valence_errors)
+        metrics["emotional_valence_accuracy"] = 1.0 - (sum(emotional_valence_errors) / len(emotional_valence_errors) / 2.0)  # Normalize by max error of 2.0
+    if importance_scores:
+        metrics["avg_importance_score_error"] = sum(importance_scores) / len(importance_scores)
+        metrics["importance_score_accuracy"] = 1.0 - sum(importance_scores) / len(importance_scores)  # Normalize by max error of 1.0
     
     # Token and cost metrics
     if include_token_metrics:
@@ -211,6 +296,38 @@ def format_metrics_report(metrics: Dict[str, Any], title: str = "Evaluation Metr
             lines.append(f"  Avg confidence (incorrect): {metrics['avg_confidence_incorrect']:.3f}")
             diff = metrics['avg_confidence_correct'] - metrics['avg_confidence_incorrect']
             lines.append(f"  Calibration gap:            {diff:.3f}  (Higher is better)")
+    
+    # Vision-aligned metrics (Digital Soul features)
+    has_vision_metrics = any(k in metrics for k in [
+        "emotional_context_recall", "episodic_context_recall", "behavioral_pattern_recall",
+        "skill_context_recall", "consolidation_hints_recall", "entities_recall"
+    ])
+    
+    if has_vision_metrics:
+        lines.append("")
+        lines.append("DIGITAL SOUL METRICS (Vision Alignment):")
+        if "emotional_context_recall" in metrics:
+            lines.append(f"  Emotional Context:      {metrics['emotional_context_recall']:.3f}  (Captures emotional weight)")
+        if "episodic_context_recall" in metrics:
+            lines.append(f"  Episodic Context:       {metrics['episodic_context_recall']:.3f}  (WHO, WHERE, WHEN details)")
+        if "behavioral_pattern_recall" in metrics:
+            lines.append(f"  Behavioral Patterns:    {metrics['behavioral_pattern_recall']:.3f}  (Recurring habits for prediction)")
+        if "skill_context_recall" in metrics:
+            lines.append(f"  Skill Progression:      {metrics['skill_context_recall']:.3f}  (Learning trajectories)")
+        if "consolidation_hints_recall" in metrics:
+            lines.append(f"  Consolidation Hints:    {metrics['consolidation_hints_recall']:.3f}  (Memory strengthening guidance)")
+        if "entities_recall" in metrics:
+            lines.append(f"  Entity Extraction:      {metrics['entities_recall']:.3f}  (People, places, organizations)")
+        
+        # Emotional accuracy
+        if "emotional_valence_accuracy" in metrics:
+            lines.append("")
+            lines.append("EMOTIONAL ACCURACY:")
+            lines.append(f"  Valence Accuracy:       {metrics['emotional_valence_accuracy']:.3f}  (How well emotions are captured)")
+            lines.append(f"  Avg Valence Error:      {metrics.get('avg_emotional_valence_error', 0):.3f}  (Lower is better)")
+        if "importance_score_accuracy" in metrics:
+            lines.append(f"  Importance Accuracy:    {metrics['importance_score_accuracy']:.3f}  (Memory significance scoring)")
+            lines.append(f"  Avg Importance Error:   {metrics.get('avg_importance_score_error', 0):.3f}  (Lower is better)")
     
     # Token and cost metrics
     if "total_tokens" in metrics:
