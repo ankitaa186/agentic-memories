@@ -304,6 +304,57 @@ LANGFUSE_SECRET_KEY=your_secret_key
 LANGFUSE_HOST=https://us.cloud.langfuse.com
 ```
 
+#### Local development: `.env` takes priority
+
+For day-to-day development you only need the `.env` file in the project root:
+
+1. Copy the template once (`cp env.example .env`).
+2. Replace the placeholder values with your real API keys, database URLs, and feature flags.
+3. Run the application or the test suite as usual (`make dev`, `pytest`, `docker compose up`, etc.).
+
+The configuration module automatically calls `load_dotenv(override=True)` during import, so every process that imports `src.config` (FastAPI, background workers, CLI tools, or tests) will hydrate `os.environ` from `.env` before reading any values. Because `override=True`, keys defined in `.env` overwrite anything supplied by the shell or exported from GitHub Secrets, ensuring local tweaks never leak back into CI environments. No extra flags or scripts are required—having the `.env` file present is enough.
+
+### Using GitHub Secrets with CI/CD
+
+Follow these steps to configure the same settings securely when running the app from GitHub Actions or other CI pipelines:
+
+1. **Prepare the variables you need.** Review `env.example` and decide which values must be available in CI (API keys, database URLs, feature flags, etc.). Anything that is purely local—like an override for `LLM_PROVIDER` used only on your laptop—can stay out of GitHub Secrets.
+2. **Add repository or environment secrets.** In GitHub, navigate to `Settings` → `Secrets and variables` → `Actions`, choose either the repository or a specific environment, and create secrets for each value you identified:
+   - Core LLM access: `OPENAI_API_KEY`, `XAI_API_KEY` *(only when `LLM_PROVIDER=xai`)*.
+   - Vector store connectivity: `CHROMA_HOST`, `CHROMA_PORT`, and `CHROMA_API_KEY` *(if required)*.
+   - Persistence backends: `TIMESCALE_DSN`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `REDIS_URL`.
+   - Observability (optional): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
+   - You can also store secrets using the prefixed naming style `GITHUB_SECRET_<NAME>` if that matches an existing convention. The application automatically checks both formats.
+3. **Expose the secrets to your workflow.** This repository now ships with `.github/workflows/ci.yml`, which demonstrates the exact setup:
+
+   ```yaml
+   jobs:
+     tests:
+       env:
+         LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openai' }}
+         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+         XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+         CF_ACCESS_AUD: ${{ secrets.CF_ACCESS_AUD }}
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-python@v5
+           with:
+             python-version: '3.11'
+         - name: Populate environment from env.example
+           run: python .github/scripts/sync_env_from_example.py
+         - run: make install
+         - run: make test
+   ```
+
+   The helper script reads `env.example`, copies existing defaults into the job environment, and fails only when a required secret is missing (for example, `OPENAI_API_KEY` when `LLM_PROVIDER=openai`). Optional placeholders trigger GitHub workflow warnings so you can decide whether to supply the value as a secret or leave the feature disabled.
+
+4. **Verify the workflow picks up the values.** Run the workflow once (e.g., push a branch or dispatch it manually) and inspect the job logs. You should see commands that rely on the secrets succeed (the logs will redact the actual secret values).
+5. **Understand the runtime precedence.** When the workflow runs, the configuration module loads values in this order:
+   1. GitHub-provided environment variables (from the `env:` block or shell exports).
+   2. `.env` file entries, if a `.env` is present in the repository. Because the loader calls `load_dotenv(override=True)`, any `.env` values will replace the GitHub-provided ones. This is intentional so developers can override settings locally without editing CI secrets.
+
+> ✅ Tip: Commit changes to `env.example` instead of checking in real secrets. CI pulls from GitHub Secrets, while `.env` is ignored and used only for local overrides.
+
 ### 4. Run Database Migrations
 
 **Fresh Install (first time setup)**:

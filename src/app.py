@@ -1,6 +1,5 @@
 from datetime import datetime, timezone, timedelta
 import logging
-import os
 from typing import List, Optional
 import json
 
@@ -29,7 +28,7 @@ from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import ping_timescale
 from src.dependencies.neo4j_client import ping_neo4j
 from src.dependencies.redis_client import get_redis_client
-from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled
+from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled, get_xai_api_key
 from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url
 import httpx
@@ -263,17 +262,16 @@ def require_llm_key() -> None:
 		extraction_model = get_extraction_model_name()
 		embedding_model = get_embedding_model_name()
 		chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
-		if provider == "openai":
-			key_present = bool(get_openai_api_key())
-			logger.info("[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
-				extraction_model, embedding_model, key_present)
-		elif provider == "xai":
-			# Do not log the API key; only presence and base URL
-			key_present = bool(get_openai_api_key())  # placeholder to avoid unused var if refactor; we won't use it
-			xai_key_present = bool(os.getenv("XAI_API_KEY"))
-			xai_base = get_xai_base_url()
-			logger.info("[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
-				extraction_model, embedding_model, xai_key_present, xai_base)
+                if provider == "openai":
+                        key_present = bool(get_openai_api_key())
+                        logger.info("[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
+                                extraction_model, embedding_model, key_present)
+                elif provider == "xai":
+                        # Do not log the API key; only presence and base URL
+                        xai_key_present = bool(get_xai_api_key())
+                        xai_base = get_xai_base_url()
+                        logger.info("[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
+                                extraction_model, embedding_model, xai_key_present, xai_base)
 		else:
 			logger.info("[startup] LLM provider=%s model=%s embedding_model=%s", provider, extraction_model, embedding_model)
 		logger.info("[startup] Chroma host=%s port=%s", chroma_host, chroma_port)

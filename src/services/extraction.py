@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import os
 import json
 import logging
 import re
@@ -18,7 +17,8 @@ from src.config import (
 	get_extraction_model_name,
 	get_extraction_retries,
 	get_extraction_timeouts_ms,
-	get_max_memories_per_request,
+        get_max_memories_per_request,
+        get_openai_api_key,
 )
 from src.services.prompts import WORTHINESS_PROMPT, TYPING_PROMPT, EXTRACTION_PROMPT
 from src.services.graph_extraction import run_extraction_graph
@@ -53,7 +53,7 @@ def _is_user_message(message: Message) -> bool:
 
 def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_array: bool = False) -> Optional[Any]:
 	logger = logging.getLogger("extraction")
-	api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_openai_api_key()
 	if not api_key or api_key.strip() == "":
 		return None
 	try:

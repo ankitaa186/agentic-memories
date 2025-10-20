@@ -4,10 +4,9 @@ Embedding utilities for memory extraction and retrieval.
 
 from __future__ import annotations
 
-import os
 from typing import List, Optional
 
-from src.config import get_embedding_model_name
+from src.config import get_embedding_model_name, get_openai_api_key
 
 
 EMBEDDING_MODEL = get_embedding_model_name()
@@ -41,7 +40,7 @@ def generate_embedding(text: str) -> Optional[List[float]]:
 			pass  # Graceful degradation if tracing fails
 	
 	# Use OpenAI if configured; otherwise return a deterministic small embedding for tests
-	api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_openai_api_key()
 	embedding = None
 	
 	if api_key and api_key.strip() != "":

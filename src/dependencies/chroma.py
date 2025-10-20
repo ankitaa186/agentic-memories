@@ -1,6 +1,13 @@
-import os
 import json
 from typing import Any, Dict, Optional
+
+from src.config import (
+        get_chroma_database,
+        get_chroma_host,
+        get_chroma_port,
+        get_chroma_tenant,
+        get_env_value,
+)
 
 # Workaround for ChromaDB 0.5.3 v1 API limitation
 # Create a custom client that bypasses tenant validation
@@ -15,24 +22,24 @@ except Exception:  # pragma: no cover
 
 
 def _env_bool(name: str, default: str = "false") -> bool:
-	val = os.getenv(name, default).strip().lower()
-	return val in {"1", "true", "yes", "on"}
+        val = (get_env_value(name, default) or default).strip().lower()
+        return val in {"1", "true", "yes", "on"}
 
 
 def _load_headers() -> Optional[Dict[str, str]]:
-	# Prefer explicit JSON headers
-	raw = os.getenv("CHROMA_HEADERS")
-	if raw:
-		try:
-			parsed = json.loads(raw)
-			return parsed if isinstance(parsed, dict) else None
-		except Exception:
-			return None
-	# Fallback: Authorization from CHROMA_API_KEY
-	api_key = os.getenv("CHROMA_API_KEY")
-	if api_key and api_key.strip():
-		return {"Authorization": f"Bearer {api_key.strip()}"}
-	return None
+        # Prefer explicit JSON headers
+        raw = get_env_value("CHROMA_HEADERS")
+        if raw:
+                try:
+                        parsed = json.loads(raw)
+                        return parsed if isinstance(parsed, dict) else None
+                except Exception:
+                        return None
+        # Fallback: Authorization from CHROMA_API_KEY
+        api_key = get_env_value("CHROMA_API_KEY")
+        if api_key and api_key.strip():
+                return {"Authorization": f"Bearer {api_key.strip()}"}
+        return None
 
 
 class V2ChromaClient:
@@ -226,15 +233,12 @@ def get_chroma_client() -> Any:
 	if Client is None or Settings is None:
 		return None
 
-	host = os.getenv("CHROMA_HOST", "localhost")
-	try:
-		port = int(os.getenv("CHROMA_PORT", "8000"))
-	except ValueError:
-		port = 8000
-	tenant = os.getenv("CHROMA_TENANT", "default_tenant")
-	database = os.getenv("CHROMA_DATABASE", "default_database")
-	ssl = _env_bool("CHROMA_SSL", "false")
-	headers = _load_headers()
+        host = get_chroma_host()
+        port = get_chroma_port()
+        tenant = get_chroma_tenant()
+        database = get_chroma_database()
+        ssl = _env_bool("CHROMA_SSL", "false")
+        headers = _load_headers()
 
 	try:
 		return V2ChromaClient(
