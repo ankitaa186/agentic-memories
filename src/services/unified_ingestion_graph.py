@@ -249,38 +249,88 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	items = state.get("extracted_items", [])
 	memories: List[Memory] = []
 	
-	for item in items:
-		content = str(item.get("content", "")).strip()
-		if not content:
-			continue
-		
-		mtype = item.get("type", "explicit")
-		layer = item.get("layer", "semantic")
-		ttl = item.get("ttl")
-		if layer == "short-term" and not ttl:
-			ttl = SHORT_TERM_TTL_SECONDS
-		confidence = float(item.get("confidence", 0.7))
-		tags = item.get("tags") or []
-		
-		embedding = generate_embedding(content)
-		memory = Memory(
-			user_id=state["user_id"],
-			content=content,
-			layer=layer,
-			type=mtype,
-			embedding=embedding,
-			confidence=confidence,
-			ttl=ttl,
-			metadata={
-				"source": "extraction_llm",
-				"tags": tags,
-				"project": item.get("project"),
-				"relationship": item.get("relationship"),
-				"learning_journal": item.get("learning_journal"),
-				"portfolio": item.get("portfolio"),
-			},
-		)
-		memories.append(memory)
+        request = state.get("request")
+
+        for item in items:
+                content = str(item.get("content", "")).strip()
+                if not content:
+                        continue
+
+                mtype = item.get("type", "explicit")
+                layer = item.get("layer", "semantic")
+                ttl = item.get("ttl")
+                if layer == "short-term" and not ttl:
+                        ttl = SHORT_TERM_TTL_SECONDS
+                confidence = float(item.get("confidence", 0.7))
+                tags = item.get("tags") or []
+
+                metadata: Dict[str, Any] = {
+                        "source": "extraction_llm",
+                        "tags": tags,
+                }
+
+                # Include all optional structured objects from the extractor output
+                optional_fields = [
+                        "project",
+                        "relationship",
+                        "learning_journal",
+                        "portfolio",
+                        "temporal",
+                        "entities",
+                        "episodic_context",
+                        "emotional_context",
+                        "behavioral_pattern",
+                        "narrative_markers",
+                        "consolidation_hints",
+                        "skill_context",
+                        "semantic_stability",
+                        "confidence_breakdown",
+                        "inferrable_context",
+                ]
+
+                for field in optional_fields:
+                        value = item.get(field)
+                        if value:
+                                metadata[field] = value
+
+                # Derive spatial/participant context for episodic storage
+                episodic_context = metadata.get("episodic_context")
+                location = metadata.get("location") or (episodic_context or {}).get("location")
+                participants = metadata.get("participants") or (episodic_context or {}).get("participants")
+
+                entities = metadata.get("entities")
+                if not location and isinstance(entities, dict):
+                        places = entities.get("places")
+                        if places:
+                                if len(places) == 1:
+                                        location = {"place": places[0]}
+                                else:
+                                        location = {"places": places}
+                if not participants and isinstance(entities, dict):
+                        people = entities.get("people")
+                        if people:
+                                participants = people
+
+                if location:
+                        metadata["location"] = location
+                if participants:
+                        metadata["participants"] = participants
+
+                if request and getattr(request, "metadata", None):
+                        metadata.update(request.metadata)
+
+                embedding = generate_embedding(content)
+                memory = Memory(
+                        user_id=state["user_id"],
+                        content=content,
+                        layer=layer,
+                        type=mtype,
+                        embedding=embedding,
+                        confidence=confidence,
+                        ttl=ttl,
+                        metadata=metadata,
+                )
+                memories.append(memory)
 	
 	state["memories"] = memories
 	state["metrics"]["build_memories_ms"] = int((time.perf_counter() - state["t_start"]) * 1000)
