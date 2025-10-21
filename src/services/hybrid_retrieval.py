@@ -57,6 +57,7 @@ class RetrievalQuery:
     importance_threshold: Optional[float] = None
     limit: int = 10
     strategy: RetrievalStrategy = RetrievalStrategy.HYBRID
+    weight_overrides: Optional[Dict[str, float]] = None
 
 
 class HybridRetrievalService:
@@ -449,6 +450,19 @@ class HybridRetrievalService:
             importance_weight = 0.1
             emotional_weight = 0.7
         
+        # Apply persona or caller overrides when provided
+        if query.weight_overrides:
+            semantic_weight = query.weight_overrides.get("semantic", semantic_weight)
+            temporal_weight = query.weight_overrides.get("temporal", temporal_weight)
+            importance_weight = query.weight_overrides.get("importance", importance_weight)
+            emotional_weight = query.weight_overrides.get("emotional", emotional_weight)
+            total = semantic_weight + temporal_weight + importance_weight + emotional_weight
+            if total > 0:
+                semantic_weight /= total
+                temporal_weight /= total
+                importance_weight /= total
+                emotional_weight /= total
+
         # Calculate weighted score
         score = 0.0
         

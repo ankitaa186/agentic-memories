@@ -30,6 +30,7 @@ def _ttl_epoch_from_ttl(ttl_seconds: Optional[int]) -> Optional[int]:
 	return int(time.time()) + int(ttl_seconds)
 
 
+
 def _build_metadata(memory: Memory) -> Dict[str, Any]:
 	meta: Dict[str, Any] = {
 		"user_id": memory.user_id,
@@ -39,8 +40,12 @@ def _build_metadata(memory: Memory) -> Dict[str, Any]:
 		"confidence": memory.confidence,
 		"relevance_score": memory.relevance_score,
 		"usage_count": memory.usage_count,
+		"importance": memory.importance,
+		"persona_tags": json.dumps(memory.persona_tags or []),
 		"tags": json.dumps(memory.metadata.get("tags", [])),  # Serialize list to string
 	}
+	if memory.emotional_signature:
+		meta["emotional_signature"] = json.dumps(memory.emotional_signature)
 	if memory.ttl is not None:
 		meta["ttl_epoch"] = _ttl_epoch_from_ttl(memory.ttl)
 	# Pass-through structured fields where present

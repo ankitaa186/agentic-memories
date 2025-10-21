@@ -133,15 +133,54 @@ def search_memories(
 		semantic_sim = 1.0 - float(scores[i]) if scores else 0.0
 		k_score = _keyword_score(query, docs[i])
 		final = _hybrid_score(semantic_sim, k_score)
+		meta = metas[i] or {}
+		if not isinstance(meta, dict):
+			meta = {"raw": meta}
+		if isinstance(meta, dict):
+			persona_raw = meta.get("persona_tags")
+			if isinstance(persona_raw, str):
+				try:
+					meta["persona_tags"] = json.loads(persona_raw)
+				except Exception:
+					meta["persona_tags"] = []
+			emotional_raw = meta.get("emotional_signature")
+			if isinstance(emotional_raw, str):
+				try:
+					meta["emotional_signature"] = json.loads(emotional_raw)
+				except Exception:
+					meta["emotional_signature"] = {}
+			if "importance" in meta:
+				try:
+					meta["importance"] = float(meta["importance"])
+				except Exception:
+					meta["importance"] = 0.0
 		item = {
 			"id": mem_id,
 			"content": docs[i],
 			"score": final,
-			"metadata": metas[i],
+			"metadata": meta,
+			"importance": (meta or {}).get("importance"),
+			"persona_tags": (meta or {}).get("persona_tags"),
+			"emotional_signature": (meta or {}).get("emotional_signature"),
 		}
 		items.append(item)
 
 	# Sort by final score and paginate
+	persona_filter = filters.get("persona") or filters.get("persona_tags")
+	if persona_filter:
+		if isinstance(persona_filter, str):
+			target = {persona_filter}
+		elif isinstance(persona_filter, list):
+			target = {str(tag) for tag in persona_filter}
+		else:
+			target = {str(persona_filter)}
+		filtered = []
+		for item in items:
+			tags = item.get("persona_tags") or []
+			if isinstance(tags, list) and any(tag in target for tag in tags):
+				filtered.append(item)
+		items = filtered
+
 	items.sort(key=lambda x: x["score"], reverse=True)
 	total = len(items)
 	page = items[offset : offset + limit]

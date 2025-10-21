@@ -40,6 +40,9 @@ class ReconstructionService:
         query: Optional[str] = None,
         time_range: Optional[Tuple[datetime, datetime]] = None,
         limit: int = 25,
+        prefetched_memories: Optional[List[Dict[str, Any]]] = None,
+        summaries: Optional[List[Dict[str, Any]]] = None,
+        persona: Optional[str] = None,
     ) -> Narrative:
         from src.services.tracing import start_span, end_span
         
@@ -51,31 +54,77 @@ class ReconstructionService:
         })
         
         try:
-            rq = RetrievalQuery(
-                user_id=user_id,
-                query_text=query,
-                time_range=time_range,
-                limit=max(1, min(limit, 50)),
-            )
-            results: List[RetrievalResult] = self.retrieval.retrieve_memories(rq)
+            payload_memories: List[Dict[str, Any]] = []
+            memory_index: Dict[str, Dict[str, Any]] = {}
+            results: List[RetrievalResult] = []
+
+            if prefetched_memories is not None:
+                for item in prefetched_memories:
+                    if not isinstance(item, dict):
+                        continue
+                    mem_id = item.get("id")
+                    if not mem_id:
+                        continue
+                    meta = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+                    relevance = float(item.get("score", 0.0) or 0.0)
+                    importance = meta.get("importance", item.get("importance", 0.5) or 0.5)
+                    try:
+                        importance_val = float(importance)
+                    except Exception:
+                        importance_val = 0.5
+                    payload_memories.append(
+                        {
+                            "id": mem_id,
+                            "type": meta.get("type", "semantic"),
+                            "content": item.get("content", ""),
+                            "relevance": relevance,
+                            "recency": float(meta.get("recency", 0.5) if isinstance(meta.get("recency"), (int, float)) else 0.5),
+                            "importance": importance_val,
+                            "meta": meta,
+                        }
+                    )
+                    memory_index[mem_id] = {
+                        "id": mem_id,
+                        "type": meta.get("type", "semantic"),
+                        "content": item.get("content", ""),
+                        "meta": meta,
+                    }
+            else:
+                rq = RetrievalQuery(
+                    user_id=user_id,
+                    query_text=query,
+                    time_range=time_range,
+                    limit=max(1, min(limit, 50)),
+                )
+                results = self.retrieval.retrieve_memories(rq)
+                for r in results:
+                    meta = r.metadata or {}
+                    payload_memories.append(
+                        {
+                            "id": r.memory_id,
+                            "type": r.memory_type,
+                            "content": r.content,
+                            "relevance": r.relevance_score,
+                            "recency": r.recency_score,
+                            "importance": r.importance_score,
+                            "meta": meta,
+                        }
+                    )
+                    memory_index[r.memory_id] = {
+                        "id": r.memory_id,
+                        "type": r.memory_type,
+                        "content": r.content,
+                        "meta": meta,
+                    }
 
             # Shape a compact payload for the LLM
             payload = {
                 "user_id": user_id,
                 "query": query or "",
                 "time_range": [r.isoformat() for r in time_range] if time_range else None,
-                "memories": [
-                    {
-                        "id": r.memory_id,
-                        "type": r.memory_type,
-                        "content": r.content,
-                        "relevance": r.relevance_score,
-                        "recency": r.recency_score,
-                        "importance": r.importance_score,
-                        "meta": r.metadata or {},
-                    }
-                    for r in results
-                ],
+                "persona": persona,
+                "summaries": summaries or [],
+                "memories": payload_memories,
             }
 
             SYSTEM_PROMPT = (
@@ -91,16 +140,7 @@ class ReconstructionService:
                 resp = {"narrative": "", "summary": None, "source_ids": []}
 
             source_ids = set(resp.get("source_ids") or [])
-            sources = [
-                {
-                    "id": r.memory_id,
-                    "type": r.memory_type,
-                    "content": r.content,
-                    "meta": r.metadata or {},
-                }
-                for r in results
-                if r.memory_id in source_ids
-            ]
+            sources = [memory_index[sid] for sid in source_ids if sid in memory_index]
 
             narrative = Narrative(
                 user_id=user_id,
@@ -112,7 +152,7 @@ class ReconstructionService:
             end_span(output={
                 "sources_count": len(sources),
                 "narrative_length": len(narrative.text),
-                "memories_retrieved": len(results)
+                "memories_retrieved": len(payload_memories)
             })
             
             return narrative

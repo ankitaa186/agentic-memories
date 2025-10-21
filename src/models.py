@@ -18,5 +18,8 @@ class Memory(BaseModel):
 	ttl: Optional[int] = None
 	usage_count: int = 0
 	relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
+	importance: float = Field(default=0.5, ge=0.0, le=1.0)
+	persona_tags: List[str] = Field(default_factory=list)
+	emotional_signature: Optional[Dict[str, Any]] = None
 	metadata: Dict[str, Any] = Field(default_factory=dict)
 

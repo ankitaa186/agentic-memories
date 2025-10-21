@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 import logging
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import json
 
 from fastapi import FastAPI, Query, HTTPException, Header, Cookie, Depends, Request
@@ -24,6 +24,11 @@ from src.schemas import (
     FinanceGoal,
     NarrativeRequest,
     NarrativeResponse,
+    PersonaRetrieveRequest,
+    PersonaRetrieveResponse,
+    PersonaRetrieveResults,
+    PersonaSelection,
+    PersonaExplainability,
 )
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import ping_timescale
@@ -46,6 +51,7 @@ except Exception:
     BackgroundScheduler = None  # type: ignore
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
+from src.services.persona_retrieval import PersonaCoPilot
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0")
 # Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
@@ -124,6 +130,7 @@ if not _root.handlers:
 
 # Services
 _reconstruction = ReconstructionService()
+_persona_copilot = PersonaCoPilot()
 
 # Request/response logging middleware (minimal, no bodies)
 import time as _time
@@ -144,6 +151,53 @@ async def _log_requests(request: Request, call_next):
     elapsed_ms = int(((_time.perf_counter() - start) * 1000))
     logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
     return response
+
+
+
+def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[RetrieveItem]:
+    items: List[RetrieveItem] = []
+    for r in raw_items:
+        meta = r.get("metadata", {}) if isinstance(r, dict) else {}
+        if not isinstance(meta, dict):
+            meta = {"raw": meta}
+        persona_tags = r.get("persona_tags") if isinstance(r, dict) else None
+        if isinstance(persona_tags, str):
+            try:
+                persona_tags = json.loads(persona_tags)
+            except Exception:
+                persona_tags = []
+        elif not isinstance(persona_tags, list):
+            persona_tags = meta.get("persona_tags") if isinstance(meta.get("persona_tags"), list) else None
+        emotional_signature = r.get("emotional_signature") if isinstance(r, dict) else None
+        if isinstance(emotional_signature, str):
+            try:
+                emotional_signature = json.loads(emotional_signature)
+            except Exception:
+                emotional_signature = {}
+        elif not isinstance(emotional_signature, dict):
+            candidate = meta.get("emotional_signature")
+            emotional_signature = candidate if isinstance(candidate, dict) else None
+        importance = r.get("importance") if isinstance(r, dict) else None
+        if importance is None and isinstance(meta.get("importance"), (int, float)):
+            importance = meta.get("importance")
+        try:
+            importance_val = float(importance) if importance is not None else None
+        except Exception:
+            importance_val = None
+        item = RetrieveItem(
+            id=r.get("id") if isinstance(r, dict) else "",
+            content=r.get("content") if isinstance(r, dict) else "",
+            layer=meta.get("layer", "semantic"),
+            type=meta.get("type", "explicit"),
+            score=float(r.get("score", 0.0)) if isinstance(r, dict) else 0.0,
+            metadata=meta,
+            importance=importance_val,
+            persona_tags=persona_tags if isinstance(persona_tags, list) else None,
+            emotional_signature=emotional_signature if isinstance(emotional_signature, dict) else None,
+        )
+        items.append(item)
+    return items
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -495,122 +549,240 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
 
 @app.get("/v1/retrieve", response_model=RetrieveResponse)
 def retrieve(
-	user_id: str = Query(...),
-	query: Optional[str] = Query(default=None, description="Search query (optional - omit to get all memories)"),
-	layer: Optional[str] = Query(default=None),
-	type: Optional[str] = Query(default=None),
-	limit: int = Query(default=10, ge=1, le=50),
-	offset: int = Query(default=0, ge=0),
+        user_id: str = Query(...),
+        query: Optional[str] = Query(default=None, description="Search query (optional - omit to get all memories)"),
+        layer: Optional[str] = Query(default=None),
+        type: Optional[str] = Query(default=None),
+        persona: Optional[str] = Query(default=None),
+        limit: int = Query(default=10, ge=1, le=50),
+        offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
-	from src.services.tracing import start_trace
-	
-	# Start trace for this request
-	trace = start_trace(
-		name="retrieve_memories",
-		user_id=user_id,
-		metadata={
-			"query": query[:100] if query else None,
-			"limit": limit,
-			"endpoint": "/v1/retrieve"
-		}
-	)
-	
-	filters: dict = {}
-	if layer:
-		filters["layer"] = layer
-	if type:
-		filters["type"] = type
-	results, total = search_memories(user_id=user_id, query=query or "", filters=filters, limit=limit, offset=offset)  # Phase 4 will enforce auth-derived user_id
-	items = [
-		RetrieveItem(
-			id=r["id"],
-			content=r["content"],
-			layer=r["metadata"].get("layer", "semantic"),
-			type=r["metadata"].get("type", "explicit"),
-			score=float(r.get("score", 0.0)),
-			metadata=r.get("metadata", {}),
-		)
-		for r in results
-	]
-	# Build finance aggregate (lightweight) from current page results
-	fin_holdings: List[dict] = []
-	counts_by_asset_type: dict[str, int] = {}
-	goals: List[FinanceGoal] = []
-	for r in results:
-		meta = r.get("metadata", {})
-		p = meta.get("portfolio")
-		try:
-			if isinstance(p, str):
-				p = json.loads(p)
-		except Exception:
-			p = None
-		if isinstance(p, dict):
-			base = {
-				"asset_type": None,
-				"ticker": p.get("ticker"),
-				"name": None,
-				"shares": p.get("shares"),
-				"avg_price": p.get("avg_price"),
-				"position": p.get("position"),
-				"intent": p.get("intent"),
-				"target_price": p.get("target_price"),
-				"stop_loss": p.get("stop_loss"),
-				"time_horizon": p.get("time_horizon"),
-				"notes": p.get("notes"),
-				"source_memory_id": r.get("id"),
-				"updated_at": meta.get("timestamp"),
-			}
-			h = p.get("holdings")
-			if isinstance(h, list) and h:
-				for one in h:
-					if not isinstance(one, dict):
-						continue
-					row = {
-						**base,
-						"asset_type": one.get("asset_type"),
-						"ticker": one.get("ticker") or base.get("ticker"),
-						"name": one.get("name"),
-						"shares": one.get("shares", base.get("shares")),
-						"avg_price": one.get("avg_price", base.get("avg_price")),
-						"ownership_pct": one.get("ownership_pct"),
-					}
-					fin_holdings.append(row)
-					at = row.get("asset_type") or "unknown"
-					counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
-			else:
-				if base.get("ticker") or base.get("shares"):
-					fin_holdings.append(base)
-					at = base.get("asset_type") or ("public_equity" if base.get("ticker") else "unknown")
-					counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+        from src.services.tracing import start_trace
 
-		# Extract finance goals hints from tags or content
-		tags_json = meta.get("tags")
-		tags: List[str] = []
-		try:
-			if isinstance(tags_json, str):
-				tags = json.loads(tags_json)
-			elif isinstance(tags_json, list):
-				tags = [str(t) for t in tags_json]
-		except Exception:
-			tags = []
-		if any(t for t in tags if t.startswith("ticker:")) or "finance" in tags:
-			goals.append(FinanceGoal(text=r.get("content", ""), source_memory_id=r.get("id")))
+        # Start trace for this request
+        trace = start_trace(
+                name="retrieve_memories",
+                user_id=user_id,
+                metadata={
+                        "query": query[:100] if query else None,
+                        "limit": limit,
+                        "endpoint": "/v1/retrieve"
+                }
+        )
 
-	finance_agg = FinanceAggregate(
-		portfolio=PortfolioSummaryResponse(user_id=user_id, holdings=fin_holdings, counts_by_asset_type=counts_by_asset_type),
-		goals=goals,
-	) if (fin_holdings or goals) else None
+        metadata_filters: Dict[str, Any] = {}
+        if layer:
+                metadata_filters["layer"] = layer
+        if type:
+                metadata_filters["type"] = type
+        persona_context: Dict[str, Any] = {}
+        if persona:
+                persona_context["forced_persona"] = persona
+                metadata_filters.setdefault("persona_tags", [persona])
 
-	response = RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total}, finance=finance_agg)
-	
-	# Update trace with output
-	if trace:
-		try:
-			trace.update(output={"results_count": len(items), "total": total})
-		except Exception:
-			pass
-	
-	return response
+        limit_with_offset = limit + offset
+        persona_results = _persona_copilot.retrieve(
+                user_id=user_id,
+                query=query or "",
+                limit=limit_with_offset,
+                persona_context=persona_context or None,
+                metadata_filters=metadata_filters if metadata_filters else None,
+                include_summaries=False,
+        )
+
+        selected_persona = persona or (next(iter(persona_results.keys()), None))
+        raw_items: List[dict] = []
+        total = 0
+        if selected_persona and selected_persona in persona_results:
+                persona_payload = persona_results[selected_persona]
+                pool = persona_payload.items
+                total = len(pool)
+                raw_items = pool[offset: offset + limit]
+        else:
+                fallback_filters = dict(metadata_filters)
+                raw_items, total = search_memories(user_id=user_id, query=query or "", filters=fallback_filters, limit=limit, offset=offset)
+
+        items = _convert_to_retrieve_items(raw_items)
+
+        # Build finance aggregate (lightweight) from current page results
+        fin_holdings: List[dict] = []
+        counts_by_asset_type: dict[str, int] = {}
+        goals: List[FinanceGoal] = []
+        for r in raw_items:
+                meta = r.get("metadata", {}) if isinstance(r, dict) else {}
+                p = meta.get("portfolio") if isinstance(meta, dict) else None
+                try:
+                        if isinstance(p, str):
+                                p = json.loads(p)
+                except Exception:
+                        p = None
+                if isinstance(p, dict):
+                        base = {
+                                "asset_type": None,
+                                "ticker": p.get("ticker"),
+                                "name": None,
+                                "shares": p.get("shares"),
+                                "avg_price": p.get("avg_price"),
+                                "position": p.get("position"),
+                                "intent": p.get("intent"),
+                                "target_price": p.get("target_price"),
+                                "stop_loss": p.get("stop_loss"),
+                                "time_horizon": p.get("time_horizon"),
+                                "notes": p.get("notes"),
+                                "source_memory_id": r.get("id") if isinstance(r, dict) else None,
+                                "updated_at": meta.get("timestamp") if isinstance(meta, dict) else None,
+                        }
+                        h = p.get("holdings")
+                        if isinstance(h, list) and h:
+                                for one in h:
+                                        if not isinstance(one, dict):
+                                                continue
+                                        row = {
+                                                **base,
+                                                "asset_type": one.get("asset_type"),
+                                                "ticker": one.get("ticker") or base.get("ticker"),
+                                                "name": one.get("name"),
+                                                "shares": one.get("shares", base.get("shares")),
+                                                "avg_price": one.get("avg_price", base.get("avg_price")),
+                                                "ownership_pct": one.get("ownership_pct"),
+                                        }
+                                        fin_holdings.append(row)
+                                        at = row.get("asset_type") or "unknown"
+                                        counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+                        else:
+                                if base.get("ticker") or base.get("shares"):
+                                        fin_holdings.append(base)
+                                        at = base.get("asset_type") or ("public_equity" if base.get("ticker") else "unknown")
+                                        counts_by_asset_type[at] = counts_by_asset_type.get(at, 0) + 1
+
+                tags_json = meta.get("tags") if isinstance(meta, dict) else None
+                tags: List[str] = []
+                try:
+                        if isinstance(tags_json, str):
+                                tags = json.loads(tags_json)
+                        elif isinstance(tags_json, list):
+                                tags = [str(t) for t in tags_json]
+                except Exception:
+                        tags = []
+                if any(t for t in tags if t.startswith("ticker:")) or "finance" in tags:
+                        content = r.get("content", "") if isinstance(r, dict) else ""
+                        goals.append(FinanceGoal(text=content, source_memory_id=r.get("id") if isinstance(r, dict) else None))
+
+        finance_agg = FinanceAggregate(
+                portfolio=PortfolioSummaryResponse(user_id=user_id, holdings=fin_holdings, counts_by_asset_type=counts_by_asset_type),
+                goals=goals,
+        ) if (fin_holdings or goals) else None
+
+        response = RetrieveResponse(results=items, pagination={"limit": limit, "offset": offset, "total": total}, finance=finance_agg)
+
+        if trace:
+                try:
+                        trace.update(output={"results_count": len(items), "total": total})
+                except Exception:
+                        pass
+
+        return response
+
+
+@app.post("/v1/retrieve", response_model=PersonaRetrieveResponse)
+def retrieve_persona(body: PersonaRetrieveRequest) -> PersonaRetrieveResponse:
+        metadata_filters: Dict[str, Any] = dict(body.filters or {})
+        if body.persona_context:
+                if hasattr(body.persona_context, "model_dump"):
+                        persona_context = body.persona_context.model_dump()
+                else:
+                        persona_context = body.persona_context.dict()
+        else:
+                persona_context = {}
+        limit_with_offset = body.limit + body.offset
+        persona_results = _persona_copilot.retrieve(
+                user_id=body.user_id,
+                query=body.query or "",
+                limit=limit_with_offset,
+                persona_context=persona_context or None,
+                metadata_filters=metadata_filters if metadata_filters else None,
+                include_summaries=True,
+                granularity=body.granularity,
+        )
+
+        selected_persona = persona_context.get("forced_persona") or (next(iter(persona_results.keys()), None))
+        persona_payload = persona_results.get(selected_persona) if selected_persona else None
+        if persona_payload is None and persona_results:
+                selected_persona, persona_payload = next(iter(persona_results.items()))
+        if selected_persona is None:
+                selected_persona = persona_context.get("forced_persona") or "identity"
+
+        if persona_payload is None:
+                fallback_filters = dict(metadata_filters)
+                raw_page, total_count = search_memories(
+                        user_id=body.user_id,
+                        query=body.query or "",
+                        filters=fallback_filters,
+                        limit=body.limit,
+                        offset=body.offset,
+                )
+                summaries = []
+                weight_profile: Dict[str, float] = {}
+        else:
+                total_count = len(persona_payload.items)
+                raw_page = persona_payload.items[body.offset : body.offset + body.limit]
+                summaries = persona_payload.summaries
+                weight_profile = persona_payload.weight_profile
+
+        items = _convert_to_retrieve_items(raw_page)
+        tier_value = _persona_copilot.summary_manager.resolve_tier(body.granularity).value
+
+        confidence = 0.0
+        if raw_page:
+                try:
+                        score_sum = sum(float(mem.get("score", 0.0) or 0.0) for mem in raw_page if isinstance(mem, dict))
+                        confidence = max(0.0, min(1.0, score_sum / max(len(raw_page), 1)))
+                except Exception:
+                        confidence = 0.0
+
+        state_snapshot_id = None
+        try:
+                state = _persona_copilot.state_store.get_state(body.user_id)
+                state_snapshot_id = f"{state.user_id}:{int(state.updated_at.timestamp())}"
+        except Exception:
+                state_snapshot_id = None
+
+        narrative_text = None
+        if body.include_narrative and raw_page:
+                narrative = _reconstruction.build_narrative(
+                        user_id=body.user_id,
+                        query=body.query,
+                        limit=body.limit,
+                        prefetched_memories=raw_page,
+                        summaries=summaries,
+                        persona=selected_persona,
+                )
+                narrative_text = narrative.text
+
+        explainability = None
+        if body.explain:
+                source_links = []
+                for mem in raw_page:
+                        if isinstance(mem, dict):
+                                try:
+                                        score_val = float(mem.get("score", 0.0) or 0.0)
+                                except Exception:
+                                        score_val = 0.0
+                                source_links.append({"id": mem.get("id"), "score": score_val})
+                explainability = PersonaExplainability(weights=weight_profile, source_links=source_links)
+
+        response = PersonaRetrieveResponse(
+                persona=PersonaSelection(selected=selected_persona, confidence=confidence, state_snapshot_id=state_snapshot_id),
+                results=PersonaRetrieveResults(
+                        granularity=tier_value,
+                        memories=items,
+                        summaries=summaries,
+                        narrative=narrative_text,
+                ),
+                explainability=explainability,
+        )
+
+        return response
 
 
 # Advanced structured retrieval endpoint
@@ -850,6 +1022,8 @@ def narrative(body: NarrativeRequest) -> NarrativeResponse:
     return response
 
 
+
+
 @app.post("/v1/forget")
 def forget(body: ForgetRequest) -> dict:
 	return {"jobs_enqueued": ["ttl_cleanup", "promotion"], "dry_run": body.dry_run}
@@ -1025,6 +1199,8 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
             pass
     
     return response
+
+
 
 
 @app.post("/v1/maintenance/compact_all", response_model=MaintenanceResponse)

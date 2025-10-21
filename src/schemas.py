@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -45,6 +45,9 @@ class RetrieveItem(BaseModel):
 	type: Literal["explicit", "implicit"]
 	score: float
 	metadata: Optional[dict[str, Any]] = None
+	importance: Optional[float] = None
+	persona_tags: Optional[List[str]] = None
+	emotional_signature: Optional[Dict[str, Any]] = None
 
 
 class Pagination(BaseModel):
@@ -57,6 +60,47 @@ class RetrieveResponse(BaseModel):
 	results: List[RetrieveItem]
 	pagination: Pagination
 	finance: Optional["FinanceAggregate"] = None
+
+class PersonaContext(BaseModel):
+	active_personas: List[str] = Field(default_factory=list)
+	forced_persona: Optional[str] = None
+	mood: Optional[str] = None
+
+
+class PersonaRetrieveRequest(BaseModel):
+	user_id: str
+	query: Optional[str] = None
+	limit: int = Field(default=10, ge=1, le=50)
+	offset: int = Field(default=0, ge=0)
+	persona_context: Optional[PersonaContext] = None
+	granularity: Literal["raw", "episodic", "arc", "auto"] = "auto"
+	include_narrative: bool = False
+	explain: bool = False
+	filters: Optional[dict[str, Any]] = None
+
+
+class PersonaSelection(BaseModel):
+	selected: Optional[str] = None
+	confidence: float = 0.0
+	state_snapshot_id: Optional[str] = None
+
+
+class PersonaRetrieveResults(BaseModel):
+	granularity: str
+	memories: List[RetrieveItem] = Field(default_factory=list)
+	summaries: List[Dict[str, Any]] = Field(default_factory=list)
+	narrative: Optional[str] = None
+
+
+class PersonaExplainability(BaseModel):
+	weights: Dict[str, float] = Field(default_factory=dict)
+	source_links: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PersonaRetrieveResponse(BaseModel):
+	persona: PersonaSelection
+	results: PersonaRetrieveResults
+	explainability: Optional[PersonaExplainability] = None
 
 
 class ForgetRequest(BaseModel):
