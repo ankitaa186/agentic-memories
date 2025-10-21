@@ -98,7 +98,10 @@ class RetrievalOrchestrator:
             return None
 
         try:
-            score = float(result.get("score", 0.0))
+            raw_score = float(result.get("score", 0.0))
+            # Apply the same score transformation as the traditional retrieve endpoint
+            # ChromaDB returns distance scores (lower is better), so we invert them
+            score = 1.0 - raw_score
         except (TypeError, ValueError):
             score = 0.0
 

@@ -31,7 +31,7 @@ class IngestionPolicy:
 class RetrievalPolicy:
     """Controls when and how memories are surfaced back to the chatbot."""
 
-    min_similarity: float = 0.55
+    min_similarity: float = 0.15
     """Minimum hybrid score required to inject a memory."""
 
     max_injections_per_message: int = 3
