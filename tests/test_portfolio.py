@@ -1,18 +1,11 @@
 """Tests for portfolio summary endpoint."""
 
 import json
-from unittest.mock import MagicMock, patch
-
-import pytest
-from fastapi.testclient import TestClient
-
-from src.app import app
-
-client = TestClient(app)
+from unittest.mock import patch
 
 
 @patch("src.app.search_memories")
-def test_portfolio_summary_basic(mock_search):
+def test_portfolio_summary_basic(mock_search, api_client):
     """Test basic portfolio summary with mocked data."""
     # Mock search results with portfolio metadata
     mock_search.return_value = (
@@ -45,7 +38,7 @@ def test_portfolio_summary_basic(mock_search):
         2
     )
     
-    response = client.get("/v1/portfolio/summary?user_id=test_user")
+    response = api_client.get("/v1/portfolio/summary?user_id=test_user")
     assert response.status_code == 200
     
     data = response.json()
@@ -70,7 +63,7 @@ def test_portfolio_summary_basic(mock_search):
 
 
 @patch("src.app.search_memories")
-def test_portfolio_summary_with_private_equity(mock_search):
+def test_portfolio_summary_with_private_equity(mock_search, api_client):
     """Test portfolio summary with private equity holdings."""
     mock_search.return_value = (
         [
@@ -100,7 +93,7 @@ def test_portfolio_summary_with_private_equity(mock_search):
         1
     )
     
-    response = client.get("/v1/portfolio/summary?user_id=test_user")
+    response = api_client.get("/v1/portfolio/summary?user_id=test_user")
     assert response.status_code == 200
     
     data = response.json()
@@ -123,11 +116,11 @@ def test_portfolio_summary_with_private_equity(mock_search):
 
 
 @patch("src.app.search_memories")
-def test_portfolio_summary_empty(mock_search):
+def test_portfolio_summary_empty(mock_search, api_client):
     """Test portfolio summary with no holdings."""
     mock_search.return_value = ([], 0)
     
-    response = client.get("/v1/portfolio/summary?user_id=test_user")
+    response = api_client.get("/v1/portfolio/summary?user_id=test_user")
     assert response.status_code == 200
     
     data = response.json()
@@ -137,7 +130,7 @@ def test_portfolio_summary_empty(mock_search):
 
 
 @patch("src.app.search_memories")
-def test_portfolio_summary_with_limit(mock_search):
+def test_portfolio_summary_with_limit(mock_search, api_client):
     """Test portfolio summary with limit parameter."""
     # Mock more holdings than the limit
     holdings = []
@@ -155,7 +148,7 @@ def test_portfolio_summary_with_limit(mock_search):
     
     mock_search.return_value = (holdings[:5], 5)  # Return only 5 items
     
-    response = client.get("/v1/portfolio/summary?user_id=test_user&limit=5")
+    response = api_client.get("/v1/portfolio/summary?user_id=test_user&limit=5")
     assert response.status_code == 200
     
     data = response.json()
@@ -163,7 +156,7 @@ def test_portfolio_summary_with_limit(mock_search):
 
 
 @patch("src.app.search_memories")
-def test_portfolio_summary_mixed_formats(mock_search):
+def test_portfolio_summary_mixed_formats(mock_search, api_client):
     """Test portfolio summary with mixed metadata formats."""
     mock_search.return_value = (
         [
@@ -199,7 +192,7 @@ def test_portfolio_summary_mixed_formats(mock_search):
         3
     )
     
-    response = client.get("/v1/portfolio/summary?user_id=test_user")
+    response = api_client.get("/v1/portfolio/summary?user_id=test_user")
     assert response.status_code == 200
     
     data = response.json()
@@ -211,7 +204,7 @@ def test_portfolio_summary_mixed_formats(mock_search):
     assert "AMZN" in tickers
 
 
-def test_portfolio_summary_missing_user_id():
+def test_portfolio_summary_missing_user_id(api_client):
     """Test portfolio summary without required user_id parameter."""
-    response = client.get("/v1/portfolio/summary")
+    response = api_client.get("/v1/portfolio/summary")
     assert response.status_code == 422  # Validation error
