@@ -90,9 +90,16 @@ def mock_extraction_items():
 
 @pytest.fixture(autouse=True)
 def mock_external_dependencies(mock_chroma_client, mock_redis_client, mock_openai_key):
-    """Automatically mock external dependencies for all tests."""
+    """Automatically mock external services that require network access."""
     with patch('src.dependencies.chroma.get_chroma_client', return_value=mock_chroma_client), \
          patch('src.dependencies.redis_client.get_redis_client', return_value=mock_redis_client), \
+         patch('src.dependencies.timescale.get_timescale_conn', return_value=None), \
+         patch('src.dependencies.timescale.get_timescale_pool', return_value=None), \
+         patch('src.dependencies.timescale.ping_timescale', return_value=(False, 'disabled')), \
+         patch('src.dependencies.neo4j_client.get_neo4j_driver', return_value=None), \
+         patch('src.dependencies.neo4j_client.ping_neo4j', return_value=(False, 'disabled')), \
+         patch('src.services.portfolio_service.PortfolioService.__init__', return_value=None), \
+         patch('src.services.portfolio_service.PortfolioService.get_holdings', side_effect=RuntimeError('timescale disabled')), \
          patch.dict(os.environ, {'OPENAI_API_KEY': mock_openai_key}):
         yield
 
@@ -101,11 +108,20 @@ def mock_external_dependencies(mock_chroma_client, mock_redis_client, mock_opena
 def app_with_mocks(mock_chroma_client, mock_redis_client, mock_openai_key):
     """FastAPI app with mocked dependencies."""
     from src.app import app
-    
+
     # Ensure collections exist
     collection = mock_chroma_client.get_or_create_collection("memories_3072")
-    
+
     with patch('src.dependencies.chroma.get_chroma_client', return_value=mock_chroma_client), \
          patch('src.dependencies.redis_client.get_redis_client', return_value=mock_redis_client), \
          patch.dict(os.environ, {'OPENAI_API_KEY': mock_openai_key}):
         yield app
+
+
+@pytest.fixture
+def api_client(app_with_mocks):
+    """Provide a TestClient bound to the mocked FastAPI app."""
+    from fastapi.testclient import TestClient
+
+    with TestClient(app_with_mocks) as client:
+        yield client
