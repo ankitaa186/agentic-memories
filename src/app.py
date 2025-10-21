@@ -1017,52 +1017,6 @@ def narrative(body: NarrativeRequest) -> NarrativeResponse:
 
 
 
-def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[RetrieveItem]:
-    items: List[RetrieveItem] = []
-    for r in raw_items:
-        meta = r.get("metadata", {}) if isinstance(r, dict) else {}
-        if not isinstance(meta, dict):
-            meta = {"raw": meta}
-        persona_tags = r.get("persona_tags") if isinstance(r, dict) else None
-        if isinstance(persona_tags, str):
-            try:
-                persona_tags = json.loads(persona_tags)
-            except Exception:
-                persona_tags = []
-        elif not isinstance(persona_tags, list):
-            persona_tags = meta.get("persona_tags") if isinstance(meta.get("persona_tags"), list) else None
-        emotional_signature = r.get("emotional_signature") if isinstance(r, dict) else None
-        if isinstance(emotional_signature, str):
-            try:
-                emotional_signature = json.loads(emotional_signature)
-            except Exception:
-                emotional_signature = {}
-        elif not isinstance(emotional_signature, dict):
-            candidate = meta.get("emotional_signature")
-            emotional_signature = candidate if isinstance(candidate, dict) else None
-        importance = r.get("importance") if isinstance(r, dict) else None
-        if importance is None and isinstance(meta.get("importance"), (int, float)):
-            importance = meta.get("importance")
-        try:
-            importance_val = float(importance) if importance is not None else None
-        except Exception:
-            importance_val = None
-        item = RetrieveItem(
-            id=r.get("id") if isinstance(r, dict) else "",
-            content=r.get("content") if isinstance(r, dict) else "",
-            layer=meta.get("layer", "semantic"),
-            type=meta.get("type", "explicit"),
-            score=float(r.get("score", 0.0)) if isinstance(r, dict) else 0.0,
-            metadata=meta,
-            importance=importance_val,
-            persona_tags=persona_tags if isinstance(persona_tags, list) else None,
-            emotional_signature=emotional_signature if isinstance(emotional_signature, dict) else None,
-        )
-        items.append(item)
-    return items
-
-
-
 @app.post("/v1/forget")
 def forget(body: ForgetRequest) -> dict:
 	return {"jobs_enqueued": ["ttl_cleanup", "promotion"], "dry_run": body.dry_run}
@@ -1238,52 +1192,6 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
             pass
     
     return response
-
-
-
-def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[RetrieveItem]:
-    items: List[RetrieveItem] = []
-    for r in raw_items:
-        meta = r.get("metadata", {}) if isinstance(r, dict) else {}
-        if not isinstance(meta, dict):
-            meta = {"raw": meta}
-        persona_tags = r.get("persona_tags") if isinstance(r, dict) else None
-        if isinstance(persona_tags, str):
-            try:
-                persona_tags = json.loads(persona_tags)
-            except Exception:
-                persona_tags = []
-        elif not isinstance(persona_tags, list):
-            persona_tags = meta.get("persona_tags") if isinstance(meta.get("persona_tags"), list) else None
-        emotional_signature = r.get("emotional_signature") if isinstance(r, dict) else None
-        if isinstance(emotional_signature, str):
-            try:
-                emotional_signature = json.loads(emotional_signature)
-            except Exception:
-                emotional_signature = {}
-        elif not isinstance(emotional_signature, dict):
-            candidate = meta.get("emotional_signature")
-            emotional_signature = candidate if isinstance(candidate, dict) else None
-        importance = r.get("importance") if isinstance(r, dict) else None
-        if importance is None and isinstance(meta.get("importance"), (int, float)):
-            importance = meta.get("importance")
-        try:
-            importance_val = float(importance) if importance is not None else None
-        except Exception:
-            importance_val = None
-        item = RetrieveItem(
-            id=r.get("id") if isinstance(r, dict) else "",
-            content=r.get("content") if isinstance(r, dict) else "",
-            layer=meta.get("layer", "semantic"),
-            type=meta.get("type", "explicit"),
-            score=float(r.get("score", 0.0)) if isinstance(r, dict) else 0.0,
-            metadata=meta,
-            importance=importance_val,
-            persona_tags=persona_tags if isinstance(persona_tags, list) else None,
-            emotional_signature=emotional_signature if isinstance(emotional_signature, dict) else None,
-        )
-        items.append(item)
-    return items
 
 
 
