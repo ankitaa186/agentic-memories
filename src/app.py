@@ -3,7 +3,6 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 import json
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Query, HTTPException, Header, Cookie, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,7 +53,7 @@ from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
 from src.services.persona_retrieval import PersonaCoPilot
 
-app: FastAPI  # forward declaration for type-checkers
+app = FastAPI(title="Agentic Memories API", version="0.1.0")
 # Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
 _scheduler: Optional[BackgroundScheduler] = None
 
@@ -105,6 +104,7 @@ def _start_scheduler() -> None:
     except Exception as exc:
         logger.info("[sched] failed to start: %s", exc)
 
+@app.on_event("startup")
 def _on_startup() -> None:
     _start_scheduler()
 logger = logging.getLogger("agentic_memories.api")
@@ -131,6 +131,28 @@ if not _root.handlers:
 # Services
 _reconstruction = ReconstructionService()
 _persona_copilot = PersonaCoPilot()
+
+# Request/response logging middleware (minimal, no bodies)
+import time as _time
+
+@app.middleware("http")
+async def _log_requests(request: Request, call_next):
+    start = _time.perf_counter()
+    path = request.url.path
+    method = request.method
+    client = request.client.host if request.client else "-"
+    try:
+        response = await call_next(request)
+        status = getattr(response, "status_code", 200)
+    except Exception as exc:  # pragma: no cover
+        elapsed_ms = int(((_time.perf_counter() - start) * 1000))
+        logger.exception("[http] %s %s error=%s client=%s latency_ms=%s", method, path, exc.__class__.__name__, client, elapsed_ms)
+        raise
+    elapsed_ms = int(((_time.perf_counter() - start) * 1000))
+    logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
+    return response
+
+
 
 def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[RetrieveItem]:
     items: List[RetrieveItem] = []
@@ -177,7 +199,8 @@ def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[Retrieve
     return items
 
 
-async def _check_chroma_on_startup() -> None:
+@app.on_event("startup")
+async def startup_event():
     """Check Chroma connectivity on startup."""
     logger.info("Starting Agentic Memories API...")
     
@@ -252,80 +275,18 @@ def get_identity(
         logger.info("[auth] CF Access verification failed: %s", exc)
         return None
 
-def _require_llm_key() -> None:
-    # Provider-aware LLM configuration check
-    if not is_llm_configured():
-        raise RuntimeError("LLM not configured. Set LLM_PROVIDER and corresponding API key.")
-    # Log selected provider and models for observability
-    try:
-        provider = get_llm_provider()
-        extraction_model = get_extraction_model_name()
-        embedding_model = get_embedding_model_name()
-        chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
-        if provider == "openai":
-            key_present = bool(get_openai_api_key())
-            logger.info(
-                "[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
-                extraction_model,
-                embedding_model,
-                key_present,
-            )
-        elif provider == "xai":
-            # Do not log the API key; only presence and base URL
-            key_present = bool(get_openai_api_key())  # placeholder
-            xai_key_present = bool(os.getenv("XAI_API_KEY"))
-            xai_base = get_xai_base_url()
-            logger.info(
-                "[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
-                extraction_model,
-                embedding_model,
-                xai_key_present,
-                xai_base,
-            )
-        else:
-            logger.info(
-                "[startup] LLM provider=%s model=%s embedding_model=%s",
-                provider,
-                extraction_model,
-                embedding_model,
-            )
-        logger.info("[startup] Chroma host=%s port=%s", chroma_host, chroma_port)
-    except Exception as _exc:  # pragma: no cover
-        logger.info("[startup] config logging failed: %s", _exc)
-
-
-@asynccontextmanager
-async def _lifespan(app: FastAPI):
-    _on_startup()
-    await _check_chroma_on_startup()
-    _require_llm_key()
-    try:
-        yield
-    finally:
-        global _scheduler
-        if _scheduler is not None:
-            try:
-                _scheduler.shutdown(wait=False)
-            except Exception as exc:  # pragma: no cover
-                logger.info("[sched] shutdown failed: %s", exc)
-            _scheduler = None
-
-
-app = FastAPI(title="Agentic Memories API", version="0.1.0", lifespan=_lifespan)
-
-
 # CORS: allow UI origin (dev server and dockerized UI)
 _ui_origin = getenv("UI_ORIGIN")
 allow_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
     "http://localhost",
     "http://127.0.0.1",
-    "http://192.168.1.220",
+	"http://192.168.1.220",
     "http://192.168.1.220:5173",
 ]
 if _ui_origin and _ui_origin not in allow_origins:
-    allow_origins.append(_ui_origin)
+	allow_origins.append(_ui_origin)
 
 # Broadly allow common local network origins via regex (HTTP/HTTPS, any port)
 # - 127.0.0.1 / localhost
@@ -336,37 +297,42 @@ if _ui_origin and _ui_origin not in allow_origins:
 LAN_ORIGIN_REGEX = r"^https?://(localhost|127\\.0\\.0\\.1|192\\.168\\.\\d{1,3}\\.\\d{1,3}|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|172\\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}|([a-zA-Z0-9-]+\\.)*memoryforge\\.io)(:\\d+)?$"
 
 app.add_middleware(
-    CORSMiddleware,
+	CORSMiddleware,
     allow_origins=allow_origins + ["http://localhost:8080", "http://127.0.0.1:8080", "https://memoryforge.io"],
-    allow_origin_regex=LAN_ORIGIN_REGEX,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+	allow_origin_regex=LAN_ORIGIN_REGEX,
+	allow_credentials=False,
+	allow_methods=["*"],
+	allow_headers=["*"]
 )
 
 
-# Request/response logging middleware (minimal, no bodies)
-import time as _time
-
-@app.middleware("http")
-async def _log_requests(request: Request, call_next):
-    start = _time.perf_counter()
-    path = request.url.path
-    method = request.method
-    client = request.client.host if request.client else "-"
-    try:
-        response = await call_next(request)
-        status = getattr(response, "status_code", 200)
-    except Exception as exc:  # pragma: no cover
-        elapsed_ms = int(((_time.perf_counter() - start) * 1000))
-        logger.exception("[http] %s %s error=%s client=%s latency_ms=%s", method, path, exc.__class__.__name__, client, elapsed_ms)
-        raise
-    elapsed_ms = int(((_time.perf_counter() - start) * 1000))
-    logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
-    return response
-
-
-
+@app.on_event("startup")
+def require_llm_key() -> None:
+	# Provider-aware LLM configuration check
+	if not is_llm_configured():
+		raise RuntimeError("LLM not configured. Set LLM_PROVIDER and corresponding API key.")
+	# Log selected provider and models for observability
+	try:
+		provider = get_llm_provider()
+		extraction_model = get_extraction_model_name()
+		embedding_model = get_embedding_model_name()
+		chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
+		if provider == "openai":
+			key_present = bool(get_openai_api_key())
+			logger.info("[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
+				extraction_model, embedding_model, key_present)
+		elif provider == "xai":
+			# Do not log the API key; only presence and base URL
+			key_present = bool(get_openai_api_key())  # placeholder to avoid unused var if refactor; we won't use it
+			xai_key_present = bool(os.getenv("XAI_API_KEY"))
+			xai_base = get_xai_base_url()
+			logger.info("[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
+				extraction_model, embedding_model, xai_key_present, xai_base)
+		else:
+			logger.info("[startup] LLM provider=%s model=%s embedding_model=%s", provider, extraction_model, embedding_model)
+		logger.info("[startup] Chroma host=%s port=%s", chroma_host, chroma_port)
+	except Exception as _exc:  # pragma: no cover
+		logger.info("[startup] config logging failed: %s", _exc)
 
 
 @app.get("/health")
