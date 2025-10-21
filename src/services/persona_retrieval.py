@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 import json
+from typing import Any, Dict, List, Optional
 
 from src.services.hybrid_retrieval import HybridRetrievalService, RetrievalQuery
 from src.services.retrieval import search_memories
@@ -17,6 +17,33 @@ PERSONA_WEIGHT_PROFILES: Dict[str, Dict[str, float]] = {
     "finance": {"semantic": 0.3, "temporal": 0.3, "importance": 0.3, "emotional": 0.1},
     "creativity": {"semantic": 0.4, "temporal": 0.15, "importance": 0.25, "emotional": 0.2},
 }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_persona_tags(raw_value: Any) -> List[str]:
+    """Return a list of persona tags from metadata or filter values."""
+
+    if raw_value is None:
+        return []
+
+    if isinstance(raw_value, list):
+        return [str(tag) for tag in raw_value]
+
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value)
+            if isinstance(parsed, list):
+                return [str(tag) for tag in parsed]
+        except (TypeError, json.JSONDecodeError):
+            # Treat the raw string as a single tag when not JSON.
+            return [raw_value]
+        return [raw_value]
+
+    return [str(raw_value)]
 
 
 @dataclass
@@ -44,13 +71,9 @@ class PersonaRetrievalAgent:
         metadata_filters: Optional[Dict[str, Any]] = None,
     ) -> PersonaRetrievalResult:
         metadata_filters = metadata_filters or {}
-        target_tags: List[str] = []
-        raw_tags = metadata_filters.get("persona_tags")
-        if isinstance(raw_tags, list):
-            target_tags.extend(str(tag) for tag in raw_tags)
-        elif isinstance(raw_tags, str):
-            target_tags.append(raw_tags)
-        if self.persona not in target_tags:
+        target_tags = _normalize_persona_tags(metadata_filters.get("persona_tags"))
+        persona_requested = bool(target_tags)
+        if persona_requested and self.persona not in target_tags:
             target_tags.append(self.persona)
 
         hybrid_query = RetrievalQuery(
@@ -68,19 +91,23 @@ class PersonaRetrievalAgent:
         }
 
         hybrid_results = self.hybrid.retrieve_memories(hybrid_query)
-        if target_tags:
+        if persona_requested:
             filtered_results = []
             for result in hybrid_results:
-                meta = result.metadata or {}
-                tags = meta.get("persona_tags")
-                if isinstance(tags, str):
-                    try:
-                        tags = json.loads(tags)
-                    except Exception:
-                        tags = []
-                if isinstance(tags, list) and any(tag in target_tags for tag in tags):
+                tags = _normalize_persona_tags((result.metadata or {}).get("persona_tags"))
+                if any(tag in target_tags for tag in tags):
                     filtered_results.append(result)
             hybrid_results = filtered_results
+        else:
+            prioritized: List[Any] = []
+            remainder: List[Any] = []
+            for result in hybrid_results:
+                tags = _normalize_persona_tags((result.metadata or {}).get("persona_tags"))
+                if self.persona in tags:
+                    prioritized.append(result)
+                else:
+                    remainder.append(result)
+            hybrid_results = prioritized + remainder
 
         # Apply additional metadata filters (layer, type, etc.)
         if metadata_filters:
@@ -112,11 +139,33 @@ class PersonaRetrievalAgent:
         ]
 
         if not formatted:
-            # Fall back to baseline search for persona-specific contexts
+            # Fall back to baseline search. Only enforce persona filtering when
+            # the caller explicitly requested it to preserve backwards
+            # compatibility with legacy memories that lack persona tags.
             search_filters = dict(metadata_filters or {})
-            search_filters["persona_tags"] = target_tags
-            fallback, _ = search_memories(user_id=user_id, query=query, filters=search_filters, limit=limit, offset=0)
-            formatted = fallback
+            if persona_requested:
+                search_filters["persona_tags"] = target_tags
+            else:
+                search_filters.pop("persona_tags", None)
+            fallback, _ = search_memories(
+                user_id=user_id,
+                query=query,
+                filters=search_filters,
+                limit=limit,
+                offset=0,
+            )
+            if not persona_requested:
+                prioritized = []
+                remainder = []
+                for item in fallback:
+                    tags = _normalize_persona_tags((item.get("metadata") or {}).get("persona_tags"))
+                    if self.persona in tags:
+                        prioritized.append(item)
+                    else:
+                        remainder.append(item)
+                formatted = prioritized + remainder
+            else:
+                formatted = fallback
 
         return PersonaRetrievalResult(
             persona=self.persona,

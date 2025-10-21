@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from src.services.persona_state import PersonaState, PersonaStateStore
-from src.services.persona_retrieval import PersonaCoPilot, PersonaRetrievalResult
+from src.services.persona_retrieval import (
+        PersonaCoPilot,
+        PersonaRetrievalAgent,
+        PersonaRetrievalResult,
+)
 from src.services.summary_manager import SummaryManager, SummaryTier
 
 
@@ -73,3 +78,72 @@ def test_persona_copilot_uses_summary_manager():
         assert "identity" in results
         assert summary_manager.requested is True
         assert results["identity"].summaries[0]["tier"] == "episodic"
+
+
+def test_persona_agent_preserves_untagged_memories(monkeypatch):
+        """Persona retrieval should not drop memories without persona tags."""
+
+        class DummyHybrid:
+                def retrieve_memories(self, query):
+                        return [
+                                SimpleNamespace(
+                                        memory_id="m1",
+                                        content="legacy",
+                                        relevance_score=0.8,
+                                        metadata={"persona_tags": []},
+                                )
+                        ]
+
+        agent = PersonaRetrievalAgent("identity", hybrid_service=DummyHybrid())
+
+        def fail_search_memories(**kwargs):
+                raise AssertionError("fallback search should not run when hybrid results exist")
+
+        monkeypatch.setattr("src.services.persona_retrieval.search_memories", fail_search_memories)
+
+        result = agent.retrieve(user_id="user", query="hello")
+
+        assert [item["id"] for item in result.items] == ["m1"]
+        assert result.source == "hybrid"
+
+
+def test_persona_agent_respects_requested_persona_filters(monkeypatch):
+        """Explicit persona filters should be enforced via fallback search."""
+
+        class DummyHybrid:
+                def retrieve_memories(self, query):
+                        return [
+                                SimpleNamespace(
+                                        memory_id="m1",
+                                        content="legacy",
+                                        relevance_score=0.8,
+                                        metadata={"persona_tags": []},
+                                )
+                        ]
+
+        agent = PersonaRetrievalAgent("identity", hybrid_service=DummyHybrid())
+
+        captured = {}
+
+        def fake_search_memories(user_id, query, filters, limit, offset):
+                captured["filters"] = filters
+                return [
+                        {
+                                "id": "m2",
+                                "content": "fallback",
+                                "score": 0.6,
+                                "metadata": {"persona_tags": ["identity"]},
+                        }
+                ], 0
+
+        monkeypatch.setattr("src.services.persona_retrieval.search_memories", fake_search_memories)
+
+        result = agent.retrieve(
+                user_id="user",
+                query="hello",
+                metadata_filters={"persona_tags": ["identity"]},
+        )
+
+        assert captured["filters"]["persona_tags"] == ["identity"]
+        assert [item["id"] for item in result.items] == ["m2"]
+        assert result.source == "semantic"
