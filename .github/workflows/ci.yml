@@ -33,6 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run unit tests
+        run: |
+          pytest tests --ignore=tests/e2e --ignore=tests/evals --ignore=tests/fixtures
+
       - name: Prepare environment variables
         env:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
