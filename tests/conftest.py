@@ -1,127 +1,129 @@
-"""Pytest configuration and fixtures."""
-import os
+from importlib import reload
+import warnings
+from types import SimpleNamespace
+from typing import Dict, Set
+from unittest.mock import MagicMock
+
+warnings.filterwarnings(
+    "ignore",
+    category=PendingDeprecationWarning,
+    module=r"starlette\\.formparsers",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=PendingDeprecationWarning,
+    message=r"Please use `import python_multipart` instead\.",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"pydantic\\.v1\\.typing",
+)
+
 import pytest
-from unittest.mock import patch, MagicMock
-
-from tests.fixtures.chroma_mock import create_mock_v2_chroma_client, create_mock_chroma_client, create_mock_collection
-from tests.fixtures.redis_mock import create_mock_redis_client
+from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def mock_chroma_client():
-    """Mock ChromaDB client fixture."""
-    return create_mock_v2_chroma_client()
+class _RedisStub:
+    """Minimal Redis stub used to observe cache invalidation behaviour."""
+
+    def __init__(self) -> None:
+        self.counters: Dict[str, int] = {}
+        self.sets: Dict[str, Set[str]] = {}
+        self.values: Dict[str, str] = {}
+
+    def ping(self) -> bool:
+        return True
+
+    def incr(self, key: str) -> int:
+        self.counters[key] = self.counters.get(key, 0) + 1
+        return self.counters[key]
+
+    def sadd(self, key: str, member: str) -> int:
+        bucket = self.sets.setdefault(key, set())
+        before = len(bucket)
+        bucket.add(member)
+        return 1 if len(bucket) > before else 0
+
+    def smembers(self, key: str) -> Set[str]:
+        return set(self.sets.get(key, set()))
+
+    # Methods used by persona state store
+    def get(self, key: str):
+        return self.values.get(key)
+
+    def setex(self, key: str, _ttl: int, value: str) -> None:
+        self.values[key] = value
+
+    def delete(self, key: str) -> None:
+        self.values.pop(key, None)
 
 
-@pytest.fixture
-def mock_redis_client():
-    """Mock Redis client fixture."""
-    return create_mock_redis_client()
+def _prepare_app(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("CHROMA_HOST", "localhost")
+    monkeypatch.setenv("CHROMA_PORT", "8000")
 
+    class _PoolStub:
+        def __init__(self, *_, **__):
+            pass
 
-@pytest.fixture
-def mock_collection():
-    """Mock ChromaDB collection fixture."""
-    return create_mock_collection()
+        def getconn(self):
+            return None
 
+        def putconn(self, _conn):
+            return None
 
-@pytest.fixture
-def mock_openai_key():
-    """Mock OpenAI API key fixture."""
-    return "sk-test-key-12345"
+    monkeypatch.setattr("src.dependencies.timescale.ConnectionPool", _PoolStub)
+    monkeypatch.setattr("src.dependencies.timescale.get_timescale_pool", lambda: None)
+    monkeypatch.setattr("src.dependencies.timescale.get_timescale_conn", lambda: None)
+    monkeypatch.setattr("src.config.is_langfuse_enabled", lambda: False)
 
+    import src.app as app_module
+    reload(app_module)
 
-@pytest.fixture
-def sample_memory_data():
-    """Sample memory data for testing."""
-    return {
-        "user_id": "test_user",
-        "content": "User loves sci-fi books.",
-        "layer": "semantic",
-        "type": "explicit",
-        "embedding": [0.1] * 16,
-        "confidence": 0.9,
-        "ttl": None,
-        "metadata": {"tags": ["behavior", "personal"]}
-    }
+    monkeypatch.setattr(app_module, "_start_scheduler", lambda: None)
+    monkeypatch.setattr(app_module, "is_llm_configured", lambda: True)
 
+    collection_name = "unit_test_collection"
+    chroma_client = MagicMock()
+    chroma_client.health_check.return_value = True
+    chroma_client.list_collections.return_value = [SimpleNamespace(name=collection_name)]
+    monkeypatch.setattr(app_module, "get_chroma_client", lambda: chroma_client)
+    monkeypatch.setattr(app_module, "_standard_collection_name", lambda: collection_name)
 
-@pytest.fixture
-def sample_transcript():
-    """Sample transcript data for testing."""
-    return {
-        "user_id": "test_user",
-        "history": [
-            {"role": "user", "content": "I love sci-fi books."},
-            {"role": "assistant", "content": "That's great! What's your favorite author?"}
-        ],
-        "metadata": {"conversation_id": "test_conv_123"}
-    }
+    monkeypatch.setattr(app_module, "ping_timescale", lambda: (True, None))
+    monkeypatch.setattr(app_module, "ping_neo4j", lambda: (True, None))
+    monkeypatch.setattr(app_module, "get_redis_client", lambda: redis_stub)
 
+    class _HTTPXStub:
+        def __enter__(self):
+            return self
 
-@pytest.fixture
-def mock_llm_response():
-    """Mock LLM response for extraction."""
-    return {
-        "worthy": True,
-        "confidence": 0.8,
-        "tags": ["behavior"],
-        "reasons": ["Contains user preference"]
-    }
+        def __exit__(self, *exc_info):
+            return False
 
+        def get(self, _url: str):
+            return SimpleNamespace(status_code=200)
 
-@pytest.fixture
-def mock_extraction_items():
-    """Mock extraction items from LLM."""
-    return [
-        {
-            "content": "User loves sci-fi books.",
-            "type": "explicit",
-            "layer": "semantic",
-            "ttl": None,
-            "confidence": 0.9,
-            "tags": ["behavior", "personal"],
-            "project": None,
-            "relationship": None,
-            "learning_journal": None
-        }
-    ]
+    monkeypatch.setattr(app_module.httpx, "Client", lambda timeout=180.0: _HTTPXStub())
 
-
-@pytest.fixture(autouse=True)
-def mock_external_dependencies(mock_chroma_client, mock_redis_client, mock_openai_key):
-    """Automatically mock external services that require network access."""
-    with patch('src.dependencies.chroma.get_chroma_client', return_value=mock_chroma_client), \
-         patch('src.dependencies.redis_client.get_redis_client', return_value=mock_redis_client), \
-         patch('src.dependencies.timescale.get_timescale_conn', return_value=None), \
-         patch('src.dependencies.timescale.get_timescale_pool', return_value=None), \
-         patch('src.dependencies.timescale.ping_timescale', return_value=(False, 'disabled')), \
-         patch('src.dependencies.neo4j_client.get_neo4j_driver', return_value=None), \
-         patch('src.dependencies.neo4j_client.ping_neo4j', return_value=(False, 'disabled')), \
-         patch('src.services.portfolio_service.PortfolioService.__init__', return_value=None), \
-         patch('src.services.portfolio_service.PortfolioService.get_holdings', side_effect=RuntimeError('timescale disabled')), \
-         patch.dict(os.environ, {'OPENAI_API_KEY': mock_openai_key}):
-        yield
+    return app_module
 
 
 @pytest.fixture
-def app_with_mocks(mock_chroma_client, mock_redis_client, mock_openai_key):
-    """FastAPI app with mocked dependencies."""
-    from src.app import app
-
-    # Ensure collections exist
-    collection = mock_chroma_client.get_or_create_collection("memories_3072")
-
-    with patch('src.dependencies.chroma.get_chroma_client', return_value=mock_chroma_client), \
-         patch('src.dependencies.redis_client.get_redis_client', return_value=mock_redis_client), \
-         patch.dict(os.environ, {'OPENAI_API_KEY': mock_openai_key}):
-        yield app
+def redis_stub() -> _RedisStub:
+    return _RedisStub()
 
 
 @pytest.fixture
-def api_client(app_with_mocks):
-    """Provide a TestClient bound to the mocked FastAPI app."""
-    from fastapi.testclient import TestClient
+def app_module(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub):
+    return _prepare_app(monkeypatch, redis_stub)
 
-    with TestClient(app_with_mocks) as client:
+
+@pytest.fixture
+def api_client(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub) -> TestClient:
+    app_module = _prepare_app(monkeypatch, redis_stub)
+    with TestClient(app_module.app) as client:
         yield client
