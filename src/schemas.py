@@ -17,6 +17,47 @@ class TranscriptRequest(BaseModel):
 	metadata: Optional[dict[str, Any]] = None
 
 
+
+class OrchestratorMessageRequest(BaseModel):
+	conversation_id: str
+	role: Literal["user", "assistant", "system", "tool"]
+	content: str
+	message_id: Optional[str] = None
+	timestamp: Optional[datetime] = None
+	metadata: Dict[str, str] = Field(default_factory=dict)
+	flush: bool = False
+
+
+class MemoryInjectionPayload(BaseModel):
+	memory_id: str
+	content: str
+	source: Literal["short_term", "long_term", "safety", "personalization", "system"]
+	channel: Literal["inline", "tool", "side_channel"] = "inline"
+	score: Optional[float] = None
+	metadata: Dict[str, str] = Field(default_factory=dict)
+
+
+class OrchestratorStreamResponse(BaseModel):
+	injections: List[MemoryInjectionPayload] = Field(default_factory=list)
+
+
+class OrchestratorTranscriptResponse(OrchestratorStreamResponse):
+	pass
+
+
+class OrchestratorRetrieveRequest(BaseModel):
+	conversation_id: str
+	query: str
+	metadata: Dict[str, str] = Field(default_factory=dict)
+	limit: int = Field(default=6, ge=1, le=50)
+	offset: int = Field(default=0, ge=0)
+
+
+class OrchestratorRetrieveResponse(OrchestratorStreamResponse):
+	pass
+
+
+
 class StoreMemoryItem(BaseModel):
 	id: str
 	content: str

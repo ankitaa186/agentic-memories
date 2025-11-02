@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 
-from src.dependencies.timescale import get_timescale_conn
+from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
@@ -64,7 +64,6 @@ class HybridRetrievalService:
     """Service for hybrid memory retrieval and ranking"""
     
     def __init__(self):
-        self.timescale_conn = get_timescale_conn()
         self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.episodic_service = EpisodicMemoryService()
@@ -180,13 +179,17 @@ class HybridRetrievalService:
         """Retrieve memories by time range"""
         results = []
         
-        if not query.time_range or not self.timescale_conn:
+        if not query.time_range:
+            return results
+        
+        conn = get_timescale_conn()
+        if not conn:
             return results
         
         start_time, end_time = query.time_range
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Search episodic memories
                 cur.execute("""
                     SELECT id, content, event_timestamp, importance_score, emotional_valence, emotional_arousal
@@ -250,6 +253,9 @@ class HybridRetrievalService:
                         }
                     )
                     results.append(result)
+            
+            # Commit read-only transaction before releasing
+            conn.commit()
                     
         except Exception as e:
             print(f"Error in temporal retrieval: {e}")
@@ -260,14 +266,18 @@ class HybridRetrievalService:
         """Retrieve memories based on emotional context"""
         results = []
         
-        if not query.emotional_context or not self.timescale_conn:
+        if not query.emotional_context:
+            return results
+        
+        conn = get_timescale_conn()
+        if not conn:
             return results
         
         try:
             target_valence = query.emotional_context.get('valence', 0.0)
             target_arousal = query.emotional_context.get('arousal', 0.5)
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Search emotional memories with similar emotional state
                 cur.execute("""
                     SELECT id, context, timestamp, valence, arousal, intensity, emotional_state
@@ -338,9 +348,15 @@ class HybridRetrievalService:
                             }
                         )
                         results.append(result)
+            
+            # Commit read-only transaction before releasing
+            conn.commit()
                         
         except Exception as e:
             print(f"Error in emotional retrieval: {e}")
+        finally:
+            if conn:
+                release_timescale_conn(conn)
         
         return results
     
@@ -516,11 +532,15 @@ class HybridRetrievalService:
         Returns:
             List[RetrievalResult]: Contextual memories
         """
+        conn = get_timescale_conn()
+        if not conn:
+            return []
+        
         try:
             # Get the target memory timestamp
             target_timestamp = None
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Try episodic memories first
                 cur.execute("""
                     SELECT event_timestamp FROM episodic_memories 
@@ -568,6 +588,9 @@ class HybridRetrievalService:
         except Exception as e:
             print(f"Error getting memory context: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_related_memories(self, user_id: str, memory_id: str, 
                            similarity_threshold: float = 0.7) -> List[RetrievalResult]:

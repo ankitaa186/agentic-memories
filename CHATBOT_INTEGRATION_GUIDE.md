@@ -5,9 +5,10 @@
 2. [Architecture Overview](#architecture-overview)
 3. [Integration Patterns](#integration-patterns)
 4. [Persona-Aware Chatbots](#persona-aware-chatbots)
-5. [Advanced Features](#advanced-features)
-6. [Production Deployment](#production-deployment)
-7. [Troubleshooting](#troubleshooting)
+5. [Streaming Memory Orchestrator](#streaming-memory-orchestrator)
+6. [Advanced Features](#advanced-features)
+7. [Production Deployment](#production-deployment)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -457,6 +458,163 @@ class HealthCoachChatbot:
 ```
 
 ---
+
+## **⚡ Streaming Memory Orchestrator**
+
+The new adaptive orchestrator lets you stream chat events without manually
+micromanaging storage or retrieval.  The orchestrator ingests every message,
+automatically batches or compresses them based on volume, and pushes relevant
+memories back to your runtime the moment they become useful.
+
+### **Why use the orchestrator?**
+
+- **Cost-aware ingestion:** message bursts are merged into batched transcripts so
+  vector upserts stay affordable.
+- **Stateful retrieval:** it tracks recent turns and suppresses duplicate memory
+  injections, preventing the LLM from seeing stale context repeatedly.
+- **Simple integration surface:** you stream `MessageEvent` instances and listen
+  for `MemoryInjection` callbacks.
+
+### **Quick start**
+
+```python
+from src.memory_orchestrator import AdaptiveMemoryOrchestrator, MessageEvent, MessageRole
+
+orchestrator = AdaptiveMemoryOrchestrator()
+
+async def on_memory(injection):
+    # Push injected memory to your LLM context window
+    await chatbot.push_memory(injection.content)
+
+conversation_id = session.conversation_id
+subscription = orchestrator.subscribe_injections(
+    on_memory, conversation_id=conversation_id
+)
+try:
+    for idx, turn in enumerate(conversation_stream()):
+        event = MessageEvent(
+            conversation_id=conversation_id,
+            message_id=turn.get("id"),
+            role=MessageRole(turn["role"]),
+            content=turn["content"],
+            metadata={"user_id": turn["user_id"]},
+        )
+        await orchestrator.stream_message(event)
+finally:
+    await orchestrator.shutdown()
+    subscription.close()
+```
+
+Always scope the subscription with the active `conversation_id` so only memories
+for that chat stream are delivered back to your runtime. This prevents
+concurrent sessions from surfacing unrelated injections when multiple users are
+connected simultaneously.
+
+### **Batch ingestion from existing transcripts**
+
+If you already rely on `TranscriptRequest` payloads, the
+`ChatRuntimeBridge` converts them into streaming events for you:
+
+```python
+from src.schemas import Message, TranscriptRequest
+from src.services.chat_runtime import ChatRuntimeBridge
+
+history = [
+    Message(role="user", content="How is my savings goal looking?"),
+    Message(role="assistant", content="You're 60% of the way there."),
+]
+
+bridge = ChatRuntimeBridge()
+injections = await bridge.run_with_injections(
+    TranscriptRequest(user_id="user-123", history=history)
+)
+for injection in injections:
+    print("retrieved memory", injection.memory_id, injection.content)
+```
+
+### **Tuning policies**
+
+`AdaptiveMemoryOrchestrator` accepts `IngestionPolicy` and `RetrievalPolicy`
+overrides if you need bespoke thresholds.  For example:
+
+```python
+from datetime import timedelta
+from src.memory_orchestrator.policies import IngestionPolicy, RetrievalPolicy
+
+orchestrator = AdaptiveMemoryOrchestrator(
+    ingestion_policy=IngestionPolicy(
+        low_volume_cutoff=4,
+        high_volume_cutoff=12,
+        medium_volume_batch_size=4,
+        flush_interval=timedelta(seconds=15),
+    ),
+    retrieval_policy=RetrievalPolicy(min_similarity=0.65, max_injections_per_message=2),
+)
+```
+
+These knobs let you trade off cost, latency, and context richness without
+rewriting your chatbot logic.
+
+### **Accessing the orchestrator over HTTP**
+
+If you cannot host the orchestrator in-process, the API exposes three helper
+endpoints:
+
+- `POST /v1/orchestrator/message` streams a single chat turn and immediately
+  returns any injected memories.
+- `POST /v1/orchestrator/transcript` accepts the existing `TranscriptRequest`
+  payload and returns every memory injection emitted while replaying that
+  transcript through the orchestrator.
+- `POST /v1/orchestrator/retrieve` fetches the top memories for a
+  conversation/query pair without emitting a new streamed turn.
+
+Example request for the streaming endpoint:
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/message \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "conversation_id": "chat-42",
+        "role": "user",
+        "content": "Any updates on my savings goal?",
+        "metadata": {"user_id": "user-123"},
+        "flush": true
+      }'
+```
+
+To retrieve memories on demand, issue a separate call:
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/retrieve \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "conversation_id": "chat-42",
+        "query": "budget status",
+        "metadata": {"user_id": "user-123"},
+        "limit": 5
+      }'
+```
+
+The response contains a list of memory injections that mirror the
+`MemoryInjection` dataclass exposed in the Python client:
+
+```json
+{
+  "injections": [
+    {
+      "memory_id": "mem-abc123",
+      "content": "You reached 60% of your savings goal last week.",
+      "source": "long_term",
+      "channel": "inline",
+      "score": 0.91,
+      "metadata": {
+        "layer": "semantic",
+        "conversation_id": "chat-42"
+      }
+    }
+  ]
+}
+```
 
 ## **🚀 Advanced Features**
 

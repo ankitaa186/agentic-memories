@@ -9,16 +9,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from os import getenv
 
 from src.schemas import (
-	ForgetRequest,
-	MaintenanceRequest,
-	MaintenanceResponse,
-	RetrieveItem,
-	RetrieveResponse,
-	StoreResponse,
-	StoreMemoryItem,
-	TranscriptRequest,
-	StructuredRetrieveRequest,
-	StructuredRetrieveResponse,
+        ForgetRequest,
+        MaintenanceRequest,
+        MaintenanceResponse,
+        RetrieveItem,
+        RetrieveResponse,
+        StoreResponse,
+        StoreMemoryItem,
+        TranscriptRequest,
+        OrchestratorMessageRequest,
+        OrchestratorStreamResponse,
+        OrchestratorTranscriptResponse,
+        OrchestratorRetrieveRequest,
+        OrchestratorRetrieveResponse,
+        MemoryInjectionPayload,
+        StructuredRetrieveRequest,
+        StructuredRetrieveResponse,
     PortfolioSummaryResponse,
     FinanceAggregate,
     FinanceGoal,
@@ -45,6 +51,8 @@ from src.services.retrieval import search_memories, _standard_collection_name
 from src.services.extract_utils import _call_llm_json
 from src.dependencies.cloudflare_access import verify_cf_access_token, extract_token_from_headers
 from src.dependencies.redis_client import get_redis_client
+from src.memory_orchestrator import AdaptiveMemoryOrchestrator, MessageEvent, MessageRole, MemoryInjection
+from src.services.chat_runtime import ChatRuntimeBridge
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
 except Exception:
@@ -107,6 +115,11 @@ def _start_scheduler() -> None:
 @app.on_event("startup")
 def _on_startup() -> None:
     _start_scheduler()
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    await _memory_orchestrator.shutdown()
 logger = logging.getLogger("agentic_memories.api")
 if not logger.handlers:
     _handler = logging.StreamHandler()
@@ -127,6 +140,25 @@ if not _root.handlers:
     _root_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     _root.addHandler(_root_handler)
     _root.setLevel(_level)
+
+# Memory orchestrator services
+_memory_orchestrator = AdaptiveMemoryOrchestrator()
+_chat_runtime_bridge = ChatRuntimeBridge(_memory_orchestrator)
+
+
+def _serialize_injection(injection: MemoryInjection) -> MemoryInjectionPayload:
+    metadata = {
+        str(key): str(value)
+        for key, value in (injection.metadata or {}).items()
+    }
+    return MemoryInjectionPayload(
+        memory_id=injection.memory_id,
+        content=injection.content,
+        source=injection.source.value,
+        channel=injection.channel.value,
+        score=injection.score,
+        metadata=metadata,
+    )
 
 # Services
 _reconstruction = ReconstructionService()
@@ -151,6 +183,68 @@ async def _log_requests(request: Request, call_next):
     elapsed_ms = int(((_time.perf_counter() - start) * 1000))
     logger.info("[http] %s %s status=%s client=%s latency_ms=%s", method, path, status, client, elapsed_ms)
     return response
+
+
+
+@app.post("/v1/orchestrator/message", response_model=OrchestratorStreamResponse)
+async def stream_orchestrator_message(body: OrchestratorMessageRequest) -> OrchestratorStreamResponse:
+    """Stream a single chat message through the adaptive orchestrator."""
+
+    captured: List[MemoryInjection] = []
+
+    def _listener(injection: MemoryInjection) -> None:
+        captured.append(injection)
+
+    subscription = _memory_orchestrator.subscribe_injections(
+        _listener, conversation_id=body.conversation_id
+    )
+    try:
+        timestamp = body.timestamp or datetime.now(timezone.utc)
+        event = MessageEvent(
+            conversation_id=body.conversation_id,
+            message_id=body.message_id,
+            role=MessageRole(body.role),
+            content=body.content,
+            timestamp=timestamp,
+            metadata=dict(body.metadata or {}),
+        )
+        await _memory_orchestrator.stream_message(event)
+        if body.flush:
+            await _memory_orchestrator.flush()
+    finally:
+        subscription.close()
+
+    return OrchestratorStreamResponse(
+        injections=[_serialize_injection(item) for item in captured]
+    )
+
+
+@app.post("/v1/orchestrator/retrieve", response_model=OrchestratorRetrieveResponse)
+async def fetch_orchestrator_memories(body: OrchestratorRetrieveRequest) -> OrchestratorRetrieveResponse:
+    """Return memory injections for a conversation without streaming a new turn."""
+
+    metadata = {str(key): str(value) for key, value in (body.metadata or {}).items()}
+    injections = await _memory_orchestrator.fetch_memories(
+        conversation_id=body.conversation_id,
+        query=body.query,
+        metadata=metadata,
+        limit=body.limit,
+        offset=body.offset,
+    )
+
+    return OrchestratorRetrieveResponse(
+        injections=[_serialize_injection(item) for item in injections]
+    )
+
+
+@app.post("/v1/orchestrator/transcript", response_model=OrchestratorTranscriptResponse)
+async def stream_orchestrator_transcript(body: TranscriptRequest) -> OrchestratorTranscriptResponse:
+    """Ingest a transcript via the orchestrator and return emitted memories."""
+
+    injections = await _chat_runtime_bridge.run_with_injections(body)
+    return OrchestratorTranscriptResponse(
+        injections=[_serialize_injection(item) for item in injections]
+    )
 
 
 

@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from src.dependencies.timescale import get_timescale_conn  # Using Timescale for time-series skill progression
+from src.dependencies.timescale import get_timescale_conn, release_timescale_conn  # Using Timescale for time-series skill progression
 from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 
@@ -63,7 +63,6 @@ class ProceduralMemoryService:
     """Service for managing procedural memories and skill development"""
     
     def __init__(self):
-        self.timescale_conn = get_timescale_conn()
         self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "procedural_memories"
@@ -122,12 +121,13 @@ class ProceduralMemoryService:
     
     def _store_procedural_memory(self, memory: ProceduralMemory) -> None:
         """Store procedural memory in PostgreSQL"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             raise Exception("Database connection not available")
         
         try:
             import json
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Check if skill already exists
                 cur.execute("""
                     SELECT id, practice_count, success_rate FROM procedural_memories 
@@ -188,13 +188,17 @@ class ProceduralMemoryService:
                     ))
             
             # Commit the transaction
-            self.timescale_conn.commit()
+            conn.commit()
             
         except Exception as e:
             # Rollback on error
-            self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             print(f"Error storing procedural memory: {e}")
             raise
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def _store_skill_relationships(self, memory: ProceduralMemory) -> None:
         """Store skill relationships in Neo4j"""
@@ -294,14 +298,15 @@ class ProceduralMemoryService:
                                 success_rate: Optional[float] = None,
                                 notes: Optional[str] = None) -> None:
         """Record skill progression in TimescaleDB"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return
         
         try:
             import json
             progression_id = str(uuid.uuid4())
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 metadata = {"recorded_at": timestamp.isoformat()}
                 cur.execute("""
                     INSERT INTO skill_progressions (
@@ -323,12 +328,16 @@ class ProceduralMemoryService:
                 ))
             
             # Commit the transaction
-            self.timescale_conn.commit()
+            conn.commit()
                 
         except Exception as e:
             # Rollback on error
-            self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             print(f"Error recording skill progression: {e}")
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def practice_skill(self, user_id: str, skill_name: str, 
                       session_duration: Optional[int] = None,
@@ -347,12 +356,13 @@ class ProceduralMemoryService:
         Returns:
             bool: True if successful
         """
+        conn = get_timescale_conn()
         try:
             timestamp = datetime.now(timezone.utc)
             
             # Update skill in PostgreSQL
-            if self.timescale_conn:
-                with self.timescale_conn.cursor() as cur:
+            if conn:
+                with conn.cursor() as cur:
                     cur.execute("""
                         UPDATE procedural_memories SET
                             last_practiced = %s,
@@ -363,6 +373,7 @@ class ProceduralMemoryService:
                             END
                         WHERE user_id = %s AND skill_name = %s
                     """, (timestamp, success_rate, success_rate, user_id, skill_name))
+                    conn.commit()
             
             # Record progression
             self._record_skill_progression(user_id, skill_name, 
@@ -377,16 +388,22 @@ class ProceduralMemoryService:
             return True
             
         except Exception as e:
+            if conn:
+                conn.rollback()
             print(f"Error practicing skill: {e}")
             return False
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def _get_current_proficiency(self, user_id: str, skill_name: str) -> str:
         """Get current proficiency level for a skill"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return "beginner"
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT proficiency_level FROM procedural_memories 
                     WHERE user_id = %s AND skill_name = %s
@@ -398,16 +415,20 @@ class ProceduralMemoryService:
         except Exception as e:
             print(f"Error getting proficiency level: {e}")
             return "beginner"
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def _update_progression_session(self, user_id: str, skill_name: str, 
                                  timestamp: datetime, session_duration: Optional[int],
                                  success_rate: Optional[float], notes: Optional[str]) -> None:
         """Update progression record with session details"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE skill_progressions SET
                         practice_session_duration = %s,
@@ -424,18 +445,25 @@ class ProceduralMemoryService:
                     skill_name,
                     timestamp
                 ))
+                conn.commit()
                 
         except Exception as e:
+            if conn:
+                conn.rollback()
             print(f"Error updating progression session: {e}")
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_skills(self, user_id: str, proficiency_level: Optional[str] = None,
                   context: Optional[str] = None) -> List[ProceduralMemory]:
         """Get skills for a user with optional filters"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 query = """
                     SELECT id, user_id, skill_name, proficiency_level, steps,
                            prerequisites, last_practiced, practice_count, success_rate,
@@ -476,20 +504,26 @@ class ProceduralMemoryService:
                         metadata=row['metadata']
                     ))
                 
+                # Commit read-only transaction before releasing
+                conn.commit()
                 return skills
                 
         except Exception as e:
             print(f"Error getting skills: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_skill_progression(self, user_id: str, skill_name: str, 
                             days: int = 30) -> List[SkillProgression]:
         """Get skill progression history"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, user_id, skill_name, timestamp, proficiency_level,
                            practice_session_duration, success_rate, notes, metadata
@@ -515,11 +549,16 @@ class ProceduralMemoryService:
                         metadata=row['metadata']
                     ))
                 
+                # Commit read-only transaction before releasing
+                conn.commit()
                 return progressions
                 
         except Exception as e:
             print(f"Error getting skill progression: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def recommend_next_skills(self, user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
@@ -532,7 +571,8 @@ class ProceduralMemoryService:
         Returns:
             List of skill recommendations with reasons
         """
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
@@ -543,7 +583,7 @@ class ProceduralMemoryService:
             # Find skills that have prerequisites met
             recommendations = []
             
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Get all skills with prerequisites
                 cur.execute("""
                     SELECT skill_name, prerequisites, proficiency_level, practice_count
@@ -571,11 +611,16 @@ class ProceduralMemoryService:
             
             # Sort by confidence and return top recommendations
             recommendations.sort(key=lambda x: x['confidence'], reverse=True)
+            # Commit read-only transaction before releasing
+            conn.commit()
             return recommendations[:limit]
             
         except Exception as e:
             print(f"Error recommending skills: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def search_skills(self, user_id: str, query: str, limit: int = 10) -> List[ProceduralMemory]:
         """Search skills using semantic search"""
@@ -617,11 +662,12 @@ class ProceduralMemoryService:
     
     def _get_skill_by_id(self, skill_id: str) -> Optional[ProceduralMemory]:
         """Get skill by ID from PostgreSQL"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return None
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, user_id, skill_name, proficiency_level, steps,
                            prerequisites, last_practiced, practice_count, success_rate,
@@ -631,6 +677,10 @@ class ProceduralMemoryService:
                 """, (skill_id,))
                 
                 row = cur.fetchone()
+                
+                # Commit read-only transaction before releasing
+                conn.commit()
+                
                 if not row:
                     return None
                 
@@ -653,3 +703,6 @@ class ProceduralMemoryService:
         except Exception as e:
             print(f"Error getting skill by ID: {e}")
             return None
+        finally:
+            if conn:
+                release_timescale_conn(conn)

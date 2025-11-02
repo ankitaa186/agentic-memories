@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from src.dependencies.timescale import get_timescale_conn
+from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 
@@ -70,7 +70,6 @@ class EmotionalMemoryService:
     """Service for managing emotional memories and patterns"""
     
     def __init__(self):
-        self.timescale_conn = get_timescale_conn()
         self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "emotional_memories"
@@ -132,12 +131,13 @@ class EmotionalMemoryService:
     
     def _store_emotional_memory(self, memory: EmotionalMemory) -> None:
         """Store emotional memory in TimescaleDB"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             raise Exception("TimescaleDB connection not available")
         
         try:
-            with self.timescale_conn.cursor() as cur:
-                import json
+            import json
+            with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO emotional_memories (
                         id, user_id, timestamp, emotional_state, valence, arousal,
@@ -160,12 +160,16 @@ class EmotionalMemoryService:
                     json.dumps(memory.metadata) if memory.metadata else None
                 ))
             # Commit the transaction
-            self.timescale_conn.commit()
+            conn.commit()
         except Exception as e:
             # Rollback on error
-            self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             print(f"Error storing emotional memory in TimescaleDB: {e}")
             raise
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def _store_in_chroma(self, memory: EmotionalMemory) -> None:
         """Store emotional memory in ChromaDB for semantic search"""
@@ -221,9 +225,6 @@ class EmotionalMemoryService:
     
     def _update_emotional_patterns(self, user_id: str, memory: EmotionalMemory) -> None:
         """Update emotional patterns based on new memory"""
-        if not self.timescale_conn:
-            return
-        
         try:
             # Get recent emotional states (last 24 hours)
             recent_states = self._get_recent_emotional_states(user_id, hours=24)
@@ -240,11 +241,12 @@ class EmotionalMemoryService:
     
     def _get_recent_emotional_states(self, user_id: str, hours: int) -> List[EmotionalMemory]:
         """Get recent emotional states for pattern analysis"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, user_id, timestamp, emotional_state, valence, arousal,
                            dominance, context, trigger_event, intensity, duration_minutes, metadata
@@ -272,11 +274,16 @@ class EmotionalMemoryService:
                         metadata=row['metadata']
                     ))
                 
+                # Commit read-only transaction before releasing
+                conn.commit()
                 return states
                 
         except Exception as e:
             print(f"Error getting recent emotional states: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def _analyze_emotional_patterns(self, states: List[EmotionalMemory]) -> List[EmotionalPattern]:
         """Analyze emotional states for patterns"""
@@ -331,11 +338,13 @@ class EmotionalMemoryService:
     
     def _store_emotional_pattern(self, pattern: EmotionalPattern) -> None:
         """Store emotional pattern in TimescaleDB"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            import json
+            with conn.cursor() as cur:
                 # Check if pattern already exists
                 cur.execute("""
                     SELECT id FROM emotional_patterns 
@@ -363,7 +372,7 @@ class EmotionalMemoryService:
                         pattern.frequency,
                         pattern.confidence,
                         pattern.triggers,
-                        pattern.metadata,
+                        json.dumps(pattern.metadata) if pattern.metadata else None,
                         existing['id']
                     ))
                 else:
@@ -388,16 +397,20 @@ class EmotionalMemoryService:
                         pattern.frequency,
                         pattern.confidence,
                         pattern.triggers,
-                        pattern.metadata
+                        json.dumps(pattern.metadata) if pattern.metadata else None
                     ))
             
             # Commit the transaction
-            self.timescale_conn.commit()
+            conn.commit()
                     
         except Exception as e:
             # Rollback on error
-            self.timescale_conn.rollback()
+            if conn:
+                conn.rollback()
             print(f"Error storing emotional pattern: {e}")
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_emotional_state_history(self, user_id: str, hours: int = 24) -> List[EmotionalMemory]:
         """Get emotional state history for a user"""
@@ -405,11 +418,12 @@ class EmotionalMemoryService:
     
     def get_emotional_patterns(self, user_id: str) -> List[EmotionalPattern]:
         """Get emotional patterns for a user"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, user_id, pattern_type, start_time, end_time,
                            dominant_emotion, average_valence, average_arousal,
@@ -438,11 +452,16 @@ class EmotionalMemoryService:
                         metadata=row['metadata']
                     ))
                 
+                # Commit read-only transaction before releasing
+                conn.commit()
                 return patterns
                 
         except Exception as e:
             print(f"Error getting emotional patterns: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_current_emotional_state(self, user_id: str) -> Optional[EmotionalMemory]:
         """Get the most recent emotional state for a user"""

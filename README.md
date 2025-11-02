@@ -1109,6 +1109,74 @@ The containers will use `host.docker.internal` to access external databases.
 
 ---
 
+## Streaming Orchestrator Retrieval (vs traditional APIs)
+
+### New retrieval mechanism (high-level)
+
+- **Two access paths**
+  - Traditional API: `GET /v1/retrieve` and `POST /v1/retrieve` (persona-aware).
+  - Orchestrator API: `POST /v1/orchestrator/message | /retrieve | /transcript`.
+
+### Orchestrator retrieval flow
+
+- **Event in → possible retrieval out**
+  - `stream_message` ingests an event, optionally batches/persists it, then immediately calls retrieval to surface relevant memories for that turn.
+  - `fetch_memories` runs on-demand retrieval without ingesting a new turn.
+
+- **Search**
+  - Uses the same core search as the classic pipeline.
+  - Results include an embedding distance from the vector DB; the orchestrator converts to similarity: \( score = 1.0 - \text{raw\_distance} \).
+
+- **Policy gating**
+  - `RetrievalPolicy` controls surfacing:
+    - `min_similarity` (default 0.15) filters out weak matches.
+    - `max_injections_per_message` caps how many memories are injected per turn.
+    - `reinjection_cooldown_turns` suppresses repeat injections across nearby turns.
+
+- **Injections**
+  - Each result is formatted into a `MemoryInjection` with:
+    - `source` derived from metadata layer: short-term → SHORT_TERM; semantic/long-term → LONG_TERM.
+    - `channel` default INLINE.
+    - `metadata` includes `conversation_id` to support scoped subscriptions.
+  - Orchestrator publishes injections only to listeners subscribed for the same `conversation_id`.
+
+- **HTTP endpoints**
+  - `POST /v1/orchestrator/message`: stream one turn, returns any immediate injections.
+  - `POST /v1/orchestrator/retrieve`: query-only; returns top injections for a conversation/query.
+  - `POST /v1/orchestrator/transcript`: replay a batch history through the orchestrator, returning all emitted injections.
+
+### Traditional and persona-aware retrieval
+
+- **GET /v1/retrieve**
+  - Standard retrieval with optional `persona` and metadata filters.
+  - Falls back to baseline search if persona-specific path yields nothing.
+
+- **POST /v1/retrieve (persona)**
+  - `PersonaCoPilot` picks or honors a persona, applies profile-based weight overrides to hybrid scoring (semantic, temporal, importance, emotional), and can return:
+    - selected persona + confidence,
+    - multi-tier summaries (raw/episodic/arc),
+    - optional narrative,
+    - optional explainability (applied weights, source links).
+
+### Advantages over traditional APIs
+
+- **Stateful, turn-by-turn retrieval**: policy-gated injections per message instead of static result lists.
+- **Duplicate suppression**: `reinjection_cooldown_turns` prevents repeating the same memory across nearby turns.
+- **Conversation-scoped delivery**: subscribers receive injections only for their `conversation_id`, avoiding cross-chat leakage.
+- **Intuitive thresholds**: normalized similarity \(1 - \text{distance}\) makes `min_similarity` easy to reason about.
+- **Cost-aware ingestion**: batching/flush policies reduce vector upsert churn during bursts.
+- **Persona-ready**: seamlessly pairs with persona-aware POST `/v1/retrieve` for dynamic weighting, summaries, and explainability.
+
+### How to tune
+
+- Increase `min_similarity` to be stricter; decrease to surface more.
+- Lower `max_injections_per_message` to reduce context bloat.
+- Raise `reinjection_cooldown_turns` to avoid repeats across multiple turns.
+- Adjust persona weight profiles to emphasize different signal types per persona.
+
+> Key impact: more relevant, timely, and non-redundant context injections; persona-aware retrieval for richer personalization.
+
+
 ## 🚧 Implementation Status
 
 ### ✅ Phase 1: Core Infrastructure (COMPLETE)

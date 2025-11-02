@@ -40,7 +40,6 @@ class EpisodicMemoryService:
     """Service for managing episodic memories"""
     
     def __init__(self):
-        self.timescale_conn = get_timescale_conn()
         self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "episodic_memories"
@@ -290,11 +289,12 @@ class EpisodicMemoryService:
                           end_time: Optional[datetime], event_types: Optional[List[str]],
                           limit: int) -> List[EpisodicMemory]:
         """Search memories by time range using TimescaleDB"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return []
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 # Build query
                 query = """
                     SELECT id, user_id, event_timestamp, event_type, content,
@@ -341,19 +341,25 @@ class EpisodicMemoryService:
                         metadata=row['metadata']
                     ))
                 
+                # Commit read-only transaction before releasing
+                conn.commit()
                 return memories
                 
         except Exception as e:
             print(f"Error in time range search: {e}")
             return []
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def get_memory_by_id(self, memory_id: str) -> Optional[EpisodicMemory]:
         """Get a specific memory by ID"""
-        if not self.timescale_conn:
+        conn = get_timescale_conn()
+        if not conn:
             return None
         
         try:
-            with self.timescale_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, user_id, event_timestamp, event_type, content,
                            location, participants, emotional_valence, emotional_arousal,
@@ -363,6 +369,10 @@ class EpisodicMemoryService:
                 """, (memory_id,))
                 
                 row = cur.fetchone()
+                
+                # Commit read-only transaction before releasing
+                conn.commit()
+                
                 if not row:
                     return None
                 
@@ -384,14 +394,19 @@ class EpisodicMemoryService:
         except Exception as e:
             print(f"Error getting memory by ID: {e}")
             return None
+        finally:
+            if conn:
+                release_timescale_conn(conn)
     
     def delete_memory(self, memory_id: str) -> bool:
         """Delete a memory from all storage systems"""
+        conn = get_timescale_conn()
         try:
             # Delete from TimescaleDB
-            if self.timescale_conn:
-                with self.timescale_conn.cursor() as cur:
+            if conn:
+                with conn.cursor() as cur:
                     cur.execute("DELETE FROM episodic_memories WHERE id = %s", (memory_id,))
+                    conn.commit()
             
             # Delete from Neo4j
             if self.neo4j_driver:
@@ -406,5 +421,10 @@ class EpisodicMemoryService:
             return True
             
         except Exception as e:
+            if conn:
+                conn.rollback()
             print(f"Error deleting memory: {e}")
             return False
+        finally:
+            if conn:
+                release_timescale_conn(conn)
