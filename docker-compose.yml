@@ -24,6 +24,7 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://us.cloud.langfuse.com}
+      - SCHEDULED_MAINTENANCE_ENABLED=${SCHEDULED_MAINTENANCE_ENABLED:-false}
     ports:
       - "8080:8080"
     depends_on:
