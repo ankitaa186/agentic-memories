@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import time
 import json
+import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
@@ -29,6 +30,8 @@ from src.services.storage import upsert_memories
 from src.models import Memory
 from src.services.embedding_utils import generate_embedding
 from src.config import get_default_short_term_ttl_seconds
+from src.services.profile_extraction import ProfileExtractor
+from src.services.profile_storage import ProfileStorageService
 
 logger = logging.getLogger("agentic_memories.unified_graph")
 
@@ -79,6 +82,7 @@ class IngestionState(Dict[str, Any]):
 	- memories: List[Memory]
 	- memory_ids: List[str]
 	- classifications: List[Dict]
+	- profile_extractions: List[Dict]
 	- storage_results: Dict[str, Any]
 	- metrics: Dict[str, Any]
 	- errors: List[str]
@@ -107,7 +111,8 @@ def node_init(state: IngestionState) -> IngestionState:
 		"emotional_stored": 0,
 		"procedural_stored": 0,
 		"portfolio_stored": 0,
-		"chromadb_stored": 0
+		"chromadb_stored": 0,
+		"profile_fields_stored": 0
 	}
 	
 	logger.info("[graph.init] user_id=%s history_length=%s", 
@@ -241,32 +246,32 @@ def node_classify_and_enrich(state: IngestionState) -> IngestionState:
 def _normalize_location_value(location: Any) -> Optional[Dict[str, Any]]:
 	"""Normalize location into a consistent dictionary form."""
 	if not location:
-	        return None
+		return None
 
 	if isinstance(location, dict):
-	        return location
+		return location
 
 	if isinstance(location, str):
-	        return {"place": location}
+		return {"place": location}
 
 	if isinstance(location, list):
-	        normalized: List[str] = []
-	        for entry in location:
-	                if isinstance(entry, str):
-	                        normalized.append(entry)
-	                elif isinstance(entry, dict):
-	                        name = entry.get("name") or entry.get("place") or entry.get("label")
-	                        normalized.append(name or json.dumps(entry, sort_keys=True))
-	                else:
-	                        normalized.append(str(entry))
+		normalized: List[str] = []
+		for entry in location:
+			if isinstance(entry, str):
+				normalized.append(entry)
+			elif isinstance(entry, dict):
+				name = entry.get("name") or entry.get("place") or entry.get("label")
+				normalized.append(name or json.dumps(entry, sort_keys=True))
+			else:
+				normalized.append(str(entry))
 
-	        if not normalized:
-	                return None
+		if not normalized:
+			return None
 
-	        if len(normalized) == 1:
-	                return {"place": normalized[0]}
+		if len(normalized) == 1:
+			return {"place": normalized[0]}
 
-	        return {"places": normalized}
+		return {"places": normalized}
 
 	return {"place": str(location)}
 
@@ -274,23 +279,23 @@ def _normalize_location_value(location: Any) -> Optional[Dict[str, Any]]:
 def _normalize_participants_value(participants: Any) -> Optional[List[str]]:
 	"""Normalize participants into a list of string identifiers."""
 	if not participants:
-	        return None
+		return None
 
 	if isinstance(participants, list):
-	        normalized: List[str] = []
-	        for participant in participants:
-	                if isinstance(participant, str):
-	                        normalized.append(participant)
-	                elif isinstance(participant, dict):
-	                        name = participant.get("name") or participant.get("label") or participant.get("person")
-	                        normalized.append(name or json.dumps(participant, sort_keys=True))
-	                else:
-	                        normalized.append(str(participant))
+		normalized: List[str] = []
+		for participant in participants:
+			if isinstance(participant, str):
+				normalized.append(participant)
+			elif isinstance(participant, dict):
+				name = participant.get("name") or participant.get("label") or participant.get("person")
+				normalized.append(name or json.dumps(participant, sort_keys=True))
+			else:
+				normalized.append(str(participant))
 
-	        return normalized or None
+		return normalized or None
 
 	if isinstance(participants, str):
-	        return [participants]
+		return [participants]
 
 	return [json.dumps(participants, sort_keys=True)]
 
@@ -298,32 +303,32 @@ def _normalize_participants_value(participants: Any) -> Optional[List[str]]:
 def _merge_request_metadata(base_metadata: Dict[str, Any], request: Optional[TranscriptRequest]) -> None:
 	"""Merge request-level metadata into the memory metadata without clobbering core fields."""
 	if not request or not getattr(request, "metadata", None):
-	        return
+		return
 
 	request_metadata = request.metadata
 	if not isinstance(request_metadata, dict):
-	        logger.warning("[graph.build_memories] request.metadata is not a dict: %s", type(request_metadata))
-	        return
+		logger.warning("[graph.build_memories] request.metadata is not a dict: %s", type(request_metadata))
+		return
 
 	request_meta_copy = dict(request_metadata)
 	request_tags = request_meta_copy.pop("tags", None)
 
 	for key, value in request_meta_copy.items():
-	        if key in base_metadata and isinstance(base_metadata[key], dict) and isinstance(value, dict):
-	                base_metadata[key] = {**base_metadata[key], **value}
-	        else:
-	                base_metadata[key] = value
+		if key in base_metadata and isinstance(base_metadata[key], dict) and isinstance(value, dict):
+			base_metadata[key] = {**base_metadata[key], **value}
+		else:
+			base_metadata[key] = value
 
 	if request_tags:
-	        existing_tags = list(base_metadata.get("tags", []))
-	        if isinstance(request_tags, str):
-	                new_tags = [request_tags]
-	        elif isinstance(request_tags, (list, tuple, set)):
-	                new_tags = list(request_tags)
-	        else:
-	                new_tags = [str(request_tags)]
-	        combined = list(dict.fromkeys(existing_tags + new_tags))
-	        base_metadata["tags"] = combined
+		existing_tags = list(base_metadata.get("tags", []))
+		if isinstance(request_tags, str):
+			new_tags = [request_tags]
+		elif isinstance(request_tags, (list, tuple, set)):
+			new_tags = list(request_tags)
+		else:
+			new_tags = [str(request_tags)]
+		combined = list(dict.fromkeys(existing_tags + new_tags))
+		base_metadata["tags"] = combined
 
 
 def node_build_memories(state: IngestionState) -> IngestionState:
@@ -340,81 +345,86 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	request = state.get("request")
 
 	for item in items:
-	        content = str(item.get("content", "")).strip()
-	        if not content:
-	                continue
+		content = str(item.get("content", "")).strip()
+		if not content:
+			continue
 
-	        mtype = item.get("type", "explicit")
-	        layer = item.get("layer", "semantic")
-	        ttl = item.get("ttl")
-	        if layer == "short-term" and not ttl:
-	                ttl = SHORT_TERM_TTL_SECONDS
-	        confidence = float(item.get("confidence", 0.7))
-	        tags = item.get("tags") or []
+		mtype = item.get("type", "explicit")
+		layer = item.get("layer", "semantic")
+		ttl = item.get("ttl")
+		if layer == "short-term" and not ttl:
+			ttl = SHORT_TERM_TTL_SECONDS
+		confidence = float(item.get("confidence", 0.7))
+		tags = item.get("tags") or []
 
-	        metadata: Dict[str, Any] = {
-	                "source": "extraction_llm",
-	                "tags": tags,
-	        }
+		metadata: Dict[str, Any] = {
+			"source": "extraction_llm",
+			"tags": tags,
+		}
 
-	        # Include all optional structured objects from the extractor output
-	        optional_fields = [
-	                "project",
-	                "relationship",
-	                "learning_journal",
-	                "portfolio",
-	                "temporal",
-	                "entities",
-	                "episodic_context",
-	                "emotional_context",
-	                "behavioral_pattern",
-	                "narrative_markers",
-	                "consolidation_hints",
-	                "skill_context",
-	                "semantic_stability",
-	                "confidence_breakdown",
-	                "inferrable_context",
-	        ]
+		# Include all optional structured objects from the extractor output
+		optional_fields = [
+			"project",
+			"relationship",
+			"learning_journal",
+			"portfolio",
+			"temporal",
+			"entities",
+			"episodic_context",
+			"emotional_context",
+			"behavioral_pattern",
+			"narrative_markers",
+			"consolidation_hints",
+			"skill_context",
+			"semantic_stability",
+			"confidence_breakdown",
+			"inferrable_context",
+		]
 
-	        for field in optional_fields:
-	                value = item.get(field)
-	                if value:
-	                        metadata[field] = value
+		for field in optional_fields:
+			value = item.get(field)
+			if value:
+				metadata[field] = value
 
-	        # Derive spatial/participant context for episodic storage
-	        episodic_context = metadata.get("episodic_context")
-	        location = _normalize_location_value(
-	                metadata.get("location") or (episodic_context or {}).get("location")
-	        )
-	        participants = _normalize_participants_value(
-	                metadata.get("participants") or (episodic_context or {}).get("participants")
-	        )
+		# Derive spatial/participant context for episodic storage
+		episodic_context = metadata.get("episodic_context")
+		location = _normalize_location_value(
+			metadata.get("location") or (episodic_context or {}).get("location")
+		)
+		participants = _normalize_participants_value(
+			metadata.get("participants") or (episodic_context or {}).get("participants")
+		)
 
-	        entities = metadata.get("entities")
-	        if not location and isinstance(entities, dict):
-	                location = _normalize_location_value(entities.get("places"))
-	        if not participants and isinstance(entities, dict):
-	                participants = _normalize_participants_value(entities.get("people"))
+		entities = metadata.get("entities")
+		if not location and isinstance(entities, dict):
+			location = _normalize_location_value(entities.get("places"))
+		if not participants and isinstance(entities, dict):
+			participants = _normalize_participants_value(entities.get("people"))
 
-	        if location:
-	                metadata["location"] = location
-	        if participants:
-	                metadata["participants"] = participants
+		if location:
+			metadata["location"] = location
+		if participants:
+			metadata["participants"] = participants
 
-	        _merge_request_metadata(metadata, request)
+		_merge_request_metadata(metadata, request)
 
-	        embedding = generate_embedding(content)
-	        memory = Memory(
-	                user_id=state["user_id"],
-	                content=content,
-	                layer=layer,
-	                type=mtype,
-	                embedding=embedding,
-	                confidence=confidence,
-	                ttl=ttl,
-	                metadata=metadata,
-	        )
-	        memories.append(memory)
+		# Generate memory ID upfront so it's available for profile extraction
+		# This ensures profile_sources.source_memory_id is properly populated
+		memory_id = f"mem_{uuid.uuid4().hex[:12]}"
+
+		embedding = generate_embedding(content)
+		memory = Memory(
+			id=memory_id,
+			user_id=state["user_id"],
+			content=content,
+			layer=layer,
+			type=mtype,
+			embedding=embedding,
+			confidence=confidence,
+			ttl=ttl,
+			metadata=metadata,
+		)
+		memories.append(memory)
 	
 	state["memories"] = memories
 	state["metrics"]["build_memories_ms"] = int((time.perf_counter() - state["t_start"]) * 1000)
@@ -423,6 +433,84 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	           state.get("user_id"), len(memories))
 	
 	end_span(output={"memories_built": len(memories)})
+	return state
+
+
+def node_extract_profile(state: IngestionState) -> IngestionState:
+	"""Extract profile information from memories using LLM"""
+	from src.services.tracing import start_span, end_span
+
+	span = start_span("extract_profile", input={
+		"memories_count": len(state.get("memories", []))
+	})
+
+	memories = state.get("memories", [])
+	user_id = state.get("user_id")
+
+	if not memories:
+		logger.info("[graph.extract_profile] user_id=%s no_memories", user_id)
+		state["profile_extractions"] = []
+		end_span(output={"extractions": 0})
+		return state
+
+	try:
+		extractor = ProfileExtractor()
+		extractions = extractor.extract_from_memories(user_id, memories)
+
+		state["profile_extractions"] = extractions
+
+		logger.info("[graph.extract_profile] user_id=%s extractions=%s", user_id, len(extractions))
+
+		end_span(output={"extractions": len(extractions)})
+	except Exception as e:
+		error_msg = f"Profile extraction failed: {str(e)}"
+		state["errors"].append(error_msg)
+		state["profile_extractions"] = []
+		logger.error("[graph.extract_profile] %s", error_msg, exc_info=True)
+
+		end_span(output={"error": str(e)}, level="ERROR")
+
+		from src.services.tracing import trace_error
+		trace_error(e, metadata={"context": "profile_extraction", "user_id": user_id})
+
+	return state
+
+
+def node_store_profile(state: IngestionState) -> IngestionState:
+	"""Store profile extractions in PostgreSQL"""
+	from src.services.tracing import start_span, end_span
+
+	span = start_span("store_profile", input={
+		"extractions_count": len(state.get("profile_extractions", []))
+	})
+
+	extractions = state.get("profile_extractions", [])
+	user_id = state.get("user_id")
+
+	if not extractions:
+		logger.info("[graph.store_profile] user_id=%s no_extractions", user_id)
+		end_span(output={"stored": 0})
+		return state
+
+	try:
+		storage = ProfileStorageService()
+		fields_updated = storage.store_profile_extractions(user_id, extractions)
+
+		state["storage_results"]["profile_fields_stored"] = fields_updated
+
+		logger.info("[graph.store_profile] user_id=%s fields_stored=%s", user_id, fields_updated)
+
+		end_span(output={"stored": fields_updated})
+	except Exception as e:
+		error_msg = f"Profile storage failed: {str(e)}"
+		state["errors"].append(error_msg)
+		logger.error("[graph.store_profile] %s", error_msg, exc_info=True)
+
+		end_span(output={"error": str(e)}, level="ERROR")
+
+		from src.services.tracing import trace_error
+		trace_error(e, metadata={"context": "profile_storage", "user_id": user_id})
+
 	return state
 
 
@@ -678,7 +766,8 @@ def node_summarize_storage(state: IngestionState) -> IngestionState:
 		storage_results.get("emotional_stored", 0),
 		storage_results.get("procedural_stored", 0),
 		storage_results.get("portfolio_stored", 0),
-		storage_results.get("chromadb_stored", 0)
+		storage_results.get("chromadb_stored", 0),
+		storage_results.get("profile_fields_stored", 0)
 	])
 	
 	# Build summary
@@ -849,6 +938,8 @@ def build_unified_ingestion_graph() -> StateGraph:
 	graph.add_node("extract", node_extract)
 	graph.add_node("classify", node_classify_and_enrich)
 	graph.add_node("build_memories", node_build_memories)
+	graph.add_node("extract_profile", node_extract_profile)
+	graph.add_node("store_profile", node_store_profile)
 	graph.add_node("store_chromadb", node_store_chromadb)
 	
 	# Individual storage nodes (executed sequentially for proper trace hierarchy)
@@ -878,7 +969,9 @@ def build_unified_ingestion_graph() -> StateGraph:
 		{"classify": "classify", "finalize_early": "finalize_early"}
 	)
 	graph.add_edge("classify", "build_memories")
-	graph.add_edge("build_memories", "store_chromadb")
+	graph.add_edge("build_memories", "extract_profile")
+	graph.add_edge("extract_profile", "store_profile")
+	graph.add_edge("store_profile", "store_chromadb")
 	
 	# Sequential storage operations (each gets its own span in trace)
 	# Note: Kept sequential to avoid LangGraph's multi-value convergence issue

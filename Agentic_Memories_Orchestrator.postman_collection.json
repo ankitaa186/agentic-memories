@@ -1,0 +1,458 @@
+{
+	"info": {
+		"_postman_id": "agentic-memories-orchestrator",
+		"name": "Agentic Memories - Orchestrator",
+		"description": "Comprehensive test collection for the orchestrator retrieval mechanism",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Baseline Setup",
+			"item": [
+				{
+					"name": "Store Baseline Context",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Memories created\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.memories_created).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"history\": [\n        {\n            \"role\": \"user\",\n            \"content\": \"I am a 27-year-old software engineer living in San Francisco with my girlfriend Sarah. We have been together for 3 years and live in a small apartment in the Mission District.\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/store",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "store"]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Establish baseline context for the test scenario"
+		},
+		{
+			"name": "2. Orchestrator Message Streaming",
+			"item": [
+				{
+					"name": "Message 1: Work Stress",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"Work has been really stressful lately. My manager keeps pushing unrealistic deadlines and I am feeling overwhelmed. We are working on a critical project launch next month.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				},
+				{
+					"name": "Message 2: Relationship Issue",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"Sarah and I had another fight last night. She thinks I am not present enough because I am always working. I feel stuck between my job and my relationship.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				},
+				{
+					"name": "Message 3: SF Lifestyle",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"The rent in Mission District is killing me. $3500 for a tiny apartment. Sarah wants to move to Oakland but I am worried about the commute. Plus all my friends are in SF.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				},
+				{
+					"name": "Message 4: Emotional State",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"I am feeling really depressed about everything. Sometimes I wonder if I made the right choices coming to SF. The pressure is intense and I do not know how much longer I can handle this.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				},
+				{
+					"name": "Message 5: Work Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"Today my manager called me into a meeting and criticized my work quality. He said I missed some important details in the last sprint review. I felt humiliated in front of the team.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				},
+				{
+					"name": "Message 6: Therapy Request (Flush)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"role\": \"user\",\n    \"content\": \"Sarah asked me to go to couples therapy. She says we need to work on our communication. I am scared but I think she might be right. We have been together for 3 years and I do not want to lose her.\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"flush\": true\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/message",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "message"]
+						}
+					}
+				}
+			],
+			"description": "Stream messages through the orchestrator"
+		},
+		{
+			"name": "3. Orchestrator Retrieval",
+			"item": [
+				{
+					"name": "Retrieve: Work Stress",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"query\": \"work stress manager deadlines\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "retrieve"]
+						}
+					}
+				},
+				{
+					"name": "Retrieve: Relationship",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"query\": \"Sarah relationship fight therapy\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "retrieve"]
+						}
+					}
+				},
+				{
+					"name": "Retrieve: Emotional State",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"query\": \"depressed feeling overwhelmed pressure\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "retrieve"]
+						}
+					}
+				},
+				{
+					"name": "Retrieve: Overall Context",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation_id\": \"{{conversation_id}}\",\n    \"query\": \"overall situation context\",\n    \"metadata\": {\"user_id\": \"{{user_id}}\"},\n    \"limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "retrieve"]
+						}
+					}
+				}
+			],
+			"description": "Test orchestrator retrieval queries"
+		},
+		{
+			"name": "4. Persona-Aware Retrieval",
+			"item": [
+				{
+					"name": "Persona Retrieve: With Narrative",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"query\": \"work stress relationship balance\",\n    \"limit\": 5,\n    \"granularity\": \"episodic\",\n    \"include_narrative\": true,\n    \"explain\": true\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "retrieve"]
+						}
+					}
+				},
+				{
+					"name": "Persona Retrieve: Raw Granularity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"query\": \"work stress relationship balance\",\n    \"limit\": 5,\n    \"granularity\": \"raw\",\n    \"include_narrative\": false\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "retrieve"]
+						}
+					}
+				}
+			],
+			"description": "Test persona-aware retrieval with summaries"
+		},
+		{
+			"name": "5. Traditional Retrieval",
+			"item": [
+				{
+					"name": "GET Retrieve",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/retrieve?user_id={{user_id}}&query=relationship+work+stress&limit=3",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "retrieve"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								},
+								{
+									"key": "query",
+									"value": "relationship work stress"
+								},
+								{
+									"key": "limit",
+									"value": "3"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "POST Retrieve",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"query\": \"relationship work stress\",\n    \"limit\": 3\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/retrieve",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "retrieve"]
+						}
+					}
+				}
+			],
+			"description": "Traditional retrieval endpoints for comparison"
+		},
+		{
+			"name": "6. Transcript Processing",
+			"item": [
+				{
+					"name": "Process Full Transcript",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"history\": [\n        {\n            \"role\": \"user\",\n            \"content\": \"I am thinking about asking for a raise. My performance has been good despite the stress.\"\n        },\n        {\n            \"role\": \"assistant\",\n            \"content\": \"That sounds like a reasonable next step. What makes you feel ready?\"\n        },\n        {\n            \"role\": \"user\",\n            \"content\": \"I completed three major features last quarter and got positive feedback from users. But I am nervous about the conversation with my manager.\"\n        },\n        {\n            \"role\": \"assistant\",\n            \"content\": \"It is normal to feel nervous. Have you prepared talking points?\"\n        },\n        {\n            \"role\": \"user\",\n            \"content\": \"Yes, I have. I also want to ask for better work-life balance. Sarah and I need more time together.\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/orchestrator/transcript",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "orchestrator", "transcript"]
+						}
+					}
+				}
+			],
+			"description": "Batch transcript processing"
+		},
+		{
+			"name": "7. Health Checks",
+			"item": [
+				{
+					"name": "Basic Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/health",
+							"host": ["{{api_url}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Full Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/health/full",
+							"host": ["{{api_url}}"],
+							"path": ["health", "full"]
+						}
+					}
+				}
+			],
+			"description": "Health check endpoints"
+		}
+	],
+	"variable": [
+		{
+			"key": "api_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "sf-worker-20s",
+			"type": "string"
+		},
+		{
+			"key": "conversation_id",
+			"value": "sf-worker-conversation",
+			"type": "string"
+		}
+	]
+}
+
+
+
+
+

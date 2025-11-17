@@ -1,0 +1,10 @@
+{
+  "user_id": "test_user_profile_001",
+  "history": [
+    {"role": "user", "content": "Hi, I am Alice and I work as a software engineer in San Francisco."},
+    {"role": "assistant", "content": "Nice to meet you, Alice!"},
+    {"role": "user", "content": "I have been coding in Python for 5 years. My goal this year is to learn AI and machine learning."},
+    {"role": "assistant", "content": "That sounds exciting!"},
+    {"role": "user", "content": "I love hiking and exploring new restaurants in my free time."}
+  ]
+}
