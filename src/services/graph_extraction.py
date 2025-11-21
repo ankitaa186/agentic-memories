@@ -18,14 +18,15 @@ def build_extraction_graph() -> StateGraph:
 
 	def node_worthiness(state: Dict[str, Any]) -> Dict[str, Any]:
 		from src.services.tracing import start_span, end_span
-		
+
 		span = start_span("worthiness_check", input={"history_count": len(state["history"])})
-		
-		payload = {"history": state["history"][-6:]}
+
+		# Process all messages to capture initial profile information
+		payload = {"history": state["history"]}
 		resp = _call_llm_json(WORTHINESS_PROMPT, payload)
 		state["worthy"] = bool(resp and resp.get("worthy", False))
 		state["worthy_raw"] = resp
-		
+
 		end_span(output={"worthy": state["worthy"]})
 		return state
 
@@ -34,27 +35,27 @@ def build_extraction_graph() -> StateGraph:
 
 	def node_extract(state: Dict[str, Any]) -> Dict[str, Any]:
 		from src.services.tracing import start_span, end_span
-		
+
 		# Get existing memories for context
 		existing_memories = state.get("existing_memories", [])
-		
-		span = start_span("memory_extraction", 
+
+		span = start_span("memory_extraction",
 		                 input={"existing_memories_count": len(existing_memories)})
-		
+
 		existing_context = format_memories_for_llm_context(existing_memories)
-		
-		# Create enhanced payload with existing memory context
+
+		# Process all messages to capture initial profile information
 		payload = {
-			"history": state["history"][-6:],
+			"history": state["history"],
 			"existing_memories_context": existing_context
 		}
-		
+
 		# Enhanced extraction prompt with context
 		enhanced_prompt = f"{EXTRACTION_PROMPT}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
-		
+
 		items = _call_llm_json(enhanced_prompt, payload, expect_array=True) or []
 		state["items"] = items
-		
+
 		end_span(output={"items_extracted": len(items)})
 		return state
 

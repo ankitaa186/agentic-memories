@@ -776,6 +776,223 @@ Structured portfolio data from PostgreSQL (with ChromaDB fallback).
 
 ---
 
+#### 🔹 Profile Management
+
+Profile CRUD APIs provide read and write access to user profile data extracted from conversations. Profiles are automatically populated during ingestion (Story 1.2) and can be manually edited via these endpoints.
+
+**Profile Categories**:
+- `basics`: name, age, location, occupation, education, family_status
+- `preferences`: communication_style, likes, dislikes, favorites, work_style
+- `goals`: short_term, long_term, aspirations
+- `interests`: hobbies, topics, activities
+- `background`: history, experiences, skills, achievements
+
+##### GET /v1/profile - Get Complete Profile
+
+```http
+GET /v1/profile?user_id=user_123
+```
+
+Returns complete user profile with all categories and confidence scores.
+
+**Parameters**:
+- `user_id` (required): User identifier
+
+**Response**:
+```json
+{
+  "user_id": "user_123",
+  "completeness_pct": 42.86,
+  "populated_fields": 9,
+  "total_fields": 21,
+  "last_updated": "2025-11-17T10:30:45.123456+00:00",
+  "created_at": "2025-11-17T10:25:12.654321+00:00",
+  "profile": {
+    "basics": {
+      "name": {"value": "Sarah Martinez", "last_updated": "2025-11-17T10:30:45+00:00"},
+      "age": {"value": 28, "last_updated": "2025-11-17T10:30:45+00:00"},
+      "occupation": {"value": "software engineer", "last_updated": "2025-11-17T10:30:45+00:00"}
+    },
+    "preferences": {
+      "communication_style": {"value": "direct", "last_updated": "2025-11-17T10:30:45+00:00"}
+    },
+    "goals": {
+      "short_term": {"value": "complete ML certification within 6 months", "last_updated": "2025-11-17T10:30:45+00:00"}
+    },
+    "interests": {},
+    "background": {}
+  }
+}
+```
+
+**HTTP Status Codes**:
+- `200`: Success
+- `404`: Profile not found for user_id
+
+---
+
+##### GET /v1/profile/{category} - Get Category Data
+
+```http
+GET /v1/profile/basics?user_id=user_123
+```
+
+Returns only the specified category's fields.
+
+**Parameters**:
+- `category` (path, required): One of: `basics`, `preferences`, `goals`, `interests`, `background`
+- `user_id` (query, required): User identifier
+
+**Response**:
+```json
+{
+  "user_id": "user_123",
+  "category": "basics",
+  "fields": {
+    "name": {"value": "Sarah Martinez", "last_updated": "2025-11-17T10:30:45+00:00"},
+    "age": {"value": 28, "last_updated": "2025-11-17T10:30:45+00:00"},
+    "occupation": {"value": "software engineer", "last_updated": "2025-11-17T10:30:45+00:00"}
+  }
+}
+```
+
+**HTTP Status Codes**:
+- `200`: Success
+- `400`: Invalid category
+- `404`: Profile not found for user_id
+
+---
+
+##### PUT /v1/profile/{category}/{field_name} - Update Field
+
+```http
+PUT /v1/profile/basics/location
+```
+
+Updates a single profile field. Manual edits always set confidence to 100% (authoritative).
+
+**Request Body**:
+```json
+{
+  "user_id": "user_123",
+  "value": "San Francisco, CA",
+  "source": "manual"
+}
+```
+
+**Response**:
+```json
+{
+  "user_id": "user_123",
+  "category": "basics",
+  "field_name": "location",
+  "value": "San Francisco, CA",
+  "confidence": 100.0,
+  "last_updated": "2025-11-17T10:35:22.789012+00:00"
+}
+```
+
+**Notes**:
+- Manual edits are recorded as `source_type="explicit"` in `profile_sources` table
+- Confidence scores are set to 100 across all components (frequency, recency, explicitness, source diversity)
+- Automatically updates profile completeness percentage
+
+**HTTP Status Codes**:
+- `200`: Success
+- `400`: Invalid category
+- `500`: Database error
+
+---
+
+##### DELETE /v1/profile - Delete Profile
+
+```http
+DELETE /v1/profile?user_id=user_123&confirmation=DELETE
+```
+
+Deletes all profile data for a user. Requires confirmation to prevent accidental deletion.
+
+**Parameters**:
+- `user_id` (required): User identifier
+- `confirmation` (required): Must be exactly `DELETE` (case-sensitive)
+
+**Response**:
+```json
+{
+  "deleted": true,
+  "user_id": "user_123"
+}
+```
+
+**Notes**:
+- Cascade deletes from all related tables: `profile_fields`, `profile_confidence_scores`, `profile_sources`, `user_profiles`
+- This operation is irreversible
+
+**HTTP Status Codes**:
+- `200`: Success
+- `400`: Confirmation mismatch
+- `404`: Profile not found for user_id
+- `500`: Database error
+
+---
+
+##### GET /v1/profile/completeness - Get Completeness Metrics
+
+```http
+GET /v1/profile/completeness?user_id=user_123
+```
+
+Returns profile completeness statistics.
+
+**Parameters**:
+- `user_id` (required): User identifier
+
+**Response**:
+```json
+{
+  "user_id": "user_123",
+  "overall_completeness_pct": 42.86,
+  "populated_fields": 9,
+  "total_fields": 21
+}
+```
+
+**Notes**:
+- Completeness = (populated_fields / 21 total expected fields) × 100
+- Expected fields: basics(6) + preferences(5) + goals(3) + interests(3) + background(4) = 21 total
+
+**HTTP Status Codes**:
+- `200`: Success
+- `404`: Profile not found for user_id
+
+---
+
+**Example Workflow**:
+```bash
+# 1. Ingest conversation (automatic profile extraction)
+curl -X POST http://localhost:8080/v1/store \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "sarah_123",
+    "history": [
+      {"role": "user", "content": "Hi! My name is Sarah Martinez and I am 28 years old."}
+    ]
+  }'
+
+# 2. Retrieve complete profile
+curl "http://localhost:8080/v1/profile?user_id=sarah_123" | jq
+
+# 3. Update a field manually
+curl -X PUT http://localhost:8080/v1/profile/basics/location \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "sarah_123", "value": "San Francisco, CA"}'
+
+# 4. Check completeness
+curl "http://localhost:8080/v1/profile/completeness?user_id=sarah_123" | jq
+```
+
+---
+
 #### 🔹 Health Check
 
 ```http

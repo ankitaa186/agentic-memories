@@ -180,13 +180,21 @@ class IngestionController:
             batches.append(state.drain(aggregated=True))
         else:
             # Check if this event is sufficiently far from the last flush to force a write
+            # For single-message conversations (last_flush is None), check time since first pending message
             last_flush = state.last_flush_timestamp
-            if (
-                last_flush is not None
-                and (event.timestamp - last_flush) >= self._policy.flush_interval
-                and state.pending
-            ):
-                batches.append(state.drain(aggregated=len(state.pending) > 1))
+            if state.pending:
+                if last_flush is not None:
+                    # Normal case: check time since last flush
+                    time_since_flush = event.timestamp - last_flush
+                    if time_since_flush >= self._policy.flush_interval:
+                        batches.append(state.drain(aggregated=len(state.pending) > 1))
+                else:
+                    # First message case: check time since first pending message
+                    # This ensures single-message conversations are persisted after flush_interval
+                    first_pending = state.pending[0]
+                    time_since_first = event.timestamp - first_pending.timestamp
+                    if time_since_first >= self._policy.flush_interval:
+                        batches.append(state.drain(aggregated=len(state.pending) > 1))
 
         return batches
 

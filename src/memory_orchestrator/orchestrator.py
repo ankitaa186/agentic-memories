@@ -53,7 +53,7 @@ class AdaptiveMemoryOrchestrator(MemoryOrchestratorClient):
         async with self._lock:
             self._ensure_open()
             adapted = self._adapter.adapt(event)
-            logger.debug(
+            logger.info(
                 "[orchestrator.stream] conversation=%s role=%s", adapted.conversation_id, adapted.role
             )
 

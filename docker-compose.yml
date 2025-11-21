@@ -7,6 +7,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUGGER_PORT=5679
+      - API_DEBUG_PORT=${API_DEBUG_PORT:-5681}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - XAI_API_KEY=${XAI_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
@@ -27,6 +30,7 @@ services:
       - SCHEDULED_MAINTENANCE_ENABLED=${SCHEDULED_MAINTENANCE_ENABLED:-false}
     ports:
       - "8080:8080"
+      - "${API_DEBUG_PORT:-5681}:5679"  # debugpy remote debugging port (dev only)
     depends_on:
       - redis
   ui:

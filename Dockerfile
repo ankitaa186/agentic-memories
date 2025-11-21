@@ -17,7 +17,13 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY src ./src
 COPY tests ./tests
+COPY docker-entrypoint.sh ./
 
+# Make entrypoint executable
+RUN chmod +x docker-entrypoint.sh
+
+# Expose app port and debug port (5679 by default, configurable)
 EXPOSE 8080
+EXPOSE 5679
 
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["./docker-entrypoint.sh"]

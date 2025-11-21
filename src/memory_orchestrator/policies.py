@@ -10,15 +10,15 @@ from datetime import timedelta
 class IngestionPolicy:
     """Thresholds that shape batching behaviour for message ingestion."""
 
-    low_volume_cutoff: int = 6
+    low_volume_cutoff: int = 3
     """Number of conversation messages before we start batching."""
 
-    high_volume_cutoff: int = 20
+    high_volume_cutoff: int = 8
     """Past this many messages we aggressively batch to control costs."""
 
-    low_volume_batch_size: int = 1
-    medium_volume_batch_size: int = 3
-    high_volume_batch_size: int = 5
+    low_volume_batch_size: int = 2
+    medium_volume_batch_size: int = 5
+    high_volume_batch_size: int = 8
 
     flush_interval: timedelta = timedelta(seconds=30)
     """Maximum time between writes even if a batch target is not reached."""
