@@ -431,6 +431,234 @@
 				}
 			],
 			"description": "Health check endpoints"
+		},
+		{
+			"name": "8. Profile Management",
+			"item": [
+				{
+					"name": "Get Complete Profile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Profile has user_id\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('user_id');",
+									"    pm.expect(jsonData).to.have.property('completeness_pct');",
+									"    pm.expect(jsonData).to.have.property('profile');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Category - Basics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile/basics?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "basics"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Category - Preferences",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile/preferences?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "preferences"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Category - Goals",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile/goals?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "goals"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Completeness",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile/completeness?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "completeness"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile Field - Name",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"value\": \"John Doe\",\n    \"confidence\": 0.95,\n    \"source_memory_id\": \"mem_abc123\"\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/profile/basics/name",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "basics", "name"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile Field - Occupation",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"value\": \"Software Engineer\",\n    \"confidence\": 0.90\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/profile/basics/occupation",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "basics", "occupation"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile Field - Location",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"value\": \"San Francisco, CA\",\n    \"confidence\": 1.0\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/profile/basics/location",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "basics", "location"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile Field - Hobbies",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"value\": [\"hiking\", \"photography\", \"cooking\"],\n    \"confidence\": 0.85\n}"
+						},
+						"url": {
+							"raw": "{{api_url}}/v1/profile/interests/hobbies",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile", "interests", "hobbies"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Profile",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/v1/profile?user_id={{user_id}}",
+							"host": ["{{api_url}}"],
+							"path": ["v1", "profile"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Profile CRUD operations - read, update, and delete user profile data"
 		}
 	],
 	"variable": [

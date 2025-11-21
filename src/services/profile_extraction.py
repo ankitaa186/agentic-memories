@@ -37,6 +37,15 @@ Analyze the provided memories and extract user profile information. Return a JSO
    - "explicit": User directly stated (e.g., "My name is Alice")
    - "implicit": Clear from context (e.g., "I work as an engineer" → occupation)
    - "inferred": Reasonable assumption (e.g., mentions Python often → interest in programming)
+5. **Multi-value handling (IMPORTANT)**:
+   - For fields that can have multiple values (languages, hobbies, degrees, skills):
+     * Extract EACH instance as a SEPARATE profile update
+     * Use the SAME field_name for related items (e.g., all languages use "languages")
+     * Use arrays for field_value when there are multiple items
+   - Examples:
+     * "I speak English and Spanish" → languages: ["English", "Spanish"]
+     * "I have a Master's from MIT and Bachelor's from Berkeley" → TWO education_history entries
+     * "I enjoy hiking, reading, and cooking" → hobbies: ["hiking", "reading", "cooking"]
 
 **Output Format:**
 Return a JSON array of objects with this structure:
@@ -129,18 +138,16 @@ class ProfileExtractor:
         Returns:
             List of profile update dictionaries
         """
-        # Filter to only profile-worthy memories
-        profile_worthy_memories = [
-            m for m in memories
-            if self._is_profile_worthy(m.content, m.metadata.get("tags", []))
-        ]
+        # Analyze ALL memories - let the LLM decide what's profile-worthy
+        # The PROFILE_EXTRACTION_PROMPT has detailed rules about what to extract
+        profile_worthy_memories = memories
 
         if not profile_worthy_memories:
-            logger.info("[profile.extract] user_id=%s no_profile_worthy_content", user_id)
+            logger.info("[profile.extract] user_id=%s no_memories", user_id)
             return []
 
         logger.info(
-            "[profile.extract] user_id=%s analyzing=%s memories",
+            "[profile.extract] user_id=%s analyzing=%s memories (all memories, no filtering)",
             user_id,
             len(profile_worthy_memories)
         )
@@ -172,14 +179,29 @@ class ProfileExtractor:
                 logger.info("[profile.extract] user_id=%s no_extractions", user_id)
                 return []
 
+            # Deduplicate by (category, field_name) before validation
+            deduplicated = self._deduplicate_extractions(extractions)
+
             # Validate and enrich extractions
-            validated = self._validate_extractions(extractions, user_id)
+            validated = self._validate_extractions(deduplicated, user_id)
 
             logger.info(
                 "[profile.extract] user_id=%s extracted=%s fields",
                 user_id,
                 len(validated)
             )
+
+            # Log detailed profile information extracted
+            if validated:
+                for extraction in validated:
+                    logger.info(
+                        "[profile.extract.detail] user_id=%s category=%s field=%s value=%s confidence=%s",
+                        user_id,
+                        extraction.get("category"),
+                        extraction.get("field_name"),
+                        extraction.get("field_value"),
+                        extraction.get("confidence")
+                    )
 
             return validated
 
@@ -223,6 +245,89 @@ class ProfileExtractor:
         ])
 
         return has_keyword or has_introduction
+
+    def _deduplicate_extractions(
+        self,
+        extractions: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Deduplicate profile extractions by (category, field_name).
+
+        When LLM extracts the same field multiple times, keep the one with:
+        1. Highest confidence score
+        2. Most recent extraction (if confidence is equal)
+        3. For list/array fields, merge the values
+
+        Args:
+            extractions: Raw extraction results from LLM
+
+        Returns:
+            Deduplicated extractions
+        """
+        from collections import defaultdict
+
+        # Group by (category, field_name)
+        grouped = defaultdict(list)
+        for extraction in extractions:
+            if not isinstance(extraction, dict):
+                continue
+            category = extraction.get("category")
+            field_name = extraction.get("field_name")
+            if category and field_name:
+                key = (category, field_name)
+                grouped[key].append(extraction)
+
+        deduplicated = []
+        for key, items in grouped.items():
+            if len(items) == 1:
+                # No duplicates for this field
+                deduplicated.append(items[0])
+            else:
+                # Multiple extractions for same field - merge intelligently
+                category, field_name = key
+
+                # Check if field_value is a list/array in any of the items
+                is_array_field = any(isinstance(item.get("field_value"), list) for item in items)
+
+                if is_array_field:
+                    # Merge array values
+                    merged_values = []
+                    seen_values = set()
+                    for item in items:
+                        values = item.get("field_value", [])
+                        if isinstance(values, list):
+                            for v in values:
+                                # Normalize for deduplication
+                                v_key = str(v).lower() if isinstance(v, str) else str(v)
+                                if v_key not in seen_values:
+                                    merged_values.append(v)
+                                    seen_values.add(v_key)
+                        else:
+                            # Single value, convert to list
+                            v_key = str(values).lower() if isinstance(values, str) else str(values)
+                            if v_key not in seen_values:
+                                merged_values.append(values)
+                                seen_values.add(v_key)
+
+                    # Use the first item as base, update with merged values
+                    merged = items[0].copy()
+                    merged["field_value"] = merged_values
+                    # Take highest confidence
+                    merged["confidence"] = max(item.get("confidence", 70) for item in items)
+                    deduplicated.append(merged)
+                else:
+                    # Non-array field: keep the one with highest confidence
+                    best = max(items, key=lambda x: x.get("confidence", 70))
+                    deduplicated.append(best)
+
+                logger.debug(
+                    "[profile.deduplicate] field=%s/%s had %s duplicates, merged",
+                    category,
+                    field_name,
+                    len(items)
+                )
+
+        return deduplicated
 
     def _validate_extractions(
         self,

@@ -127,6 +127,34 @@ Given existing: "User loves science fiction."
 
 ## Domain-Specific Rules
 
+### Basic Profile Information (Identity & Bio) (HIGHEST PRIORITY)
+When you detect introductions or self-descriptions with name, age, occupation, location, or employer:
+→ **Always extract each as a separate semantic memory**
+
+**Extraction patterns:**
+- Name: "I'm [Name]", "My name is [Name]", "This is [Name]"
+- Age: "I'm [N] years old", "[N]-year-old", "I'm [N]"
+- Occupation/Role: "I'm a [job]", "I work as [job]", "[job] at [company]"
+- Current Location: "I live in [place]", "living in [place]", "based in [place]"
+- Employer/Company: "I work at [company]", "working for [company]", "[role] at [company]"
+- Hometown/Origin: "I'm from [place]", "originally from [place]", "grew up in [place]"
+
+**Tags to use:**
+- Name: `["identity", "name"]`
+- Age: `["identity", "age"]`
+- Occupation: `["professional", "occupation"]` or `["identity", "occupation"]`
+- Location: `["location", "current"]`
+- Company: `["professional", "company"]`
+- Hometown: `["location", "origin"]`
+
+**Important:**
+- Split compound introductions into atomic facts (one memory per attribute)
+- Include `entities.people` for the name itself
+- Include `entities.places` for locations
+- Include `entities.organizations` for companies/employers
+- Always use semantic layer (these are stable facts)
+- Confidence should be 1.0 for explicit statements
+
 ### Finance/Stocks (HIGH PRIORITY)
 When you detect: tickers (AAPL, TSLA), buy/sell, portfolio, shares, price targets
 → Always extract + include `portfolio` object + tags: `["finance", "stocks", "ticker:SYMBOL"]`
@@ -171,6 +199,56 @@ When both a specific time-bound event and a generic version of the same fact cou
 - Extract only the specific short-term event and suppress a redundant generic semantic memory (avoid: "User is meeting Sarah").
 
 ## Examples (Learn from these!)
+
+### Example 0: Basic Profile/Introduction (CRITICAL)
+**Input:**
+```
+User: "Hi! I'm Sarah Chen, a 28-year-old software engineer living in San Francisco. I work at Google."
+```
+
+**Output:**
+```json
+[
+  {
+    "content": "User's name is Sarah Chen.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["identity", "name"],
+    "entities": {"people": ["Sarah Chen"]}
+  },
+  {
+    "content": "User is 28 years old.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["identity", "age"]
+  },
+  {
+    "content": "User is a software engineer.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["professional", "occupation"]
+  },
+  {
+    "content": "User lives in San Francisco.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["location", "current"],
+    "entities": {"places": ["San Francisco"]}
+  },
+  {
+    "content": "User works at Google.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["professional", "company"],
+    "entities": {"organizations": ["Google"]}
+  }
+]
+```
 
 ### Example 1: Multi-faceted Input
 **Input:**
