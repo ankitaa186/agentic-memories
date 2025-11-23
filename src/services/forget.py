@@ -92,10 +92,15 @@ def simple_deduplicate(user_id: str, similarity_threshold: float = 0.88, limit: 
 		return {"scanned": 0, "removed": 0}
 
 
-def run_compaction_for_user(user_id: str) -> Dict[str, Any]:
-	"""Run LangGraph-based compaction for a single user and return summary metrics."""
+def run_compaction_for_user(user_id: str, skip_reextract: bool = True) -> Dict[str, Any]:
+	"""Run LangGraph-based compaction for a single user and return summary metrics.
+
+	Args:
+		user_id: User to compact
+		skip_reextract: If True, skip expensive LLM re-extraction (default True)
+	"""
 	try:
-		final = run_compaction_graph(user_id)
+		final = run_compaction_graph(user_id, skip_reextract=skip_reextract)
 		metrics = final.get("metrics", {})
 		logger.info("[forget.compact] user_id=%s metrics=%s", user_id, metrics)
 		return {"user_id": user_id, **metrics}
