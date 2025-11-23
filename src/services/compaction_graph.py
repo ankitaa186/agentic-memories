@@ -330,10 +330,17 @@ def build_compaction_graph() -> StateGraph:
 	return graph
 
 
-def run_compaction_graph(user_id: str, *, dry_run: bool = False, limit: int = 10000) -> Dict[str, Any]:
-	"""Run the minimal compaction graph for a single user and return the final state."""
+def run_compaction_graph(user_id: str, *, dry_run: bool = False, limit: int = 10000, skip_reextract: bool = True) -> Dict[str, Any]:
+	"""Run the minimal compaction graph for a single user and return the final state.
+
+	Args:
+		user_id: User to compact
+		dry_run: If True, don't actually apply changes
+		limit: Max memories to process
+		skip_reextract: If True, skip expensive LLM re-extraction (default True for speed/cost)
+	"""
 	from src.services.tracing import start_trace
-	
+
 	# Start a trace for this compaction job
 	trace = start_trace(
 		name="compaction_job",
@@ -341,13 +348,14 @@ def run_compaction_graph(user_id: str, *, dry_run: bool = False, limit: int = 10
 		metadata={
 			"dry_run": dry_run,
 			"limit": limit,
+			"skip_reextract": skip_reextract,
 			"trigger": "manual"
 		}
 	)
-	
+
 	graph = build_compaction_graph()
 	_t0 = _time.perf_counter()
-	initial = {"user_id": user_id, "dry_run": dry_run, "limit": limit}
+	initial = {"user_id": user_id, "dry_run": dry_run, "limit": limit, "skip_reextract": skip_reextract}
 	final: Dict[str, Any] = graph.compile().invoke(initial)  # type: ignore
 	final.setdefault("metrics", {})
 	final["metrics"]["duration_ms"] = int((_time.perf_counter() - _t0) * 1000)

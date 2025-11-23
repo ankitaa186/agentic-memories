@@ -652,7 +652,7 @@ def retrieve(
         layer: Optional[str] = Query(default=None),
         type: Optional[str] = Query(default=None),
         persona: Optional[str] = Query(default=None),
-        limit: int = Query(default=10, ge=1, le=50),
+        limit: int = Query(default=10, ge=1, le=200),
         offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
         from src.services.tracing import start_trace
@@ -1320,3 +1320,32 @@ def compact_all_users() -> MaintenanceResponse:
         except Exception as exc:
             logger.info("[maint.compaction.error] user_id=%s (manual) %s", uid, exc)
     return MaintenanceResponse(jobs_started=["compaction_all"], status="running")
+
+
+@app.post("/v1/maintenance/compact")
+def compact_single_user(
+    user_id: str = Query(...),
+    skip_reextract: bool = Query(default=True, description="Skip expensive LLM re-extraction (default: true)")
+) -> dict:
+    """Run compaction for a single user.
+
+    By default, only runs TTL cleanup and deduplication (fast, cheap).
+    Set skip_reextract=false to enable full LLM re-extraction (slow, expensive).
+    """
+    try:
+        stats = run_compaction_for_user(user_id, skip_reextract=skip_reextract)
+        logger.info("[maint.compaction.done] user_id=%s skip_reextract=%s stats=%s", user_id, skip_reextract, stats)
+        return {
+            "user_id": user_id,
+            "skip_reextract": skip_reextract,
+            "status": "completed",
+            "stats": stats
+        }
+    except Exception as exc:
+        logger.error("[maint.compaction.error] user_id=%s %s", user_id, exc, exc_info=True)
+        return {
+            "user_id": user_id,
+            "skip_reextract": skip_reextract,
+            "status": "failed",
+            "error": str(exc)
+        }
