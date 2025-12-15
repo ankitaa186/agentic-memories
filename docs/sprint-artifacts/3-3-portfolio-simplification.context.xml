@@ -1,0 +1,253 @@
+<story-context id="epic-3/story-3.3" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3-3-portfolio-simplification</storyId>
+    <title>Portfolio Schema Simplification</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-14</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-3-portfolio-simplification.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system maintainer</asA>
+    <iWant>to simplify the portfolio_holdings table to only store public equity holdings</iWant>
+    <soThat>the data model is focused, easier to maintain, and aligned with current usage patterns</soThat>
+    <tasks>
+      <task id="1">Create database migration (AC1, AC2, AC3, AC4, AC5)
+        <subtask>Create migrations/postgres/015_simplify_portfolio.up.sql</subtask>
+        <subtask>Drop unused columns (11 columns)</subtask>
+        <subtask>Drop unused constraints (4 constraints)</subtask>
+        <subtask>Drop unused indexes (3 indexes)</subtask>
+        <subtask>Alter ticker to NOT NULL</subtask>
+        <subtask>Create migrations/postgres/015_simplify_portfolio.down.sql (rollback)</subtask>
+      </task>
+      <task id="2">Update service layer (AC8)
+        <subtask>Simplify PortfolioHolding dataclass in portfolio_service.py</subtask>
+        <subtask>Remove: VALID_INTENTS, SPECULATIVE_INTENTS, VALID_POSITIONS, VALID_ASSET_TYPES, VALID_TIME_HORIZONS</subtask>
+        <subtask>Simplify upsert_holding_from_memory() - remove field extraction for dropped columns</subtask>
+        <subtask>Simplify _upsert_single_holding() - simplify INSERT/UPDATE queries</subtask>
+        <subtask>Remove ownership gate logic (speculative intent filtering)</subtask>
+        <subtask>Keep: normalize_ticker(), validate_positive_float()</subtask>
+      </task>
+      <task id="3">Update schema models (AC6, AC7)
+        <subtask>Simplify PortfolioHolding in src/schemas.py</subtask>
+        <subtask>Simplify FinanceGoal - remove intent, time_horizon, target_price, risk_tolerance, concern</subtask>
+        <subtask>Simplify PortfolioSummaryResponse - remove counts_by_asset_type</subtask>
+      </task>
+      <task id="4">Update API layer (AC6, AC7)
+        <subtask>Verify src/routers/portfolio.py models are correct (already simplified)</subtask>
+        <subtask>Clean up any remaining intent references</subtask>
+        <subtask>Update docstrings</subtask>
+      </task>
+      <task id="5">Update prompts (AC8)
+        <subtask>Simplify portfolio extraction schema in src/services/prompts.py</subtask>
+        <subtask>Remove intent detection logic from extraction prompts</subtask>
+        <subtask>Update examples to only show ticker, shares, avg_price</subtask>
+      </task>
+      <task id="6">Update tests
+        <subtask>Remove intent-related tests from tests/unit/test_portfolio_api.py</subtask>
+        <subtask>Update mock data to match new schema (6-tuple instead of 7-tuple)</subtask>
+        <subtask>Update assertions to not check intent field</subtask>
+        <subtask>Tests to remove: test_post_holding_invalid_intent, test_post_holding_default_intent, test_post_holding_all_valid_intents, test_get_portfolio_multiple_intents</subtask>
+      </task>
+      <task id="7">Run migration and verify
+        <subtask>Apply migration to production database</subtask>
+        <subtask>Verify schema changes</subtask>
+        <subtask>Run integration tests</subtask>
+        <subtask>Verify existing data integrity</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Simplified portfolio_holdings schema - table has only 8 columns: id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated</criterion>
+    <criterion id="AC2">Columns removed - Drop: asset_type, current_price, current_value, cost_basis, ownership_pct, position, intent, time_horizon, target_price, stop_loss, notes, source_memory_id</criterion>
+    <criterion id="AC3">Constraints simplified - Remove: chk_asset_type, chk_position, chk_intent, chk_time_horizon; ticker becomes NOT NULL</criterion>
+    <criterion id="AC4">Indexes cleaned up - Drop: idx_holdings_user_asset_type, idx_holdings_user_intent, idx_holdings_user_asset_name_unique; Keep: portfolio_holdings_pkey, idx_holdings_user_ticker_unique, idx_holdings_last_updated</criterion>
+    <criterion id="AC5">Existing data preserved - All 61 existing holdings preserved with core data (id, user_id, ticker, asset_name, shares, avg_price, timestamps)</criterion>
+    <criterion id="AC6">API responses updated - GET /v1/portfolio no longer includes intent field</criterion>
+    <criterion id="AC7">POST endpoint updated - POST /v1/portfolio/holding no longer accepts intent field</criterion>
+    <criterion id="AC8">Service layer simplified - portfolio_service.py only extracts ticker, asset_name, shares, avg_price; removes ownership gate logic</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <artifact path="docs/epic-portfolio-crud-api.md" relevance="high">Epic definition for Portfolio CRUD API</artifact>
+      <artifact path="docs/sprint-artifacts/3-1-portfolio-get-endpoint.md" relevance="medium">Story 3.1 reference - GET endpoint patterns</artifact>
+      <artifact path="docs/sprint-artifacts/3-2-portfolio-post-endpoint.md" relevance="medium">Story 3.2 reference - POST endpoint patterns</artifact>
+      <artifact path="docs/architecture.md" relevance="low">System architecture reference</artifact>
+    </docs>
+    <code>
+      <artifact path="migrations/postgres/005_portfolio_holdings.up.sql" relevance="critical">
+        <description>Original schema definition - 19 columns to simplify</description>
+        <currentState>
+          - 19 columns: id, user_id, ticker, asset_name, asset_type, shares, avg_price, current_price, current_value, cost_basis, ownership_pct, position, intent, time_horizon, target_price, stop_loss, notes, first_acquired, last_updated, source_memory_id
+          - 4 CHECK constraints: chk_asset_type, chk_position, chk_intent, chk_time_horizon
+          - 4 indexes: idx_holdings_user_ticker, idx_holdings_user_asset_type, idx_holdings_user_intent, idx_holdings_last_updated
+        </currentState>
+        <targetState>
+          - 8 columns: id, user_id, ticker (NOT NULL), asset_name, shares, avg_price, first_acquired, last_updated
+          - No CHECK constraints
+          - Keep: portfolio_holdings_pkey, idx_holdings_user_ticker_unique, idx_holdings_last_updated
+        </targetState>
+      </artifact>
+      <artifact path="migrations/postgres/013_portfolio_holdings_unique.up.sql" relevance="high">
+        <description>Unique constraint definitions</description>
+        <note>idx_holdings_user_ticker_unique - will KEEP this constraint</note>
+        <note>idx_holdings_user_asset_name_unique - will DROP this (ticker-only model)</note>
+      </artifact>
+      <artifact path="src/services/portfolio_service.py" relevance="critical">
+        <description>Portfolio service layer - requires major simplification</description>
+        <linesOfChange>~200</linesOfChange>
+        <itemsToRemove>
+          <item line="30">VALID_INTENTS constant</item>
+          <item line="33">SPECULATIVE_INTENTS constant</item>
+          <item line="34">VALID_POSITIONS constant</item>
+          <item line="35">VALID_ASSET_TYPES constant</item>
+          <item line="36">VALID_TIME_HORIZONS constant</item>
+          <item line="59-70">validate_enum() function</item>
+          <item line="93-108">validate_percentage() function</item>
+          <item line="111-132">PortfolioHolding dataclass - simplify to 8 fields</item>
+          <item line="188-223">Intent validation and ownership gate logic in upsert_holding_from_memory()</item>
+          <item line="278-313">Intent validation and ownership gate logic in _upsert_single_holding()</item>
+          <item line="339-408">Complex INSERT/UPDATE queries - simplify to 8 columns</item>
+          <item line="448-488">get_holdings() intent_filter parameter</item>
+        </itemsToRemove>
+        <itemsToKeep>
+          <item line="42-56">normalize_ticker() function</item>
+          <item line="73-90">validate_positive_float() function</item>
+        </itemsToKeep>
+      </artifact>
+      <artifact path="src/schemas.py" relevance="high">
+        <description>Pydantic schema models - requires simplification</description>
+        <linesOfChange>~30</linesOfChange>
+        <itemsToSimplify>
+          <item line="185-201">PortfolioHolding class - remove asset_type, current_value, cost_basis, ownership_pct, position, intent, target_price, stop_loss, time_horizon, notes, source_memory_id</item>
+          <item line="204-208">PortfolioSummaryResponse - remove counts_by_asset_type field</item>
+          <item line="210-218">FinanceGoal class - remove intent, time_horizon, target_price, risk_tolerance, concern fields</item>
+        </itemsToSimplify>
+      </artifact>
+      <artifact path="src/routers/portfolio.py" relevance="medium">
+        <description>Portfolio API router - already simplified in Story 3.2</description>
+        <linesOfChange>~10</linesOfChange>
+        <currentState>
+          - HoldingResponse: ticker, asset_name, shares, avg_price, first_acquired, last_updated (NO intent)
+          - AddHoldingRequest: user_id, ticker, asset_name, shares, avg_price (NO intent)
+          - GET query: SELECT ticker, asset_name, shares, avg_price, first_acquired, last_updated
+          - POST query: INSERT INTO ... ON CONFLICT (user_id, ticker)
+        </currentState>
+        <note>Already correct - verify and update docstrings only</note>
+      </artifact>
+      <artifact path="src/services/prompts.py" relevance="high">
+        <description>LLM extraction prompts - requires intent removal</description>
+        <linesOfChange>~50</linesOfChange>
+        <itemsToRemove>
+          <item line="76-81">portfolio object schema - remove intent field</item>
+          <item line="158-176">Finance/Stocks section - remove CRITICAL Intent Classification table</item>
+          <item line="269-301">Example 1 with portfolio.intent - update to remove intent</item>
+        </itemsToRemove>
+        <note>Keep ticker, quantity/shares, price extraction; remove all intent references</note>
+      </artifact>
+      <artifact path="tests/unit/test_portfolio_api.py" relevance="high">
+        <description>Unit tests for portfolio API</description>
+        <linesOfChange>~200</linesOfChange>
+        <testsToRemove>
+          <test line="352-366">test_post_holding_invalid_intent</test>
+          <test line="536-566">test_post_holding_default_intent</test>
+          <test line="569-597">test_post_holding_all_valid_intents</test>
+          <test line="212-243">test_get_portfolio_multiple_intents</test>
+        </testsToRemove>
+        <testsToUpdate>
+          <test line="42-79">test_get_portfolio_success_with_holdings - change 7-tuple to 6-tuple mock data</test>
+          <test line="111-139">test_get_portfolio_dict_cursor_format - remove intent from mock dict</test>
+          <test line="142-174">test_get_portfolio_holdings_ordered_by_ticker - change mock data</test>
+          <test line="187-209">test_get_portfolio_with_null_values - change mock data</test>
+          <test line="275-316">test_post_holding_creates_new_holding - remove intent from mock result</test>
+          <test line="319-349">test_post_holding_ticker_normalization - remove intent validation</test>
+          <test line="369-407">test_post_holding_upsert_updates_existing - remove intent</test>
+          <test line="434-465">test_post_holding_optional_fields_null - remove intent</test>
+          <test line="481-519">test_post_holding_dict_cursor_format - remove intent from mock</test>
+        </testsToUpdate>
+      </artifact>
+    </code>
+    <dependencies>
+      <dependency type="database">PostgreSQL - portfolio_holdings table migration</dependency>
+      <dependency type="internal">Story 3.1 (GET endpoint) - done</dependency>
+      <dependency type="internal">Story 3.2 (POST endpoint) - done</dependency>
+      <dependency type="internal">Story 3.2 hotfix (intent removal from API) - done</dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="data-integrity">All 61 existing holdings must be preserved during migration</constraint>
+    <constraint type="backwards-compatibility">API already updated - no additional API changes needed</constraint>
+    <constraint type="production">Migration must be reversible (down migration provided)</constraint>
+    <constraint type="testing">All existing tests must pass after updates</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface type="api-unchanged">
+      <endpoint>GET /v1/portfolio?user_id={uuid}</endpoint>
+      <response>Returns: user_id, holdings[{ticker, asset_name, shares, avg_price, first_acquired, last_updated}], total_holdings, last_updated</response>
+    </interface>
+    <interface type="api-unchanged">
+      <endpoint>POST /v1/portfolio/holding</endpoint>
+      <request>Accepts: user_id, ticker, asset_name, shares, avg_price</request>
+      <response>Returns: id, ticker, asset_name, shares, avg_price, first_acquired, last_updated, created</response>
+    </interface>
+    <interface type="database">
+      <table>portfolio_holdings</table>
+      <currentColumns>id, user_id, ticker, asset_name, asset_type, shares, avg_price, current_price, current_value, cost_basis, ownership_pct, position, intent, time_horizon, target_price, stop_loss, notes, first_acquired, last_updated, source_memory_id</currentColumns>
+      <targetColumns>id, user_id, ticker (NOT NULL), asset_name, shares, avg_price, first_acquired, last_updated</targetColumns>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      <standard>All unit tests in tests/unit/test_portfolio_api.py must pass</standard>
+      <standard>Mock data must match simplified 6-column schema (no intent)</standard>
+      <standard>Integration tests validate actual database operations</standard>
+    </standards>
+    <locations>
+      <location>tests/unit/test_portfolio_api.py</location>
+      <location>Integration tests via curl/httpx against running server</location>
+    </locations>
+    <ideas>
+      <idea>Test migration preserves all 61 existing records</idea>
+      <idea>Test ticker NOT NULL constraint rejects NULL tickers</idea>
+      <idea>Test simplified GET response has no intent field</idea>
+      <idea>Test simplified POST request without intent field</idea>
+      <idea>Test service layer extracts only ticker, shares, avg_price from memories</idea>
+      <idea>Verify indexes dropped correctly (check pg_indexes)</idea>
+      <idea>Verify constraints dropped correctly (check pg_constraint)</idea>
+    </ideas>
+  </tests>
+
+  <migrationStrategy>
+    <step order="1">Create up migration to drop columns, constraints, indexes</step>
+    <step order="2">Create down migration for rollback capability</step>
+    <step order="3">Update service layer to match simplified schema</step>
+    <step order="4">Update Pydantic models in schemas.py</step>
+    <step order="5">Update extraction prompts to remove intent</step>
+    <step order="6">Update tests to match new schema</step>
+    <step order="7">Apply migration to production database</step>
+    <step order="8">Run integration tests to verify</step>
+  </migrationStrategy>
+
+  <riskAssessment>
+    <risk level="low" area="data-loss">Only dropping unused columns; core data preserved</risk>
+    <risk level="low" area="api-breaking">API already updated in Story 3.2 hotfix</risk>
+    <risk level="low" area="ingestion">Service layer update handles gracefully</risk>
+    <risk level="medium" area="rollback">Down migration can recreate columns but without original data</risk>
+  </riskAssessment>
+
+  <futureConsideration>
+    A separate ticker_research or watchlist table could be created later to store:
+    - Intent (wants-to-buy, wants-to-sell, watch)
+    - Target prices, stop losses
+    - Notes and research
+    - Time horizons
+    This keeps holdings (what you own) separate from research (what you're thinking about).
+  </futureConsideration>
+</story-context>

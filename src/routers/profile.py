@@ -2,7 +2,7 @@
 Profile CRUD API Endpoints
 Provides REST API for reading, creating, updating, and deleting user profile data.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 import logging
 from datetime import datetime, timezone
 
@@ -43,11 +43,29 @@ class CategoryResponse(BaseModel):
 
 
 class CompletenessResponse(BaseModel):
-    """Response model for completeness metrics"""
+    """Response model for completeness metrics (simple mode)"""
     user_id: str
     overall_completeness_pct: float
     populated_fields: int
     total_fields: int
+
+
+class CategoryCompleteness(BaseModel):
+    """Completeness details for a single category"""
+    completeness_pct: float
+    populated: int
+    total: int
+    missing: List[str]
+
+
+class DetailedCompletenessResponse(BaseModel):
+    """Response model for detailed completeness metrics (with categories and gaps)"""
+    user_id: str
+    overall_completeness_pct: float
+    populated_fields: int
+    total_fields: int
+    categories: Dict[str, CategoryCompleteness]
+    high_value_gaps: List[str]
 
 
 class DeleteResponse(BaseModel):
@@ -89,18 +107,46 @@ def get_profile(user_id: str = Query(..., description="User identifier")) -> Pro
     return ProfileResponse(**profile)
 
 
-@router.get("/completeness", response_model=CompletenessResponse)
+@router.get("/completeness", response_model=Union[CompletenessResponse, DetailedCompletenessResponse])
 def get_profile_completeness(
-    user_id: str = Query(..., description="User identifier")
-) -> CompletenessResponse:
+    user_id: str = Query(..., description="User identifier"),
+    details: bool = Query(False, description="If true, return per-category breakdown and high-value gaps")
+) -> Union[CompletenessResponse, DetailedCompletenessResponse]:
     """
     Get profile completeness metrics.
 
-    Returns overall completeness percentage, populated fields count,
-    and total expected fields count (21 fields total).
-    """
-    logger.info("[profile.api.completeness] user_id=%s", user_id)
+    Args:
+        user_id: User identifier
+        details: If true, return detailed breakdown with categories and high_value_gaps.
+                 If false (default), return simple completeness metrics for backward compatibility.
 
+    Returns:
+        Simple response (details=false):
+            - overall_completeness_pct, populated_fields, total_fields
+
+        Detailed response (details=true):
+            - overall_completeness_pct, populated_fields, total_fields
+            - categories: per-category breakdown with missing fields
+            - high_value_gaps: prioritized list of fields to fill
+    """
+    logger.info("[profile.api.completeness] user_id=%s details=%s", user_id, details)
+
+    if details:
+        # Use service layer for detailed completeness (includes caching)
+        completeness_data = _profile_service.get_completeness_details(user_id)
+
+        if completeness_data is None:
+            raise HTTPException(status_code=404, detail=f"Profile not found for user_id: {user_id}")
+
+        # Remove cached_at field if present (internal use only)
+        completeness_data.pop("cached_at", None)
+
+        return DetailedCompletenessResponse(
+            user_id=user_id,
+            **completeness_data
+        )
+
+    # Simple mode - backward compatible response
     conn = None
     cursor = None
 
@@ -421,33 +467,43 @@ def _serialize_field_value(value: Any) -> str:
 
 
 def _update_profile_metadata(cursor, user_id: str):
-    """Update user_profiles with field counts and completeness percentage"""
-    # Count total fields
+    """
+    Update user_profiles with field counts and completeness percentage.
+    Uses the service layer constants (25 total fields across 5 categories).
+    Also invalidates the completeness cache.
+    """
+    from src.services.profile_storage import EXPECTED_PROFILE_FIELDS, TOTAL_EXPECTED_FIELDS
+
+    # Get populated fields grouped by category
     cursor.execute("""
-        SELECT COUNT(*) as total_fields
+        SELECT category, field_name
         FROM profile_fields
         WHERE user_id = %s
     """, (user_id,))
 
-    result = cursor.fetchone()
-    # Handle both tuple and dict-like cursor results
-    if result:
-        populated_fields = result['total_fields'] if isinstance(result, dict) else result[0]
-    else:
-        populated_fields = 0
+    rows = cursor.fetchall()
 
-    # Define expected fields per category (21 total)
-    expected_fields_per_category = {
-        'basics': 6,
-        'preferences': 5,
-        'goals': 3,
-        'interests': 3,
-        'background': 4
-    }
-    total_expected_fields = sum(expected_fields_per_category.values())  # 21 fields
+    # Build set of populated fields per category
+    populated_by_category = {cat: set() for cat in EXPECTED_PROFILE_FIELDS}
+    for row in rows:
+        if isinstance(row, dict):
+            category = row['category']
+            field_name = row['field_name']
+        else:
+            category, field_name = row
+
+        if category in populated_by_category:
+            populated_by_category[category].add(field_name)
+
+    # Count total populated fields (intersection with expected fields)
+    total_populated = 0
+    for category, expected_fields in EXPECTED_PROFILE_FIELDS.items():
+        populated = populated_by_category.get(category, set())
+        # Count only fields that are in our expected list
+        total_populated += len(populated.intersection(set(expected_fields)))
 
     # Calculate completeness percentage
-    completeness_pct = min(100.0, (populated_fields / total_expected_fields) * 100)
+    completeness_pct = min(100.0, (total_populated / TOTAL_EXPECTED_FIELDS) * 100)
 
     # Update user_profiles
     cursor.execute("""
@@ -458,4 +514,23 @@ def _update_profile_metadata(cursor, user_id: str):
             populated_fields = %s,
             last_updated = %s
         WHERE user_id = %s
-    """, (completeness_pct, total_expected_fields, populated_fields, datetime.now(timezone.utc), user_id))
+    """, (completeness_pct, TOTAL_EXPECTED_FIELDS, total_populated, datetime.now(timezone.utc), user_id))
+
+    # Invalidate completeness cache
+    _invalidate_completeness_cache(user_id)
+
+
+def _invalidate_completeness_cache(user_id: str):
+    """Invalidate the Redis completeness cache for a user"""
+    from src.services.profile_storage import COMPLETENESS_CACHE_KEY
+    from src.dependencies.redis_client import get_redis_client
+
+    try:
+        redis_client = get_redis_client()
+        if redis_client:
+            cache_key = COMPLETENESS_CACHE_KEY.format(user_id=user_id)
+            redis_client.delete(cache_key)
+            logger.debug("[profile.cache] invalidated completeness cache for user_id=%s", user_id)
+    except Exception as e:
+        # Cache invalidation failure shouldn't break the main flow
+        logger.warning("[profile.cache] failed to invalidate cache for user_id=%s: %s", user_id, e)

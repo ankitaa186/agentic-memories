@@ -50,7 +50,7 @@ development_status:
   # 1-3-profile-confidence-scoring-engine: DEFERRED to future enhancements (see scope change log)
   # 1-4-profile-update-proposal-approval-api: DEFERRED to future enhancements (see scope change log)
   1-5-profile-crud-api-endpoints: done
-  1-6-profile-completeness-tracking: ready-for-dev
+  1-6-profile-completeness-tracking: done
   1-7-profile-data-import-export: backlog
   1-8-profile-admin-analytics-apis: backlog
   epic-1-retrospective: optional
@@ -62,7 +62,8 @@ development_status:
   epic-3: backlog  # Portfolio Direct CRUD API
   3-1-portfolio-get-endpoint: done
   3-2-portfolio-post-endpoint: done
-  3-3-portfolio-put-endpoint: backlog
-  3-4-portfolio-delete-single-endpoint: backlog
-  3-5-portfolio-delete-all-endpoint: backlog
+  3-3-portfolio-simplification: ready-for-dev  # Schema simplification - public equities only
+  3-4-portfolio-put-endpoint: backlog
+  3-5-portfolio-delete-single-endpoint: backlog
+  3-6-portfolio-delete-all-endpoint: backlog
   epic-3-retrospective: optional
