@@ -1,0 +1,165 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>5</storyId>
+    <title>Portfolio DELETE Endpoint (Remove Single Holding)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-5-portfolio-delete-single-endpoint.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>chatbot (Annie)</asA>
+    <iWant>to remove a specific stock holding via API</iWant>
+    <soThat>users can remove stocks they no longer hold</soThat>
+    <tasks>
+      <task id="1" status="pending">Create Pydantic response model (AC4)
+        <subtask>Create HoldingDeleteResponse model with fields: deleted (bool), ticker (str)</subtask>
+        <subtask>Note: user_id comes from query parameter, ticker from path</subtask>
+      </task>
+      <task id="2" status="pending">Implement ticker normalization for path parameter (AC2, AC6)
+        <subtask>Use existing normalize_ticker() from portfolio_service.py</subtask>
+        <subtask>Validate ticker format (alphanumeric + dots, 1-10 chars)</subtask>
+        <subtask>Return 400 if ticker format is invalid</subtask>
+      </task>
+      <task id="3" status="pending">Implement DELETE endpoint (AC1, AC3, AC4, AC5)
+        <subtask>Add @router.delete("/holding/{ticker}") endpoint</subtask>
+        <subtask>Accept ticker from path, user_id from query parameter</subtask>
+        <subtask>Use DELETE RETURNING pattern for efficiency</subtask>
+        <subtask>If RETURNING empty, return 404</subtask>
+        <subtask>If exists, return confirmation response with 200 status</subtask>
+      </task>
+      <task id="4" status="pending">Write unit tests (AC1, AC2, AC3, AC4, AC5, AC6)
+        <subtask>Test DELETE removes existing holding successfully</subtask>
+        <subtask>Test ticker normalization (lowercase path to uppercase lookup)</subtask>
+        <subtask>Test 404 for non-existent holding</subtask>
+        <subtask>Test response includes deleted=true and ticker</subtask>
+        <subtask>Test missing user_id returns 422</subtask>
+        <subtask>Test invalid ticker format returns 400</subtask>
+        <subtask>Test dotted tickers like BRK.B</subtask>
+        <subtask>Test database unavailable returns 500</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="DELETE endpoint removes existing holding">
+      <given>an existing holding for user_id + ticker</given>
+      <when>calling DELETE /v1/portfolio/holding/{ticker}?user_id={uuid}</when>
+      <then>the system deletes the holding from the database and returns confirmation with 200 status</then>
+    </criterion>
+    <criterion id="AC2" title="Ticker normalization in path">
+      <given>a request with lowercase ticker in path (e.g., /holding/aapl)</given>
+      <when>processing the request</when>
+      <then>ticker is normalized to uppercase ("AAPL") for database lookup and delete succeeds if holding exists</then>
+    </criterion>
+    <criterion id="AC3" title="Returns 404 for non-existent holding">
+      <given>no holding exists for user_id + ticker</given>
+      <when>calling DELETE endpoint</when>
+      <then>the system returns 404 Not Found with error message indicating holding not found</then>
+    </criterion>
+    <criterion id="AC4" title="Returns confirmation response">
+      <given>a successful delete</given>
+      <when>the response is returned</when>
+      <then>response includes {"deleted": true, "ticker": "AAPL"} confirming which ticker was deleted</then>
+    </criterion>
+    <criterion id="AC5" title="Request validation">
+      <given>a request with missing required query parameter (user_id)</given>
+      <when>calling DELETE endpoint</when>
+      <then>the system returns 422 Unprocessable Entity with error message indicating missing parameter</then>
+    </criterion>
+    <criterion id="AC6" title="Invalid ticker format returns 400">
+      <given>a request with invalid ticker format in path</given>
+      <when>calling DELETE endpoint</when>
+      <then>the system returns 400 Bad Request with error message indicating invalid ticker format</then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-portfolio-crud-api.md" title="Epic 3: Portfolio Direct CRUD API" section="Story 3.4/FR-PC4" snippet="DELETE /v1/portfolio/holding/{ticker}?user_id={uuid} removes holding. Returns 404 if doesn't exist. Returns confirmation with deleted ticker."/>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Pattern: FastAPI Router" snippet="Clean separation of endpoints from main app using FastAPI router pattern with dependency injection."/>
+      <doc path="docs/sprint-artifacts/3-4-portfolio-put-endpoint.md" title="Story 3.4: PUT Endpoint" section="Dev Notes" snippet="Two-step SELECT+UPDATE pattern, normalize_ticker() for validation, psycopg3 dict/tuple handling, try/except/finally with rollback."/>
+      <doc path="docs/sprint-artifacts/3-3-portfolio-simplification.md" title="Story 3.3: Schema Simplification" section="Simplified Schema" snippet="portfolio_holdings has 8 columns: id, user_id, ticker (NOT NULL), asset_name, shares, avg_price, first_acquired, last_updated. Unique constraint on (user_id, ticker)."/>
+    </docs>
+    <code>
+      <file path="src/routers/portfolio.py" kind="router" symbol="router, get_portfolio, add_holding, update_holding" lines="1-364" reason="Existing GET, POST, PUT endpoints - extend with DELETE endpoint following same patterns"/>
+      <file path="src/services/portfolio_service.py" kind="service" symbol="normalize_ticker" lines="28-42" reason="Reuse normalize_ticker() for path parameter validation"/>
+      <file path="src/dependencies/timescale.py" kind="dependency" symbol="get_timescale_conn, release_timescale_conn" reason="Database connection pattern to follow"/>
+      <file path="tests/unit/test_portfolio_api.py" kind="test" symbol="_MockCursor, _MockCursorWithFetchone, _MockCursorWithMultipleFetchone, _MockConnectionWithCommit" lines="12-40, 217-240, 509-523" reason="Test fixture patterns to reuse for DELETE endpoint tests"/>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" usage="APIRouter, Query, HTTPException"/>
+        <package name="pydantic" version="2.8.2" usage="BaseModel for HoldingDeleteResponse"/>
+        <package name="psycopg" version="latest" usage="Database cursor/connection"/>
+        <package name="pytest" version="8.3.2" usage="Unit testing"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="database">Use simplified schema (Story 3.3): 8 columns only, no intent field</constraint>
+    <constraint type="database">Unique constraint is (user_id, ticker) - regular constraint</constraint>
+    <constraint type="pattern">Use DELETE RETURNING pattern for efficiency (single query) or two-step SELECT+DELETE</constraint>
+    <constraint type="pattern">Handle both dict and tuple cursor results for psycopg3 compatibility</constraint>
+    <constraint type="pattern">Use try/except/finally for connection cleanup with rollback on error</constraint>
+    <constraint type="pattern">Use parameterized queries (%s) to prevent SQL injection</constraint>
+    <constraint type="api">Return 404 if holding doesn't exist</constraint>
+    <constraint type="api">Return 200 on successful delete (not 204)</constraint>
+    <constraint type="api">user_id from query parameter (not body like PUT)</constraint>
+    <constraint type="api">Ticker in path parameter must be normalized to uppercase</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="DELETE /v1/portfolio/holding/{ticker}" kind="REST endpoint">
+      <signature>DELETE /v1/portfolio/holding/{ticker}?user_id={uuid}</signature>
+      <request>
+        <path-param name="ticker" type="string" required="true" description="Stock ticker symbol (will be normalized to uppercase)"/>
+        <query-param name="user_id" type="string" required="true" description="User identifier"/>
+      </request>
+      <response status="200">{"deleted": true, "ticker": "AAPL"}</response>
+      <response status="400">Invalid ticker format</response>
+      <response status="404">Holding not found for user_id + ticker</response>
+      <response status="422">Missing required query parameter (user_id)</response>
+      <response status="500">Database error</response>
+      <path>src/routers/portfolio.py</path>
+    </interface>
+    <interface name="normalize_ticker" kind="function">
+      <signature>normalize_ticker(ticker: Optional[str]) -> Optional[str]</signature>
+      <description>Normalizes ticker to uppercase and validates format (1-10 alphanumeric + dots). Returns None if invalid.</description>
+      <path>src/services/portfolio_service.py:28-42</path>
+    </interface>
+    <interface name="get_timescale_conn / release_timescale_conn" kind="function">
+      <signature>get_timescale_conn() -> Optional[Connection]; release_timescale_conn(conn: Connection) -> None</signature>
+      <description>Database connection pool management</description>
+      <path>src/dependencies/timescale.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with unittest.mock for database mocking. Follow existing test patterns in test_portfolio_api.py.
+      Mock _MockCursor, _MockCursorWithFetchone, _MockConnection, _MockConnectionWithCommit classes.
+      Patch src.routers.portfolio.get_timescale_conn and release_timescale_conn.
+      Use api_client fixture from conftest.py.
+      Test both tuple and dict cursor result formats for psycopg3 compatibility.
+    </standards>
+    <locations>
+      <location>tests/unit/test_portfolio_api.py</location>
+    </locations>
+    <ideas>
+      <test ac="AC1" name="test_delete_holding_removes_existing">Test DELETE removes existing holding successfully, returns 200</test>
+      <test ac="AC1" name="test_delete_holding_response_structure">Test response includes deleted=true and ticker fields</test>
+      <test ac="AC2" name="test_delete_holding_ticker_normalization">Test lowercase ticker in path is normalized to uppercase</test>
+      <test ac="AC3" name="test_delete_holding_not_found">Test DELETE on non-existent holding returns 404</test>
+      <test ac="AC4" name="test_delete_holding_confirmation_response">Test response format {"deleted": true, "ticker": "AAPL"}</test>
+      <test ac="AC5" name="test_delete_holding_missing_user_id">Test missing user_id query param returns 422</test>
+      <test ac="AC6" name="test_delete_holding_invalid_ticker_format">Test invalid ticker format returns 400</test>
+      <test name="test_delete_holding_database_unavailable">Test handling when database connection is unavailable returns 500</test>
+      <test name="test_delete_holding_dotted_ticker">Test dotted tickers like BRK.B work in path parameter</test>
+      <test name="test_delete_holding_dict_cursor_format">Test handling of dict cursor results (psycopg3 compatibility)</test>
+    </ideas>
+  </tests>
+</story-context>

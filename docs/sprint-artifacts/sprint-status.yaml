@@ -63,7 +63,7 @@ development_status:
   3-1-portfolio-get-endpoint: done
   3-2-portfolio-post-endpoint: done
   3-3-portfolio-simplification: done  # Schema simplification - public equities only
-  3-4-portfolio-put-endpoint: backlog
-  3-5-portfolio-delete-single-endpoint: backlog
+  3-4-portfolio-put-endpoint: done
+  3-5-portfolio-delete-single-endpoint: review
   3-6-portfolio-delete-all-endpoint: backlog
   epic-3-retrospective: optional

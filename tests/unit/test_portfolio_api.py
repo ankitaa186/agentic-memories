@@ -1,6 +1,6 @@
 """
-Unit tests for Portfolio CRUD API endpoints (simplified schema - Story 3.3)
-Tests the GET /v1/portfolio and POST /v1/portfolio/holding endpoints
+Unit tests for Portfolio CRUD API endpoints (simplified schema - Story 3.3, 3.4, 3.5)
+Tests GET /v1/portfolio, POST /v1/portfolio/holding, PUT /v1/portfolio/holding/{ticker}, DELETE /v1/portfolio/holding/{ticker}
 Schema: id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
 """
 import pytest
@@ -500,3 +500,471 @@ def test_post_holding_dotted_ticker(api_client):
     assert response.status_code == 201
     data = response.json()
     assert data["ticker"] == "BRK.B"  # Normalized to uppercase
+
+
+# ============================================================
+# PUT /v1/portfolio/holding/{ticker} tests (Story 3.4)
+# ============================================================
+
+class _MockCursorWithMultipleFetchone(_MockCursor):
+    """Mock cursor that supports multiple fetchone calls for PUT tests (SELECT then UPDATE)"""
+
+    def __init__(self, results=None, fetchone_results=None):
+        super().__init__(results)
+        self._fetchone_results = fetchone_results or []
+        self._fetchone_index = 0
+
+    def fetchone(self):
+        if self._fetchone_index < len(self._fetchone_results):
+            result = self._fetchone_results[self._fetchone_index]
+            self._fetchone_index += 1
+            return result
+        return None
+
+
+def test_put_holding_updates_existing(api_client):
+    """Test PUT updates existing holding with valid data, returns 200 (AC1)"""
+    # First fetchone: SELECT returns existing holding id
+    # Second fetchone: UPDATE RETURNING returns updated holding
+    mock_fetchone_results = [
+        ("existing-holding-id",),  # SELECT result
+        (
+            "AAPL",
+            "Apple Inc.",
+            150.0,  # updated shares
+            160.00,  # updated price
+            datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),  # original first_acquired
+            datetime(2025, 12, 14, 15, 30, 0, tzinfo=timezone.utc),  # new last_updated
+        )
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/AAPL", json={
+                "user_id": "test-user-123",
+                "asset_name": "Apple Inc.",
+                "shares": 150.0,
+                "avg_price": 160.00
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["ticker"] == "AAPL"
+    assert data["asset_name"] == "Apple Inc."
+    assert data["shares"] == 150.0
+    assert data["avg_price"] == 160.00
+    assert data["first_acquired"] is not None
+    assert data["last_updated"] is not None
+
+
+def test_put_holding_ticker_normalization(api_client):
+    """Test lowercase ticker in path is normalized to uppercase (AC2)"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("AAPL", "Apple", 100.0, 150.0,
+         datetime(2025, 1, 1, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/aapl", json={  # lowercase path
+                "user_id": "test-user",
+                "shares": 100.0
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ticker"] == "AAPL"  # Should be uppercase
+
+    # Verify SELECT query used uppercase ticker
+    assert len(mock_cursor.queries) >= 1
+    select_query, select_params = mock_cursor.queries[0]
+    assert "SELECT" in select_query
+    assert select_params[1] == "AAPL"  # Normalized ticker
+
+
+def test_put_holding_invalid_ticker_format(api_client):
+    """Test invalid ticker format returns 400 (AC2)"""
+    response = api_client.put("/v1/portfolio/holding/invalid-ticker-too-long", json={
+        "user_id": "test-user",
+        "shares": 100.0
+    })
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "Invalid ticker format" in data["detail"]
+
+
+def test_put_holding_not_found(api_client):
+    """Test PUT on non-existent holding returns 404 (AC4)"""
+    # SELECT returns None (no existing holding)
+    mock_fetchone_results = [None]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/NOTEXIST", json={
+                "user_id": "test-user",
+                "shares": 100.0
+            })
+
+    assert response.status_code == 404
+    data = response.json()
+    assert "not found" in data["detail"].lower()
+
+
+def test_put_holding_missing_user_id(api_client):
+    """Test missing user_id returns 422 (AC5)"""
+    response = api_client.put("/v1/portfolio/holding/AAPL", json={
+        "shares": 100.0
+    })
+
+    assert response.status_code == 422
+    data = response.json()
+    assert "detail" in data
+
+
+def test_put_holding_partial_update_shares_only(api_client):
+    """Test updating only shares field preserves other values (AC3)"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("AAPL", "Apple Inc.", 200.0, 150.00,  # shares updated, avg_price preserved
+         datetime(2025, 1, 1, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/AAPL", json={
+                "user_id": "test-user",
+                "shares": 200.0  # Only updating shares
+                # asset_name and avg_price not provided
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["shares"] == 200.0
+    # Other fields should be preserved (via COALESCE)
+    assert data["asset_name"] == "Apple Inc."
+    assert data["avg_price"] == 150.00
+
+
+def test_put_holding_partial_update_avg_price_only(api_client):
+    """Test updating only avg_price field preserves other values (AC3)"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("MSFT", "Microsoft Corp.", 50.0, 400.00,
+         datetime(2025, 1, 1, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/MSFT", json={
+                "user_id": "test-user",
+                "avg_price": 400.00  # Only updating avg_price
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["avg_price"] == 400.00
+    assert data["shares"] == 50.0  # Preserved
+
+
+def test_put_holding_partial_update_asset_name_only(api_client):
+    """Test updating only asset_name field preserves other values (AC3)"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("GOOGL", "Alphabet Inc. (Updated)", 25.0, 140.00,
+         datetime(2025, 1, 1, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/GOOGL", json={
+                "user_id": "test-user",
+                "asset_name": "Alphabet Inc. (Updated)"  # Only updating asset_name
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["asset_name"] == "Alphabet Inc. (Updated)"
+    assert data["shares"] == 25.0  # Preserved
+    assert data["avg_price"] == 140.00  # Preserved
+
+
+def test_put_holding_response_includes_all_fields(api_client):
+    """Test response includes all expected fields (AC6)"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("TSLA", "Tesla Inc.", 10.0, 250.00,
+         datetime(2025, 6, 15, 9, 0, 0, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, 16, 30, 0, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/TSLA", json={
+                "user_id": "test-user",
+                "shares": 10.0
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify all expected fields are present (AC6)
+    assert "ticker" in data
+    assert "asset_name" in data
+    assert "shares" in data
+    assert "avg_price" in data
+    assert "first_acquired" in data
+    assert "last_updated" in data
+
+    # Verify no extra fields (like 'id' or 'created')
+    assert "id" not in data
+    assert "created" not in data
+
+
+def test_put_holding_dict_cursor_format(api_client):
+    """Test handling of dict cursor results (psycopg3 compatibility) (AC6)"""
+    mock_fetchone_results = [
+        {"id": "existing-id"},  # SELECT result as dict
+        {
+            "ticker": "NVDA",
+            "asset_name": "NVIDIA Corp.",
+            "shares": 30.0,
+            "avg_price": 500.00,
+            "first_acquired": datetime(2025, 3, 1, tzinfo=timezone.utc),
+            "last_updated": datetime(2025, 12, 14, tzinfo=timezone.utc)
+        }
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/NVDA", json={
+                "user_id": "dict-test-user",
+                "shares": 30.0
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["ticker"] == "NVDA"
+    assert data["asset_name"] == "NVIDIA Corp."
+    assert data["shares"] == 30.0
+    assert data["avg_price"] == 500.00
+
+
+def test_put_holding_database_unavailable(api_client):
+    """Test handling when database connection is unavailable returns 500"""
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=None):
+        response = api_client.put("/v1/portfolio/holding/AAPL", json={
+            "user_id": "test-user",
+            "shares": 100.0
+        })
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Database connection unavailable" in data["detail"]
+
+
+def test_put_holding_dotted_ticker(api_client):
+    """Test dotted tickers like BRK.B work in path parameter"""
+    mock_fetchone_results = [
+        ("existing-id",),
+        ("BRK.B", "Berkshire Hathaway B", 15.0, 450.00,
+         datetime(2025, 1, 1, tzinfo=timezone.utc),
+         datetime(2025, 12, 14, tzinfo=timezone.utc))
+    ]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.put("/v1/portfolio/holding/brk.b", json={  # lowercase with dot
+                "user_id": "test-user",
+                "shares": 15.0
+            })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ticker"] == "BRK.B"  # Normalized to uppercase
+
+
+# ============================================================
+# DELETE /v1/portfolio/holding/{ticker} tests (Story 3.5)
+# ============================================================
+
+def test_delete_holding_removes_existing(api_client):
+    """Test DELETE removes existing holding successfully, returns 200 (AC1)"""
+    # DELETE RETURNING returns the deleted ticker
+    mock_fetchone_results = [("AAPL",)]  # RETURNING ticker
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/AAPL?user_id=test-user-123")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["deleted"] is True
+    assert data["ticker"] == "AAPL"
+
+
+def test_delete_holding_response_structure(api_client):
+    """Test response includes deleted=true and ticker fields (AC4)"""
+    mock_fetchone_results = [("MSFT",)]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/MSFT?user_id=test-user")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify exact response structure (AC4)
+    assert "deleted" in data
+    assert "ticker" in data
+    assert data["deleted"] is True
+    assert data["ticker"] == "MSFT"
+
+    # Should only have these two fields
+    assert len(data) == 2
+
+
+def test_delete_holding_ticker_normalization(api_client):
+    """Test lowercase ticker in path is normalized to uppercase (AC2)"""
+    mock_fetchone_results = [("GOOGL",)]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/googl?user_id=test-user")  # lowercase
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ticker"] == "GOOGL"  # Should be uppercase
+
+    # Verify DELETE query used uppercase ticker
+    assert len(mock_cursor.queries) >= 1
+    delete_query, delete_params = mock_cursor.queries[0]
+    assert "DELETE" in delete_query
+    assert delete_params[1] == "GOOGL"  # Normalized ticker
+
+
+def test_delete_holding_not_found(api_client):
+    """Test DELETE on non-existent holding returns 404 (AC3)"""
+    # DELETE RETURNING returns None (no row deleted)
+    mock_fetchone_results = [None]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/NOTEXIST?user_id=test-user")
+
+    assert response.status_code == 404
+    data = response.json()
+    assert "not found" in data["detail"].lower()
+
+
+def test_delete_holding_missing_user_id(api_client):
+    """Test missing user_id query param returns 422 (AC5)"""
+    response = api_client.delete("/v1/portfolio/holding/AAPL")  # No user_id query param
+
+    assert response.status_code == 422
+    data = response.json()
+    assert "detail" in data
+
+
+def test_delete_holding_invalid_ticker_format(api_client):
+    """Test invalid ticker format returns 400 (AC6)"""
+    response = api_client.delete("/v1/portfolio/holding/invalid-ticker-too-long?user_id=test-user")
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "Invalid ticker format" in data["detail"]
+
+
+def test_delete_holding_database_unavailable(api_client):
+    """Test handling when database connection is unavailable returns 500"""
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=None):
+        response = api_client.delete("/v1/portfolio/holding/AAPL?user_id=test-user")
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Database connection unavailable" in data["detail"]
+
+
+def test_delete_holding_dotted_ticker(api_client):
+    """Test dotted tickers like BRK.B work in path parameter"""
+    mock_fetchone_results = [("BRK.B",)]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/brk.b?user_id=test-user")  # lowercase with dot
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ticker"] == "BRK.B"  # Normalized to uppercase
+
+
+def test_delete_holding_dict_cursor_format(api_client):
+    """Test handling of dict cursor results (psycopg3 compatibility)"""
+    # DELETE RETURNING returns dict format
+    mock_fetchone_results = [{"ticker": "NVDA"}]
+
+    mock_cursor = _MockCursorWithMultipleFetchone(fetchone_results=mock_fetchone_results)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio/holding/NVDA?user_id=dict-test-user")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["deleted"] is True
+    assert data["ticker"] == "NVDA"

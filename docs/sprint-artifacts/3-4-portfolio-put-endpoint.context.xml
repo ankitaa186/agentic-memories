@@ -1,0 +1,169 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>4</storyId>
+    <title>Portfolio PUT Endpoint (Update Holding)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-14</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-4-portfolio-put-endpoint.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>chatbot (Annie)</asA>
+    <iWant>to update an existing stock holding via API</iWant>
+    <soThat>users can correct their portfolio data through me</soThat>
+    <tasks>
+      <task id="1" status="pending">Create Pydantic request model (AC1, AC5)
+        <subtask>Create UpdateHoldingRequest model with fields: user_id (required), asset_name (optional), shares (optional), avg_price (optional)</subtask>
+        <subtask>Note: ticker comes from path parameter, not body</subtask>
+      </task>
+      <task id="2" status="pending">Implement ticker normalization for path parameter (AC2)
+        <subtask>Use existing normalize_ticker() from portfolio_service.py</subtask>
+        <subtask>Validate ticker format (alphanumeric + dots, 1-10 chars)</subtask>
+        <subtask>Return 400 if ticker format is invalid</subtask>
+      </task>
+      <task id="3" status="pending">Implement PUT endpoint (AC1, AC3, AC4, AC6)
+        <subtask>Add @router.put("/holding/{ticker}") endpoint</subtask>
+        <subtask>Accept ticker from path, UpdateHoldingRequest from body</subtask>
+        <subtask>Check if holding exists first (SELECT query)</subtask>
+        <subtask>If not exists, return 404</subtask>
+        <subtask>If exists, UPDATE with COALESCE for partial updates</subtask>
+        <subtask>Return updated holding with 200 status</subtask>
+      </task>
+      <task id="4" status="pending">Write unit tests (AC1, AC2, AC3, AC4, AC5, AC6)
+        <subtask>Test PUT updates existing holding successfully</subtask>
+        <subtask>Test ticker normalization (lowercase path → uppercase lookup)</subtask>
+        <subtask>Test partial update (only shares, only avg_price, etc.)</subtask>
+        <subtask>Test 404 for non-existent holding</subtask>
+        <subtask>Test missing user_id returns 422</subtask>
+        <subtask>Test response includes all expected fields</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="PUT endpoint updates existing holding">
+      <given>an existing holding for user_id + ticker</given>
+      <when>calling PUT /v1/portfolio/holding/{ticker} with body containing user_id and fields to update</when>
+      <then>the system updates the existing holding and returns the updated holding with 200 status</then>
+    </criterion>
+    <criterion id="AC2" title="Ticker normalization in path">
+      <given>a request with lowercase ticker in path (e.g., /holding/aapl)</given>
+      <when>processing the request</when>
+      <then>ticker is normalized to uppercase ("AAPL") for database lookup and update succeeds if holding exists</then>
+    </criterion>
+    <criterion id="AC3" title="Partial updates supported">
+      <given>an existing holding</given>
+      <when>calling PUT with only some fields (e.g., only shares)</when>
+      <then>only provided fields are updated and other fields retain their existing values (COALESCE pattern)</then>
+    </criterion>
+    <criterion id="AC4" title="Returns 404 for non-existent holding">
+      <given>no holding exists for user_id + ticker</given>
+      <when>calling PUT endpoint</when>
+      <then>the system returns 404 Not Found with error message indicating holding not found</then>
+    </criterion>
+    <criterion id="AC5" title="Request validation">
+      <given>a request with missing required field (user_id)</given>
+      <when>calling PUT endpoint</when>
+      <then>the system returns 422 Unprocessable Entity with error message indicating missing field</then>
+    </criterion>
+    <criterion id="AC6" title="Returns updated holding data">
+      <given>a successful update</given>
+      <when>the response is returned</when>
+      <then>response includes: ticker, asset_name, shares, avg_price, first_acquired, last_updated with last_updated timestamp reflecting the update time</then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-portfolio-crud-api.md" title="Epic 3: Portfolio Direct CRUD API" section="Story 3.3/FR-PC3" snippet="PUT /v1/portfolio/holding/{ticker} updates existing holding with partial update support. Returns 404 if holding doesn't exist."/>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Pattern: FastAPI Router" snippet="Clean separation of endpoints from main app using FastAPI router pattern with dependency injection."/>
+      <doc path="docs/sprint-artifacts/3-3-portfolio-simplification.md" title="Story 3.3: Schema Simplification" section="Simplified Schema" snippet="portfolio_holdings has 8 columns: id, user_id, ticker (NOT NULL), asset_name, shares, avg_price, first_acquired, last_updated. No intent field. Unique constraint on (user_id, ticker)."/>
+      <doc path="docs/sprint-artifacts/3-2-portfolio-post-endpoint.md" title="Story 3.2: POST Endpoint" section="Dev Notes" snippet="UPSERT pattern with ON CONFLICT, normalize_ticker() for validation, JSONResponse for dynamic status codes, dict/tuple cursor handling for psycopg3 compatibility."/>
+    </docs>
+    <code>
+      <file path="src/routers/portfolio.py" kind="router" symbol="router, get_portfolio, add_holding" lines="1-244" reason="Existing GET and POST endpoints - extend with PUT endpoint following same patterns"/>
+      <file path="src/services/portfolio_service.py" kind="service" symbol="normalize_ticker, validate_positive_float, PortfolioHolding" lines="28-73" reason="Reuse normalize_ticker() for path parameter validation, validate_positive_float() for numeric fields"/>
+      <file path="src/dependencies/timescale.py" kind="dependency" symbol="get_timescale_conn, release_timescale_conn" reason="Database connection pattern to follow"/>
+      <file path="tests/unit/test_portfolio_api.py" kind="test" symbol="_MockCursor, _MockCursorWithFetchone, _MockConnectionWithCommit" lines="12-40, 217-240" reason="Test fixture patterns to reuse for PUT endpoint tests"/>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" usage="APIRouter, Query, HTTPException, Path"/>
+        <package name="pydantic" version="2.8.2" usage="BaseModel for UpdateHoldingRequest"/>
+        <package name="psycopg" version="latest" usage="Database cursor/connection"/>
+        <package name="pytest" version="8.3.2" usage="Unit testing"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="database">Use simplified schema (Story 3.3): 8 columns only, no intent field</constraint>
+    <constraint type="database">Unique constraint is (user_id, ticker) - regular constraint, not partial index</constraint>
+    <constraint type="pattern">Use two-step pattern: SELECT to check existence, then UPDATE with COALESCE</constraint>
+    <constraint type="pattern">Handle both dict and tuple cursor results for psycopg3 compatibility</constraint>
+    <constraint type="pattern">Use try/except/finally for connection cleanup with rollback on error</constraint>
+    <constraint type="pattern">Use parameterized queries (%s) to prevent SQL injection</constraint>
+    <constraint type="api">Return 404 if holding doesn't exist (unlike POST which creates)</constraint>
+    <constraint type="api">Return 200 on successful update (not 201)</constraint>
+    <constraint type="api">Ticker in path parameter must be normalized to uppercase</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="PUT /v1/portfolio/holding/{ticker}" kind="REST endpoint">
+      <signature>PUT /v1/portfolio/holding/{ticker}</signature>
+      <request>
+        <path-param name="ticker" type="string" required="true" description="Stock ticker symbol (will be normalized to uppercase)"/>
+        <body-param name="user_id" type="string" required="true"/>
+        <body-param name="asset_name" type="string" required="false"/>
+        <body-param name="shares" type="float" required="false"/>
+        <body-param name="avg_price" type="float" required="false"/>
+      </request>
+      <response status="200">Updated holding with ticker, asset_name, shares, avg_price, first_acquired, last_updated</response>
+      <response status="400">Invalid ticker format</response>
+      <response status="404">Holding not found for user_id + ticker</response>
+      <response status="422">Missing required field (user_id)</response>
+      <response status="500">Database error</response>
+      <path>src/routers/portfolio.py</path>
+    </interface>
+    <interface name="normalize_ticker" kind="function">
+      <signature>normalize_ticker(ticker: Optional[str]) -> Optional[str]</signature>
+      <description>Normalizes ticker to uppercase and validates format (1-10 alphanumeric + dots). Returns None if invalid.</description>
+      <path>src/services/portfolio_service.py:28-42</path>
+    </interface>
+    <interface name="get_timescale_conn / release_timescale_conn" kind="function">
+      <signature>get_timescale_conn() -> Optional[Connection]; release_timescale_conn(conn: Connection) -> None</signature>
+      <description>Database connection pool management</description>
+      <path>src/dependencies/timescale.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with unittest.mock for database mocking. Follow existing test patterns in test_portfolio_api.py.
+      Mock _MockCursor, _MockCursorWithFetchone, _MockConnection, _MockConnectionWithCommit classes.
+      Patch src.routers.portfolio.get_timescale_conn and release_timescale_conn.
+      Use api_client fixture from conftest.py.
+      Test both tuple and dict cursor result formats for psycopg3 compatibility.
+    </standards>
+    <locations>
+      <location>tests/unit/test_portfolio_api.py</location>
+    </locations>
+    <ideas>
+      <test ac="AC1" name="test_put_holding_updates_existing">Test PUT updates existing holding with valid data, returns 200</test>
+      <test ac="AC1" name="test_put_holding_response_structure">Test response includes all expected fields (ticker, asset_name, shares, avg_price, first_acquired, last_updated)</test>
+      <test ac="AC2" name="test_put_holding_ticker_normalization">Test lowercase ticker in path is normalized to uppercase</test>
+      <test ac="AC2" name="test_put_holding_invalid_ticker_format">Test invalid ticker format returns 400</test>
+      <test ac="AC3" name="test_put_holding_partial_update_shares_only">Test updating only shares field preserves other values</test>
+      <test ac="AC3" name="test_put_holding_partial_update_avg_price_only">Test updating only avg_price field preserves other values</test>
+      <test ac="AC3" name="test_put_holding_partial_update_asset_name_only">Test updating only asset_name field preserves other values</test>
+      <test ac="AC4" name="test_put_holding_not_found">Test PUT on non-existent holding returns 404</test>
+      <test ac="AC5" name="test_put_holding_missing_user_id">Test missing user_id returns 422</test>
+      <test ac="AC6" name="test_put_holding_last_updated_changes">Test last_updated timestamp is updated after PUT</test>
+      <test ac="AC6" name="test_put_holding_dict_cursor_format">Test handling of dict cursor results (psycopg3 compatibility)</test>
+      <test name="test_put_holding_database_unavailable">Test handling when database connection is unavailable returns 500</test>
+      <test name="test_put_holding_dotted_ticker">Test dotted tickers like BRK.B work in path parameter</test>
+    </ideas>
+  </tests>
+</story-context>

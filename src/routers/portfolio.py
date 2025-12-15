@@ -48,6 +48,14 @@ class AddHoldingRequest(BaseModel):
     avg_price: Optional[float] = None
 
 
+class UpdateHoldingRequest(BaseModel):
+    """Request model for updating a portfolio holding (Story 3.4)"""
+    user_id: str
+    asset_name: Optional[str] = None
+    shares: Optional[float] = None
+    avg_price: Optional[float] = None
+
+
 class HoldingCreateResponse(BaseModel):
     """Response model for holding create/update operations"""
     id: str
@@ -58,6 +66,22 @@ class HoldingCreateResponse(BaseModel):
     first_acquired: Optional[datetime] = None
     last_updated: Optional[datetime] = None
     created: bool  # True if new record, False if updated existing
+
+
+class HoldingUpdateResponse(BaseModel):
+    """Response model for holding update operations (Story 3.4)"""
+    ticker: str
+    asset_name: Optional[str] = None
+    shares: Optional[float] = None
+    avg_price: Optional[float] = None
+    first_acquired: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
+
+
+class HoldingDeleteResponse(BaseModel):
+    """Response model for holding delete operations (Story 3.5)"""
+    deleted: bool
+    ticker: str
 
 
 @router.get("", response_model=PortfolioResponse)
@@ -238,6 +262,187 @@ def add_holding(request: AddHoldingRequest):
         if conn:
             conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error adding holding: {str(e)}")
+    finally:
+        if conn is not None:
+            release_timescale_conn(conn)
+
+
+@router.put("/holding/{ticker}", response_model=HoldingUpdateResponse)
+def update_holding(ticker: str, request: UpdateHoldingRequest):
+    """
+    Update an existing portfolio holding (Story 3.4).
+
+    Updates the holding identified by user_id + ticker.
+    Returns 404 if holding doesn't exist (unlike POST which creates).
+    Supports partial updates - only provided fields are updated.
+    """
+    logger.info("[portfolio.api.put] user_id=%s ticker=%s",
+                request.user_id, ticker)
+
+    # Normalize ticker to uppercase (AC2)
+    normalized_ticker = normalize_ticker(ticker)
+    if normalized_ticker is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ticker format: '{ticker}'. Ticker must be 1-10 alphanumeric characters."
+        )
+
+    conn = None
+    try:
+        conn = get_timescale_conn()
+        if conn is None:
+            logger.error("[portfolio.api.put] user_id=%s database_unavailable", request.user_id)
+            raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+        with conn.cursor() as cur:
+            # Step 1: Check if holding exists (AC4)
+            cur.execute("""
+                SELECT id FROM portfolio_holdings
+                WHERE user_id = %s AND ticker = %s
+            """, (request.user_id, normalized_ticker))
+
+            existing = cur.fetchone()
+            if existing is None:
+                logger.info("[portfolio.api.put] user_id=%s ticker=%s not_found",
+                            request.user_id, normalized_ticker)
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Holding not found for user '{request.user_id}' and ticker '{normalized_ticker}'"
+                )
+
+            # Step 2: Update with COALESCE for partial updates (AC1, AC3, AC6)
+            cur.execute("""
+                UPDATE portfolio_holdings
+                SET
+                    asset_name = COALESCE(%s, asset_name),
+                    shares = COALESCE(%s, shares),
+                    avg_price = COALESCE(%s, avg_price),
+                    last_updated = NOW()
+                WHERE user_id = %s AND ticker = %s
+                RETURNING ticker, asset_name, shares, avg_price, first_acquired, last_updated
+            """, (
+                request.asset_name,
+                request.shares,
+                request.avg_price,
+                request.user_id,
+                normalized_ticker
+            ))
+
+            row = cur.fetchone()
+            conn.commit()
+
+            # Handle both dict and tuple cursor results (psycopg3 compatibility)
+            if isinstance(row, dict):
+                response = HoldingUpdateResponse(
+                    ticker=row['ticker'],
+                    asset_name=row.get('asset_name'),
+                    shares=float(row['shares']) if row.get('shares') is not None else None,
+                    avg_price=float(row['avg_price']) if row.get('avg_price') is not None else None,
+                    first_acquired=row.get('first_acquired'),
+                    last_updated=row.get('last_updated')
+                )
+            else:
+                # Tuple: (ticker, asset_name, shares, avg_price, first_acquired, last_updated)
+                response = HoldingUpdateResponse(
+                    ticker=row[0],
+                    asset_name=row[1],
+                    shares=float(row[2]) if row[2] is not None else None,
+                    avg_price=float(row[3]) if row[3] is not None else None,
+                    first_acquired=row[4],
+                    last_updated=row[5]
+                )
+
+            logger.info("[portfolio.api.put] user_id=%s ticker=%s updated",
+                        request.user_id, normalized_ticker)
+
+            return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[portfolio.api.put] user_id=%s ticker=%s error=%s",
+                     request.user_id, ticker, str(e))
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating holding: {str(e)}")
+    finally:
+        if conn is not None:
+            release_timescale_conn(conn)
+
+
+@router.delete("/holding/{ticker}", response_model=HoldingDeleteResponse)
+def delete_holding(
+    ticker: str,
+    user_id: str = Query(..., description="User identifier")
+):
+    """
+    Delete a portfolio holding (Story 3.5).
+
+    Deletes the holding identified by user_id + ticker.
+    Returns 404 if holding doesn't exist.
+    Returns confirmation with deleted ticker on success.
+    """
+    logger.info("[portfolio.api.delete] user_id=%s ticker=%s", user_id, ticker)
+
+    # Normalize ticker to uppercase (AC2)
+    normalized_ticker = normalize_ticker(ticker)
+    if normalized_ticker is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ticker format: '{ticker}'. Ticker must be 1-10 alphanumeric characters."
+        )
+
+    conn = None
+    try:
+        conn = get_timescale_conn()
+        if conn is None:
+            logger.error("[portfolio.api.delete] user_id=%s database_unavailable", user_id)
+            raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+        with conn.cursor() as cur:
+            # Use DELETE RETURNING pattern for efficiency (AC1, AC3, AC4)
+            # If RETURNING returns nothing, the holding didn't exist
+            cur.execute("""
+                DELETE FROM portfolio_holdings
+                WHERE user_id = %s AND ticker = %s
+                RETURNING ticker
+            """, (user_id, normalized_ticker))
+
+            row = cur.fetchone()
+
+            if row is None:
+                logger.info("[portfolio.api.delete] user_id=%s ticker=%s not_found",
+                            user_id, normalized_ticker)
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Holding not found for user '{user_id}' and ticker '{normalized_ticker}'"
+                )
+
+            conn.commit()
+
+            # Handle both dict and tuple cursor results (psycopg3 compatibility)
+            if isinstance(row, dict):
+                deleted_ticker = row['ticker']
+            else:
+                # Tuple: (ticker,)
+                deleted_ticker = row[0]
+
+            logger.info("[portfolio.api.delete] user_id=%s ticker=%s deleted",
+                        user_id, normalized_ticker)
+
+            return HoldingDeleteResponse(
+                deleted=True,
+                ticker=deleted_ticker
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[portfolio.api.delete] user_id=%s ticker=%s error=%s",
+                     user_id, ticker, str(e))
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting holding: {str(e)}")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
