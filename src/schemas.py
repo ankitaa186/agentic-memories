@@ -181,41 +181,28 @@ class StructuredRetrieveResponse(BaseModel):
 	finance: Optional["FinanceAggregate"] = None
 
 
-# Portfolio summary
+# Portfolio summary (simplified schema - Story 3.3)
 class PortfolioHolding(BaseModel):
-	asset_type: Optional[Literal["public_equity", "private_equity", "etf", "mutual_fund", "cash", "bond", "crypto", "other"]] = None
-	ticker: Optional[str] = None
-	name: Optional[str] = None
+	"""Simplified portfolio holding - public equities only"""
+	ticker: str
+	asset_name: Optional[str] = None
 	shares: Optional[float] = None
 	avg_price: Optional[float] = None
-	current_value: Optional[float] = None
-	cost_basis: Optional[float] = None
-	ownership_pct: Optional[float] = None
-	position: Optional[Literal["long", "short"]] = None
-	intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
-	target_price: Optional[float] = None
-	stop_loss: Optional[float] = None
-	time_horizon: Optional[str] = None  # Freeform: "days", "weeks", "months", "years", "short-term", "long-term", etc.
-	notes: Optional[str] = None
-	source_memory_id: Optional[str] = None
-	updated_at: Optional[datetime] = None
+	first_acquired: Optional[datetime] = None
+	last_updated: Optional[datetime] = None
 
 
 class PortfolioSummaryResponse(BaseModel):
+	"""Simplified portfolio summary response"""
 	user_id: str
 	holdings: List[PortfolioHolding] = Field(default_factory=list)
-	counts_by_asset_type: dict[str, int] = Field(default_factory=dict)
+	total_holdings: int = 0
 
 
 class FinanceGoal(BaseModel):
-    text: str
-    tickers: List[str] = Field(default_factory=list)
-    intent: Optional[Literal["buy", "sell", "hold", "watch"]] = None
-    time_horizon: Optional[str] = None  # Freeform: "days", "weeks", "months", "years", "short-term", "long-term", etc.
-    target_price: Optional[float] = None
-    risk_tolerance: Optional[Literal["low", "medium", "high"]] = None
-    concern: Optional[str] = None
-    source_memory_id: Optional[str] = None
+	"""Finance goal extracted from memory"""
+	text: str
+	tickers: List[str] = Field(default_factory=list)
 
 
 class FinanceAggregate(BaseModel):

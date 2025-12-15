@@ -1,6 +1,7 @@
 """
 Portfolio CRUD API Endpoints
 Provides REST API for reading, creating, updating, and deleting portfolio holdings.
+Simplified schema (Story 3.3): 8 columns (id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated)
 """
 from typing import List, Optional
 from datetime import datetime
@@ -167,13 +168,12 @@ def add_holding(request: AddHoldingRequest):
             raise HTTPException(status_code=500, detail="Database connection unavailable")
 
         with conn.cursor() as cur:
-            # UPSERT query using ON CONFLICT
+            # UPSERT query using ON CONFLICT (simplified schema - Story 3.3)
             # The unique constraint is (user_id, ticker) - one holding per ticker per user
-            # asset_type defaults to 'public_equity' for stock tickers
             cur.execute("""
-                INSERT INTO portfolio_holdings (user_id, ticker, asset_name, shares, avg_price, asset_type, first_acquired, last_updated)
-                VALUES (%s, %s, %s, %s, %s, 'public_equity', NOW(), NOW())
-                ON CONFLICT (user_id, ticker) WHERE ticker IS NOT NULL
+                INSERT INTO portfolio_holdings (user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated)
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (user_id, ticker)
                 DO UPDATE SET
                     asset_name = COALESCE(EXCLUDED.asset_name, portfolio_holdings.asset_name),
                     shares = COALESCE(EXCLUDED.shares, portfolio_holdings.shares),

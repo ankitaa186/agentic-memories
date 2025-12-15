@@ -1,6 +1,7 @@
 """
-Unit tests for Portfolio CRUD API endpoints
-Tests the GET /v1/portfolio endpoint
+Unit tests for Portfolio CRUD API endpoints (simplified schema - Story 3.3)
+Tests the GET /v1/portfolio and POST /v1/portfolio/holding endpoints
+Schema: id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
 """
 import pytest
 from unittest.mock import MagicMock, patch
@@ -41,12 +42,12 @@ class _MockConnection:
 # Test GET /v1/portfolio endpoint
 def test_get_portfolio_success_with_holdings(api_client, monkeypatch):
     """Test successful portfolio retrieval with holdings (AC1, AC2)"""
-    # Setup mock data - tuple format from psycopg3
+    # Setup mock data - 6-tuple format (simplified schema, no intent)
     mock_holdings = [
-        ("AAPL", "Apple Inc.", 100.0, 150.50, "hold",
+        ("AAPL", "Apple Inc.", 100.0, 150.50,
          datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
          datetime(2025, 12, 10, 15, 30, 0, tzinfo=timezone.utc)),
-        ("GOOGL", "Alphabet Inc.", 50.0, 2800.00, "hold",
+        ("GOOGL", "Alphabet Inc.", 50.0, 2800.00,
          datetime(2025, 2, 1, 9, 0, 0, tzinfo=timezone.utc),
          datetime(2025, 12, 5, 12, 0, 0, tzinfo=timezone.utc)),
     ]
@@ -68,15 +69,16 @@ def test_get_portfolio_success_with_holdings(api_client, monkeypatch):
     assert len(data["holdings"]) == 2
     assert data["last_updated"] is not None
 
-    # Verify holding fields (AC1)
+    # Verify holding fields (AC1 - simplified schema)
     holding = data["holdings"][0]
     assert holding["ticker"] == "AAPL"
     assert holding["asset_name"] == "Apple Inc."
     assert holding["shares"] == 100.0
     assert holding["avg_price"] == 150.50
-    assert holding["intent"] == "hold"
     assert holding["first_acquired"] is not None
     assert holding["last_updated"] is not None
+    # No intent field in simplified schema
+    assert "intent" not in holding
 
 
 def test_get_portfolio_empty(api_client, monkeypatch):
@@ -110,14 +112,13 @@ def test_get_portfolio_missing_user_id(api_client):
 
 def test_get_portfolio_dict_cursor_format(api_client, monkeypatch):
     """Test handling of dict cursor results (psycopg3 compatibility)"""
-    # Setup mock data - dict format
+    # Setup mock data - dict format (simplified schema, no intent)
     mock_holdings = [
         {
             "ticker": "MSFT",
             "asset_name": "Microsoft Corp.",
             "shares": 75.0,
             "avg_price": 380.00,
-            "intent": "hold",
             "first_acquired": datetime(2025, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
             "last_updated": datetime(2025, 12, 1, 14, 0, 0, tzinfo=timezone.utc)
         }
@@ -143,13 +144,13 @@ def test_get_portfolio_holdings_ordered_by_ticker(api_client, monkeypatch):
     """Test holdings are returned ordered by ticker ASC (AC1, AC2)"""
     # Data should come back ordered from DB, but verify query is correct
     mock_holdings = [
-        ("AAPL", "Apple", 10.0, 150.0, "hold",
+        ("AAPL", "Apple", 10.0, 150.0,
          datetime(2025, 1, 1, tzinfo=timezone.utc),
          datetime(2025, 12, 1, tzinfo=timezone.utc)),
-        ("MSFT", "Microsoft", 20.0, 380.0, "hold",
+        ("MSFT", "Microsoft", 20.0, 380.0,
          datetime(2025, 1, 1, tzinfo=timezone.utc),
          datetime(2025, 12, 1, tzinfo=timezone.utc)),
-        ("TSLA", "Tesla", 5.0, 250.0, "watch",
+        ("TSLA", "Tesla", 5.0, 250.0,
          datetime(2025, 1, 1, tzinfo=timezone.utc),
          datetime(2025, 12, 1, tzinfo=timezone.utc)),
     ]
@@ -187,7 +188,7 @@ def test_get_portfolio_database_unavailable(api_client, monkeypatch):
 def test_get_portfolio_with_null_values(api_client, monkeypatch):
     """Test handling of holdings with NULL optional fields"""
     mock_holdings = [
-        (None, "Private Equity Fund", None, None, "hold",
+        ("AAPL", None, None, None,
          datetime(2025, 1, 1, tzinfo=timezone.utc),
          datetime(2025, 12, 1, tzinfo=timezone.utc)),
     ]
@@ -203,48 +204,14 @@ def test_get_portfolio_with_null_values(api_client, monkeypatch):
     data = response.json()
 
     holding = data["holdings"][0]
-    assert holding["ticker"] is None
-    assert holding["asset_name"] == "Private Equity Fund"
+    assert holding["ticker"] == "AAPL"
+    assert holding["asset_name"] is None
     assert holding["shares"] is None
     assert holding["avg_price"] is None
 
 
-def test_get_portfolio_multiple_intents(api_client, monkeypatch):
-    """Test portfolio with different intent values"""
-    mock_holdings = [
-        ("AAPL", "Apple", 100.0, 150.0, "hold",
-         datetime(2025, 1, 1, tzinfo=timezone.utc),
-         datetime(2025, 12, 1, tzinfo=timezone.utc)),
-        ("NVDA", "Nvidia", None, None, "wants-to-buy",
-         datetime(2025, 1, 1, tzinfo=timezone.utc),
-         datetime(2025, 12, 1, tzinfo=timezone.utc)),
-        ("TSLA", "Tesla", 50.0, 250.0, "wants-to-sell",
-         datetime(2025, 1, 1, tzinfo=timezone.utc),
-         datetime(2025, 12, 1, tzinfo=timezone.utc)),
-        ("AMD", "AMD", None, None, "watch",
-         datetime(2025, 1, 1, tzinfo=timezone.utc),
-         datetime(2025, 12, 1, tzinfo=timezone.utc)),
-    ]
-
-    mock_cursor = _MockCursor(results=mock_holdings)
-    mock_conn = _MockConnection(cursor=mock_cursor)
-
-    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
-        with patch("src.routers.portfolio.release_timescale_conn"):
-            response = api_client.get("/v1/portfolio?user_id=intents-test-user")
-
-    assert response.status_code == 200
-    data = response.json()
-
-    intents = [h["intent"] for h in data["holdings"]]
-    assert "hold" in intents
-    assert "wants-to-buy" in intents
-    assert "wants-to-sell" in intents
-    assert "watch" in intents
-
-
 # ============================================================
-# POST /v1/portfolio/holding tests (Story 3.2)
+# POST /v1/portfolio/holding tests (Story 3.2 / 3.3 simplified)
 # ============================================================
 
 class _MockCursorWithFetchone(_MockCursor):
@@ -277,14 +244,13 @@ def test_post_holding_creates_new_holding(api_client):
     import uuid
     holding_id = str(uuid.uuid4())
 
-    # Mock result: new insert (inserted=True)
+    # Mock result: new insert (inserted=True) - 8-tuple (simplified schema)
     mock_result = (
         holding_id,
         "AAPL",
         "Apple Inc.",
         100.0,
         150.50,
-        "hold",
         datetime(2025, 12, 14, 10, 0, 0, tzinfo=timezone.utc),
         datetime(2025, 12, 14, 10, 0, 0, tzinfo=timezone.utc),
         True  # inserted (xmax = 0)
@@ -300,8 +266,7 @@ def test_post_holding_creates_new_holding(api_client):
                 "ticker": "AAPL",
                 "asset_name": "Apple Inc.",
                 "shares": 100.0,
-                "avg_price": 150.50,
-                "intent": "hold"
+                "avg_price": 150.50
             })
 
     assert response.status_code == 201
@@ -312,8 +277,9 @@ def test_post_holding_creates_new_holding(api_client):
     assert data["asset_name"] == "Apple Inc."
     assert data["shares"] == 100.0
     assert data["avg_price"] == 150.50
-    assert data["intent"] == "hold"
     assert data["created"] is True
+    # No intent field in simplified schema
+    assert "intent" not in data
 
 
 def test_post_holding_ticker_normalization(api_client):
@@ -322,7 +288,7 @@ def test_post_holding_ticker_normalization(api_client):
     holding_id = str(uuid.uuid4())
 
     mock_result = (
-        holding_id, "AAPL", None, None, None, "hold",
+        holding_id, "AAPL", None, None, None,
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         True
@@ -335,8 +301,7 @@ def test_post_holding_ticker_normalization(api_client):
         with patch("src.routers.portfolio.release_timescale_conn"):
             response = api_client.post("/v1/portfolio/holding", json={
                 "user_id": "test-user",
-                "ticker": "aapl",  # lowercase input
-                "intent": "hold"
+                "ticker": "aapl"  # lowercase input
             })
 
     assert response.status_code == 201
@@ -349,36 +314,18 @@ def test_post_holding_ticker_normalization(api_client):
     assert params[1] == "AAPL"  # Second param is ticker
 
 
-def test_post_holding_invalid_intent(api_client):
-    """Test invalid intent returns 400 with list of valid intents (AC3)"""
-    response = api_client.post("/v1/portfolio/holding", json={
-        "user_id": "test-user",
-        "ticker": "AAPL",
-        "intent": "invalid-intent"
-    })
-
-    assert response.status_code == 400
-    data = response.json()
-    assert "Invalid intent" in data["detail"]
-    assert "hold" in data["detail"]
-    assert "wants-to-buy" in data["detail"]
-    assert "wants-to-sell" in data["detail"]
-    assert "watch" in data["detail"]
-
-
 def test_post_holding_upsert_updates_existing(api_client):
-    """Test UPSERT updates existing holding for same user+ticker+intent, returns 200 (AC4)"""
+    """Test UPSERT updates existing holding for same user+ticker, returns 200 (AC4)"""
     import uuid
     holding_id = str(uuid.uuid4())
 
-    # Mock result: update (inserted=False)
+    # Mock result: update (inserted=False) - simplified schema
     mock_result = (
         holding_id,
         "AAPL",
         "Apple Inc.",
         150.0,  # updated shares
         160.00,  # updated price
-        "hold",
         datetime(2025, 11, 1, tzinfo=timezone.utc),  # original first_acquired
         datetime(2025, 12, 14, tzinfo=timezone.utc),  # new last_updated
         False  # NOT inserted, was updated
@@ -394,8 +341,7 @@ def test_post_holding_upsert_updates_existing(api_client):
                 "ticker": "AAPL",
                 "asset_name": "Apple Inc.",
                 "shares": 150.0,
-                "avg_price": 160.00,
-                "intent": "hold"
+                "avg_price": 160.00
             })
 
     assert response.status_code == 200
@@ -410,8 +356,7 @@ def test_post_holding_upsert_updates_existing(api_client):
 def test_post_holding_missing_user_id(api_client):
     """Test missing user_id returns 422 (AC5)"""
     response = api_client.post("/v1/portfolio/holding", json={
-        "ticker": "AAPL",
-        "intent": "hold"
+        "ticker": "AAPL"
     })
 
     assert response.status_code == 422
@@ -422,8 +367,7 @@ def test_post_holding_missing_user_id(api_client):
 def test_post_holding_missing_ticker(api_client):
     """Test missing ticker returns 422 (AC5)"""
     response = api_client.post("/v1/portfolio/holding", json={
-        "user_id": "test-user",
-        "intent": "hold"
+        "user_id": "test-user"
     })
 
     assert response.status_code == 422
@@ -437,7 +381,7 @@ def test_post_holding_optional_fields_null(api_client):
     holding_id = str(uuid.uuid4())
 
     mock_result = (
-        holding_id, "TSLA", None, None, None, "watch",
+        holding_id, "TSLA", None, None, None,
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         True
@@ -450,8 +394,7 @@ def test_post_holding_optional_fields_null(api_client):
         with patch("src.routers.portfolio.release_timescale_conn"):
             response = api_client.post("/v1/portfolio/holding", json={
                 "user_id": "test-user",
-                "ticker": "TSLA",
-                "intent": "watch"
+                "ticker": "TSLA"
                 # No asset_name, shares, avg_price
             })
 
@@ -469,8 +412,7 @@ def test_post_holding_invalid_ticker_format(api_client):
     """Test invalid ticker format returns 400 (AC2)"""
     response = api_client.post("/v1/portfolio/holding", json={
         "user_id": "test-user",
-        "ticker": "this-is-way-too-long-for-a-ticker",
-        "intent": "hold"
+        "ticker": "this-is-way-too-long-for-a-ticker"
     })
 
     assert response.status_code == 400
@@ -483,14 +425,13 @@ def test_post_holding_dict_cursor_format(api_client):
     import uuid
     holding_id = str(uuid.uuid4())
 
-    # Dict format result
+    # Dict format result (simplified schema)
     mock_result = {
         "id": holding_id,
         "ticker": "GOOGL",
         "asset_name": "Alphabet Inc.",
         "shares": 25.0,
         "avg_price": 140.00,
-        "intent": "hold",
         "first_acquired": datetime(2025, 12, 14, tzinfo=timezone.utc),
         "last_updated": datetime(2025, 12, 14, tzinfo=timezone.utc),
         "inserted": True
@@ -506,8 +447,7 @@ def test_post_holding_dict_cursor_format(api_client):
                 "ticker": "GOOGL",
                 "asset_name": "Alphabet Inc.",
                 "shares": 25.0,
-                "avg_price": 140.00,
-                "intent": "hold"
+                "avg_price": 140.00
             })
 
     assert response.status_code == 201
@@ -524,8 +464,7 @@ def test_post_holding_database_unavailable(api_client):
     with patch("src.routers.portfolio.get_timescale_conn", return_value=None):
         response = api_client.post("/v1/portfolio/holding", json={
             "user_id": "test-user",
-            "ticker": "AAPL",
-            "intent": "hold"
+            "ticker": "AAPL"
         })
 
     assert response.status_code == 500
@@ -533,13 +472,13 @@ def test_post_holding_database_unavailable(api_client):
     assert "Database connection unavailable" in data["detail"]
 
 
-def test_post_holding_default_intent(api_client):
-    """Test default intent is 'hold' when not specified"""
+def test_post_holding_dotted_ticker(api_client):
+    """Test dotted tickers like BRK.B are accepted"""
     import uuid
     holding_id = str(uuid.uuid4())
 
     mock_result = (
-        holding_id, "MSFT", None, None, None, "hold",
+        holding_id, "BRK.B", "Berkshire Hathaway B", 10.0, 420.00,
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         datetime(2025, 12, 14, tzinfo=timezone.utc),
         True
@@ -552,46 +491,12 @@ def test_post_holding_default_intent(api_client):
         with patch("src.routers.portfolio.release_timescale_conn"):
             response = api_client.post("/v1/portfolio/holding", json={
                 "user_id": "test-user",
-                "ticker": "MSFT"
-                # No intent specified
+                "ticker": "brk.b",  # lowercase with dot
+                "asset_name": "Berkshire Hathaway B",
+                "shares": 10.0,
+                "avg_price": 420.00
             })
 
     assert response.status_code == 201
     data = response.json()
-    assert data["intent"] == "hold"
-
-    # Verify query was called with "hold" intent
-    assert len(mock_cursor.queries) == 1
-    query, params = mock_cursor.queries[0]
-    assert params[5] == "hold"  # Sixth param is intent
-
-
-def test_post_holding_all_valid_intents(api_client):
-    """Test all valid intent values are accepted"""
-    import uuid
-
-    valid_intents = ["hold", "wants-to-buy", "wants-to-sell", "watch"]
-
-    for intent in valid_intents:
-        holding_id = str(uuid.uuid4())
-        mock_result = (
-            holding_id, "AAPL", None, None, None, intent,
-            datetime(2025, 12, 14, tzinfo=timezone.utc),
-            datetime(2025, 12, 14, tzinfo=timezone.utc),
-            True
-        )
-
-        mock_cursor = _MockCursorWithFetchone(fetchone_result=mock_result)
-        mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
-
-        with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
-            with patch("src.routers.portfolio.release_timescale_conn"):
-                response = api_client.post("/v1/portfolio/holding", json={
-                    "user_id": f"test-user-{intent}",
-                    "ticker": "AAPL",
-                    "intent": intent
-                })
-
-        assert response.status_code == 201, f"Intent '{intent}' should be valid"
-        data = response.json()
-        assert data["intent"] == intent
+    assert data["ticker"] == "BRK.B"  # Normalized to uppercase

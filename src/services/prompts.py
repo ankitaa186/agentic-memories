@@ -74,10 +74,9 @@ Extract memories from conversation history as JSON array. Each memory must be:
   },
   
   "portfolio": {
-    "ticker": "AAPL",                               // Stock symbol
-    "intent": "hold" | "wants-to-buy" | "wants-to-sell" | "watch",
-    "quantity": 100,
-    "price": 175.50
+    "ticker": "AAPL",                               // Stock symbol (required)
+    "quantity": 100,                                // Shares owned (optional)
+    "price": 175.50                                 // Price per share (optional)
   },
   
   "learning_journal": {
@@ -156,20 +155,15 @@ When you detect introductions or self-descriptions with name, age, occupation, l
 - Confidence should be 1.0 for explicit statements
 
 ### Finance/Stocks (HIGH PRIORITY)
-When you detect: tickers (AAPL, TSLA), buy/sell, portfolio, shares, price targets
+When you detect: tickers (AAPL, TSLA), portfolio, shares, price
 → Always extract + include `portfolio` object + tags: `["finance", "stocks", "ticker:SYMBOL"]`
 
-**CRITICAL - Intent Classification:**
-The `intent` field distinguishes OWNERSHIP from DESIRE. Use these values precisely:
+**Portfolio extraction focuses on:**
+- **ticker**: The stock symbol (e.g., "AAPL", "TSLA", "BRK.B")
+- **quantity**: Number of shares owned (if mentioned)
+- **price**: Price per share or average cost (if mentioned)
 
-| Intent Value | When to Use | Examples |
-|--------------|-------------|----------|
-| `hold` | User OWNS/HAS the asset (completed purchase or stated ownership) | "I bought 100 AAPL", "I own MSFT", "I have 50 shares of GOOGL", "My TSLA position" |
-| `wants-to-buy` | User WANTS/PLANS to acquire (future intent, NOT owned yet) | "I want to buy AAPL", "Planning to buy NVDA", "Thinking of getting TSLA", "I'd like to purchase" |
-| `wants-to-sell` | User WANTS/PLANS to dispose (intending to sell) | "I want to sell my META", "Planning to exit AMZN", "Thinking of selling" |
-| `watch` | User is MONITORING only (no ownership, no immediate intent) | "Watching INTC", "Keeping an eye on AMD", "Tracking NVDA price" |
-
-**Key distinction:** "I bought X" → `hold` (completed action = ownership), "I want to buy X" → `wants-to-buy` (future desire ≠ ownership)
+**Key:** Only extract actual holdings (stocks the user owns). Watchlist items and future purchase intentions are not stored as portfolio holdings.
 
 Performance & cause:
 - If performance is stated (e.g., "portfolio is down 15% this quarter") extract as a semantic fact with tags `["portfolio", "performance"]`.
@@ -266,7 +260,7 @@ User: "Hi! I'm Sarah Chen, a 28-year-old software engineer living in San Francis
 ### Example 1: Multi-faceted Input
 **Input:**
 ```
-User: "I bought 100 shares of AAPL at $150 yesterday. Planning to hold long-term.
+User: "I bought 100 shares of AAPL at $150 yesterday.
        Also, I'm learning Python - been at it for 3 months now!"
 ```
 
@@ -274,17 +268,15 @@ User: "I bought 100 shares of AAPL at $150 yesterday. Planning to hold long-term
 ```json
 [
   {
-    "content": "User bought 100 shares of AAPL at $150.",
+    "content": "User owns 100 shares of AAPL at $150.",
     "type": "explicit",
     "layer": "semantic",
     "confidence": 1.0,
     "tags": ["finance", "stocks", "ticker:AAPL"],
     "portfolio": {
       "ticker": "AAPL",
-      "intent": "hold",
       "quantity": 100,
-      "price": 150,
-      "time_horizon": "long-term"
+      "price": 150
     }
   },
   {
