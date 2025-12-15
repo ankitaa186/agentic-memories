@@ -1,6 +1,7 @@
 """
-Unit tests for Portfolio CRUD API endpoints (simplified schema - Story 3.3, 3.4, 3.5)
-Tests GET /v1/portfolio, POST /v1/portfolio/holding, PUT /v1/portfolio/holding/{ticker}, DELETE /v1/portfolio/holding/{ticker}
+Unit tests for Portfolio CRUD API endpoints (simplified schema - Story 3.3, 3.4, 3.5, 3.6)
+Tests GET /v1/portfolio, POST /v1/portfolio/holding, PUT /v1/portfolio/holding/{ticker},
+DELETE /v1/portfolio/holding/{ticker}, DELETE /v1/portfolio (clear all)
 Schema: id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
 """
 import pytest
@@ -968,3 +969,127 @@ def test_delete_holding_dict_cursor_format(api_client):
 
     assert data["deleted"] is True
     assert data["ticker"] == "NVDA"
+
+
+# ============================================================
+# DELETE /v1/portfolio (Clear All) tests (Story 3.6)
+# ============================================================
+
+class _MockCursorWithRowcount(_MockCursor):
+    """Mock cursor that supports rowcount for DELETE all tests"""
+
+    def __init__(self, results=None, rowcount=0):
+        super().__init__(results)
+        self.rowcount = rowcount
+
+    def execute(self, query, params=None):
+        super().execute(query, params)
+        # rowcount is set after execute
+
+
+def test_clear_portfolio_removes_all_holdings(api_client):
+    """Test DELETE all removes all holdings successfully, returns 200 (AC1)"""
+    mock_cursor = _MockCursorWithRowcount(rowcount=5)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio?user_id=test-user-123&confirmation=DELETE_ALL")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["deleted"] is True
+    assert data["holdings_removed"] == 5
+
+
+def test_clear_portfolio_returns_count(api_client):
+    """Test response includes correct holdings_removed count (AC4)"""
+    mock_cursor = _MockCursorWithRowcount(rowcount=3)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio?user_id=test-user&confirmation=DELETE_ALL")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify response structure (AC4)
+    assert "deleted" in data
+    assert "holdings_removed" in data
+    assert data["deleted"] is True
+    assert data["holdings_removed"] == 3
+
+    # Should only have these two fields
+    assert len(data) == 2
+
+
+def test_clear_portfolio_missing_confirmation(api_client):
+    """Test missing confirmation parameter returns 400 (AC2)"""
+    response = api_client.delete("/v1/portfolio?user_id=test-user")
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "confirmation" in data["detail"].lower()
+    assert "required" in data["detail"].lower()
+
+
+def test_clear_portfolio_invalid_confirmation(api_client):
+    """Test invalid confirmation value returns 400 (AC3)"""
+    response = api_client.delete("/v1/portfolio?user_id=test-user&confirmation=WRONG")
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "invalid" in data["detail"].lower()
+    assert "WRONG" in data["detail"]
+
+
+def test_clear_portfolio_confirmation_case_sensitive(api_client):
+    """Test confirmation must be exactly 'DELETE_ALL' (case-sensitive) (AC3)"""
+    # Test lowercase
+    response = api_client.delete("/v1/portfolio?user_id=test-user&confirmation=delete_all")
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "invalid" in data["detail"].lower()
+
+    # Test mixed case
+    response2 = api_client.delete("/v1/portfolio?user_id=test-user&confirmation=Delete_All")
+
+    assert response2.status_code == 400
+
+
+def test_clear_portfolio_empty_portfolio(api_client):
+    """Test empty portfolio returns 200 with holdings_removed=0 (AC5)"""
+    mock_cursor = _MockCursorWithRowcount(rowcount=0)
+    mock_conn = _MockConnectionWithCommit(cursor=mock_cursor)
+
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=mock_conn):
+        with patch("src.routers.portfolio.release_timescale_conn"):
+            response = api_client.delete("/v1/portfolio?user_id=empty-user&confirmation=DELETE_ALL")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["deleted"] is True
+    assert data["holdings_removed"] == 0
+
+
+def test_clear_portfolio_missing_user_id(api_client):
+    """Test missing user_id query param returns 422 (AC6)"""
+    response = api_client.delete("/v1/portfolio?confirmation=DELETE_ALL")
+
+    assert response.status_code == 422
+    data = response.json()
+    assert "detail" in data
+
+
+def test_clear_portfolio_database_unavailable(api_client):
+    """Test handling when database connection is unavailable returns 500"""
+    with patch("src.routers.portfolio.get_timescale_conn", return_value=None):
+        response = api_client.delete("/v1/portfolio?user_id=test-user&confirmation=DELETE_ALL")
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Database connection unavailable" in data["detail"]

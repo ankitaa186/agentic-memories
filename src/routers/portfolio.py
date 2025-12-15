@@ -84,6 +84,12 @@ class HoldingDeleteResponse(BaseModel):
     ticker: str
 
 
+class PortfolioClearResponse(BaseModel):
+    """Response model for clearing entire portfolio (Story 3.6)"""
+    deleted: bool
+    holdings_removed: int
+
+
 @router.get("", response_model=PortfolioResponse)
 def get_portfolio(user_id: str = Query(..., description="User identifier")) -> PortfolioResponse:
     """
@@ -443,6 +449,74 @@ def delete_holding(
         if conn:
             conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting holding: {str(e)}")
+    finally:
+        if conn is not None:
+            release_timescale_conn(conn)
+
+
+@router.delete("", response_model=PortfolioClearResponse)
+def clear_portfolio(
+    user_id: str = Query(..., description="User identifier"),
+    confirmation: Optional[str] = Query(None, description="Must be 'DELETE_ALL' to confirm")
+):
+    """
+    Clear all portfolio holdings for a user (Story 3.6).
+
+    Deletes ALL holdings for the specified user.
+    Requires confirmation parameter set to 'DELETE_ALL' for safety.
+    Returns count of deleted holdings (can be 0 if portfolio was already empty).
+    """
+    logger.info("[portfolio.api.clear] user_id=%s confirmation=%s", user_id, confirmation)
+
+    # Validate confirmation parameter (AC2, AC3)
+    if confirmation is None:
+        logger.info("[portfolio.api.clear] user_id=%s confirmation_missing", user_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation required. Set confirmation='DELETE_ALL' to clear all holdings."
+        )
+
+    if confirmation != "DELETE_ALL":
+        logger.info("[portfolio.api.clear] user_id=%s invalid_confirmation=%s", user_id, confirmation)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid confirmation value: '{confirmation}'. Must be exactly 'DELETE_ALL'."
+        )
+
+    conn = None
+    try:
+        conn = get_timescale_conn()
+        if conn is None:
+            logger.error("[portfolio.api.clear] user_id=%s database_unavailable", user_id)
+            raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+        with conn.cursor() as cur:
+            # Delete all holdings for user and get count via rowcount
+            cur.execute("""
+                DELETE FROM portfolio_holdings
+                WHERE user_id = %s
+            """, (user_id,))
+
+            # Get count of deleted rows (psycopg pattern)
+            holdings_removed = cur.rowcount
+
+            conn.commit()
+
+            logger.info("[portfolio.api.clear] user_id=%s holdings_removed=%d",
+                        user_id, holdings_removed)
+
+            return PortfolioClearResponse(
+                deleted=True,
+                holdings_removed=holdings_removed
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[portfolio.api.clear] user_id=%s error=%s", user_id, str(e))
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error clearing portfolio: {str(e)}")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
