@@ -79,7 +79,7 @@ development_status:
   # Priority: P0 (Quality & Cost Reduction)
   # ============================================================
   epic-4: backlog
-  4-1-add-negative-examples-to-extraction-prompt: in-progress
+  4-1-add-negative-examples-to-extraction-prompt: review
   4-2-improve-worthiness-prompt-with-negative-cases: drafted
   4-3-add-semantic-entailment-check-before-storage: drafted
   4-4-separate-state-from-insight-in-extraction: drafted
