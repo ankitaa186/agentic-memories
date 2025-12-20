@@ -1,16 +1,8 @@
-# generated: 2025-11-16 (updated: scope change - Story 1.4 deferred)
+# generated: 2025-12-20
 # project: agentic-memories
 # project_key: agentic-memories
 # tracking_system: file-system
 # story_location: docs/sprint-artifacts
-
-# SCOPE CHANGE LOG:
-# 2025-11-16: Stories 1.3 and 1.4 moved to future enhancements
-#             Story 1.4 (Profile Update Proposal & Approval API) - Not needed with direct-write
-#             Story 1.3 (Profile Confidence Scoring Engine) - Trust LLM confidence, defer aggregation
-#             Reason: Story 1.2 uses direct-write with LLM confidence scores (simpler, faster MVP)
-#             Manual correction available via Story 1.5 CRUD APIs
-#             MVP scope: 7 stories (down from 9)
 
 # STATUS DEFINITIONS:
 # ==================
@@ -36,34 +28,67 @@
 # - Stories can be worked in parallel if team capacity allows
 # - SM typically drafts next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
+#
+# SCOPE CHANGE LOG:
+# 2025-11-16: Stories 1.3 and 1.4 moved to future enhancements (direct-write model)
+# 2025-12-20: Added Epic 4 (Memory Extraction Quality) with 5 stories
 
-generated: 2025-11-16
+generated: 2025-12-20
 project: agentic-memories
 project_key: agentic-memories
 tracking_system: file-system
 story_location: docs/sprint-artifacts
 
 development_status:
-  epic-1: backlog
+  # ============================================================
+  # EPIC 1: Profile Foundation
+  # ============================================================
+  epic-1: contexted
   1-1-user-profiles-database-schema-migration: done
   1-2-profile-extraction-llm-pipeline: done
-  # 1-3-profile-confidence-scoring-engine: DEFERRED to future enhancements (see scope change log)
-  # 1-4-profile-update-proposal-approval-api: DEFERRED to future enhancements (see scope change log)
+  # 1-3-profile-confidence-scoring-engine: DEFERRED (direct-write model)
+  # 1-4-profile-update-proposal-approval-api: DEFERRED (direct-write model)
   1-5-profile-crud-api-endpoints: done
   1-6-profile-completeness-tracking: done
   1-7-profile-data-import-export: backlog
   1-8-profile-admin-analytics-apis: backlog
   epic-1-retrospective: optional
 
+  # ============================================================
+  # EPIC 2: Companion Integration
+  # ============================================================
   epic-2: backlog
   2-1-profile-aware-orchestrator-integration: backlog
   epic-2-retrospective: optional
 
-  epic-3: backlog  # Portfolio Direct CRUD API
+  # ============================================================
+  # EPIC 3: Portfolio Direct CRUD API
+  # ============================================================
+  epic-3: contexted
   3-1-portfolio-get-endpoint: done
   3-2-portfolio-post-endpoint: done
-  3-3-portfolio-simplification: done  # Schema simplification - public equities only
+  3-3-portfolio-simplification: done
   3-4-portfolio-put-endpoint: done
   3-5-portfolio-delete-single-endpoint: done
   3-6-portfolio-delete-all-endpoint: done
   epic-3-retrospective: optional
+
+  # ============================================================
+  # EPIC 4: Memory Extraction Quality Improvements
+  # Source: docs/epic-extraction-quality.md
+  # Priority: P0 (Quality & Cost Reduction)
+  # ============================================================
+  epic-4: backlog
+  4-1-add-negative-examples-to-extraction-prompt: in-progress
+  4-2-improve-worthiness-prompt-with-negative-cases: drafted
+  4-3-add-semantic-entailment-check-before-storage: drafted
+  4-4-separate-state-from-insight-in-extraction: drafted
+  4-5-add-golden-record-consolidation-to-compaction: drafted
+  epic-4-retrospective: optional
+
+  # ============================================================
+  # EPIC (TBD): Ingestion Graph Optimization
+  # Source: docs/epic-ingestion-optimization.md
+  # Status: Proposed (no stories defined yet)
+  # ============================================================
+  # epic-ingestion-optimization: proposed

@@ -124,6 +124,72 @@ Given existing: "User loves science fiction."
 - `0.7`: Moderate indication ("might try X", "considering Y")
 - `0.5`: Weak indication ("X could be interesting")
 
+## CRITICAL: What NOT to Extract
+
+### Anti-Pattern 1: Truisms & Obvious Statements
+Universal desires that apply to everyone and provide no personalization value.
+
+❌ Examples to AVOID:
+- "User wants to make money" (everyone wants this)
+- "User wants to be successful" (universal desire)
+- "User wants good returns on investments" (obvious for any investor)
+- "User wants to be happy" (universal human desire)
+- "User is interested in the stock market" (too vague if no specific insight)
+
+✅ Correct Alternative:
+- "User prioritizes dividend income over growth" (specific strategy)
+- "User prefers small-cap value stocks" (specific preference)
+- "User focuses on companies with strong moats" (specific investing approach)
+
+### Anti-Pattern 2: State Data (Belongs in Structured Tools)
+Quantitative facts that change frequently and are tracked by the Portfolio tool.
+For pure holdings data, use the `portfolio` object ONLY - do not create memory content.
+
+❌ Examples to AVOID (as memory content):
+- "User owns 100 shares of AAPL" (portfolio tool tracks this)
+- "User's position is worth $15,000" (portfolio tool tracks this)
+- "User bought AAPL at $150" (portfolio tool tracks this)
+- "User has a $50,000 portfolio" (portfolio tool tracks this)
+- "User owns 2810 shares of RKLB" (pure state, no insight)
+
+✅ Correct Alternative:
+- Extract to `portfolio` object: `{"ticker": "AAPL", "quantity": 100, "price": 150}`
+- Only create memory content if there's an INSIGHT explaining WHY:
+  - "User bought AAPL for dividend income" (insight about reasoning)
+  - "User holds RKLB because of belief in Neutron rocket reusability" (insight about thesis)
+
+### Anti-Pattern 3: Semantic Echoes (Already Captured Elsewhere)
+Variations of information already stored in existing memories.
+Before extracting, check if the new statement is ENTAILED by an existing memory.
+
+❌ Examples to AVOID (given existing: "User is a Buffett-style value investor"):
+- "User likes Warren Buffett" (implied by existing)
+- "User admires Buffett" (implied by existing)
+- "User follows Buffett's approach" (duplicate of existing)
+- "User is a value investor" (subset of existing)
+- "User prefers value investing" (redundant with existing)
+
+✅ Correct Alternative:
+- "User also applies Munger's mental models" (NEW information not in existing)
+- "User combines Buffett's approach with momentum indicators" (EXTENDS existing)
+- Skip extraction if new statement is logically entailed by existing memory
+
+### Anti-Pattern 4: Restatements of User Actions (Meta-chatter)
+Commentary about the conversation itself or vague requests without specific preferences.
+
+❌ Examples to AVOID:
+- "User asked about stocks" (meta-commentary about conversation)
+- "User wants to learn about investing" (too vague, no specific goal)
+- "User is having a conversation about finance" (meta-chatter)
+- "User requested information about AAPL" (action, not preference)
+- "User discussed their portfolio" (meta-commentary)
+- "User mentioned their investments" (meta-commentary)
+
+✅ Correct Alternative:
+- Only extract when there's a genuine preference, insight, or specific goal
+- "User is studying for CFA certification" (specific learning goal)
+- "User wants to understand options trading for hedging" (specific intent)
+
 ## Domain-Specific Rules
 
 ### Basic Profile Information (Identity & Bio) (HIGHEST PRIORITY)

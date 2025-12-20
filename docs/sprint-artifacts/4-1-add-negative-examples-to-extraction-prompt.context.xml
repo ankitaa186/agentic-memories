@@ -1,0 +1,266 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>epic-4</epicId>
+    <storyId>4-1-add-negative-examples-to-extraction-prompt</storyId>
+    <title>Add Negative Examples to Extraction Prompt</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-20</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/4-1-add-negative-examples-to-extraction-prompt.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>memory system</asA>
+    <iWant>explicit anti-patterns in the extraction prompt</iWant>
+    <soThat>the LLM avoids extracting truisms, state data, and semantic echoes</soThat>
+    <tasks>
+      <task id="1" status="pending">
+        <name>Add Anti-Pattern Section to EXTRACTION_PROMPT</name>
+        <subtasks>
+          <subtask>1.1 Open src/services/prompts.py</subtask>
+          <subtask>1.2 Locate EXTRACTION_PROMPT variable</subtask>
+          <subtask>1.3 Find "Core Extraction Rules" section</subtask>
+          <subtask>1.4 Add new section "## CRITICAL: What NOT to Extract" after Core Extraction Rules</subtask>
+          <subtask>1.5 Add Anti-Pattern 1: Truisms and Obvious Statements with examples</subtask>
+          <subtask>1.6 Add Anti-Pattern 2: State Data with examples</subtask>
+          <subtask>1.7 Add Anti-Pattern 3: Semantic Echoes with before/after examples</subtask>
+          <subtask>1.8 Add Anti-Pattern 4: Restatements of User Actions with examples</subtask>
+        </subtasks>
+      </task>
+      <task id="2" status="pending">
+        <name>Create Test Conversations</name>
+        <subtasks>
+          <subtask>2.1 Create test input containing truisms</subtask>
+          <subtask>2.2 Create test input containing state data</subtask>
+          <subtask>2.3 Create test input containing semantic echoes</subtask>
+          <subtask>2.4 Create test input containing meta-chatter</subtask>
+        </subtasks>
+      </task>
+      <task id="3" status="pending">
+        <name>Test Extraction with Anti-Patterns</name>
+        <subtasks>
+          <subtask>3.1 Run extraction pipeline on test conversations</subtask>
+          <subtask>3.2 Verify truisms are NOT extracted</subtask>
+          <subtask>3.3 Verify state data goes to portfolio object only</subtask>
+          <subtask>3.4 Verify semantic echoes are skipped</subtask>
+          <subtask>3.5 Verify meta-chatter is NOT extracted</subtask>
+          <subtask>3.6 Document results: target is zero unwanted extractions in 10 runs</subtask>
+        </subtasks>
+      </task>
+      <task id="4" status="pending">
+        <name>Regression Testing</name>
+        <subtasks>
+          <subtask>4.1 Test profile extraction still works</subtask>
+          <subtask>4.2 Test preference extraction still works</subtask>
+          <subtask>4.3 Test project extraction still works</subtask>
+          <subtask>4.4 Test relationship extraction still works</subtask>
+          <subtask>4.5 Verify no regressions in existing extraction quality</subtask>
+        </subtasks>
+      </task>
+      <task id="5" status="pending">
+        <name>Integration Testing</name>
+        <subtasks>
+          <subtask>5.1 Use test user test-user-compaction-001 for integration tests</subtask>
+          <subtask>5.2 Run full extraction pipeline with mixed input</subtask>
+          <subtask>5.3 Verify correct filtering behavior</subtask>
+          <subtask>5.4 Check logs show proper skip reasons</subtask>
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">
+      <description>Add "What NOT to Extract" section to EXTRACTION_PROMPT with 4 anti-patterns: Truisms, State Data, Semantic Echoes, Restatements of User Actions</description>
+      <verification>Section exists after Core Extraction Rules section in prompt</verification>
+    </criterion>
+    <criterion id="AC2">
+      <description>Each anti-pattern includes: Clear description, 3+ specific examples showing what to avoid, 1+ examples showing correct alternative</description>
+      <verification>Review prompt structure for completeness</verification>
+    </criterion>
+    <criterion id="AC3">
+      <description>Anti-pattern section is placed AFTER Core Extraction Rules section in the prompt</description>
+      <verification>Check insertion point in prompts.py</verification>
+    </criterion>
+    <criterion id="AC4">
+      <description>Run extraction on test conversations containing truisms, portfolio state data, semantic echoes, meta-chatter - Verify zero truisms/echoes extracted in 10 test runs</description>
+      <verification>Run docker exec tests with test inputs</verification>
+    </criterion>
+    <criterion id="AC5">
+      <description>Existing valid extractions still work correctly (profile data, preferences, projects)</description>
+      <verification>Regression tests pass</verification>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-extraction-quality.md" relevance="high">Epic definition with problem statement and proposed changes</doc>
+      <doc path="docs/sprint-artifacts/4-1-add-negative-examples-to-extraction-prompt.md" relevance="high">Story file with detailed tasks</doc>
+    </docs>
+    <code>
+      <file path="src/services/prompts.py" relevance="critical" lines="45-524">
+        <description>Contains EXTRACTION_PROMPT - the primary file to modify</description>
+        <keySection name="EXTRACTION_PROMPT" startLine="45" endLine="524">
+          Main extraction prompt that needs the anti-pattern section added after Core Extraction Rules (line 100-126)
+        </keySection>
+        <keySection name="Core Extraction Rules" startLine="100" endLine="126">
+          Insertion point - add anti-patterns AFTER this section
+        </keySection>
+        <keySection name="Domain-Specific Rules" startLine="127" endLine="207">
+          Existing domain rules - anti-patterns go BEFORE this section
+        </keySection>
+      </file>
+      <file path="src/services/graph_extraction.py" relevance="high" lines="1-86">
+        <description>LangGraph-based extraction pipeline that uses EXTRACTION_PROMPT</description>
+        <keyFunction name="node_extract" startLine="36" endLine="60">
+          Calls the extraction LLM with the EXTRACTION_PROMPT
+        </keyFunction>
+        <keyFunction name="run_extraction_graph" startLine="70" endLine="83">
+          Entry point that initializes state and runs the graph
+        </keyFunction>
+      </file>
+      <file path="src/services/extraction.py" relevance="medium" lines="1-250">
+        <description>Orchestrates extraction pipeline and processes results</description>
+        <keyFunction name="extract_from_transcript" startLine="139" endLine="247">
+          Main entry point that calls run_extraction_graph and processes Memory objects
+        </keyFunction>
+      </file>
+    </code>
+    <dependencies>
+      <dependency name="openai" usage="LLM calls for extraction">Used via _call_llm_json</dependency>
+      <dependency name="langgraph" usage="Graph-based extraction pipeline">StateGraph in graph_extraction.py</dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="placement">Anti-pattern section MUST be placed AFTER Core Extraction Rules and BEFORE Domain-Specific Rules</constraint>
+    <constraint type="format">Each anti-pattern must use consistent structure with description, examples, and correct alternative</constraint>
+    <constraint type="regression">Existing extraction behavior for profiles, preferences, projects, relationships must not regress</constraint>
+    <constraint type="testing">Must use test-user-compaction-001 for integration tests</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="EXTRACTION_PROMPT">
+      <type>String template</type>
+      <location>src/services/prompts.py:45-524</location>
+      <usage>Passed to LLM via _call_llm_json in node_extract function</usage>
+      <placeholders>
+        <placeholder name="{existing_memories}">Formatted existing memories for deduplication context</placeholder>
+        <placeholder name="{history}">Recent conversation history to extract from</placeholder>
+      </placeholders>
+    </interface>
+    <interface name="extract_from_transcript">
+      <type>Function</type>
+      <location>src/services/extraction.py:139</location>
+      <input>TranscriptRequest with user_id and history</input>
+      <output>ExtractionResult with memories list</output>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      <standard>Run tests via docker exec agentic-memories-api-1 python3 -c "..."</standard>
+      <standard>Use test-user-compaction-001 for all integration tests</standard>
+      <standard>Target: zero unwanted extractions in 10 runs for negative cases</standard>
+      <standard>Regression: existing valid extractions must continue working</standard>
+    </standards>
+    <locations>
+      <location>tests/ directory for unit tests if needed</location>
+      <location>Manual docker exec testing for extraction pipeline</location>
+    </locations>
+    <ideas>
+      <testCase id="TC1" type="negative">
+        <name>Truism Rejection</name>
+        <input>"I want to make money investing"</input>
+        <expectedOutput>Empty array [] or no memory content</expectedOutput>
+      </testCase>
+      <testCase id="TC2" type="negative">
+        <name>State Data Routing</name>
+        <input>"I own 2810 shares of RKLB"</input>
+        <expectedOutput>Portfolio object only, no memory content like "User owns..."</expectedOutput>
+      </testCase>
+      <testCase id="TC3" type="negative">
+        <name>Semantic Echo Prevention</name>
+        <input>Multiple Buffett references with existing "User is a Buffett-style value investor"</input>
+        <expectedOutput>Skip redundant variations</expectedOutput>
+      </testCase>
+      <testCase id="TC4" type="negative">
+        <name>Meta-chatter Rejection</name>
+        <input>"Tell me about the stock market"</input>
+        <expectedOutput>Empty array [] - not memory-worthy</expectedOutput>
+      </testCase>
+      <testCase id="TC5" type="regression">
+        <name>Profile Extraction</name>
+        <input>"I'm John, 35, living in NYC"</input>
+        <expectedOutput>Name, age, location memories extracted correctly</expectedOutput>
+      </testCase>
+      <testCase id="TC6" type="regression">
+        <name>Preference Extraction</name>
+        <input>"I prefer dark mode"</input>
+        <expectedOutput>Preference memory extracted correctly</expectedOutput>
+      </testCase>
+    </ideas>
+  </tests>
+
+  <proposedChanges>
+    <change id="1" file="src/services/prompts.py" type="addition">
+      <description>Add "## CRITICAL: What NOT to Extract" section after Core Extraction Rules (line 126)</description>
+      <content><![CDATA[
+## CRITICAL: What NOT to Extract
+
+### Anti-Pattern 1: Truisms & Obvious Statements
+Universal desires that apply to everyone and provide no personalization value.
+
+Examples to AVOID:
+- "User wants to make money" (everyone wants this)
+- "User wants to be successful" (universal desire)
+- "User wants good returns on investments" (obvious for any investor)
+- "User wants to be happy" (universal human desire)
+- "User is interested in the stock market" (too vague if no specific insight)
+
+Correct Alternative:
+- "User prioritizes dividend income over growth" (specific strategy)
+- "User prefers small-cap value stocks" (specific preference)
+
+### Anti-Pattern 2: State Data (Belongs in Structured Tools)
+Quantitative facts that change frequently and are tracked by the Portfolio tool.
+
+Examples to AVOID:
+- "User owns 100 shares of AAPL" (portfolio tool tracks this)
+- "User's position is worth $15,000" (portfolio tool tracks this)
+- "User bought AAPL at $150" (portfolio tool tracks this)
+- "User has a $50,000 portfolio" (portfolio tool tracks this)
+
+Correct Alternative:
+- Extract to portfolio object: {"ticker": "AAPL", "quantity": 100, "price": 150}
+- Only create memory content if there's an INSIGHT: "User bought AAPL for dividend income"
+
+### Anti-Pattern 3: Semantic Echoes (Already Captured Elsewhere)
+Variations of information already stored in existing memories.
+
+Examples to AVOID (given existing: "User is a Buffett-style value investor"):
+- "User likes Warren Buffett" (implied by existing)
+- "User admires Buffett" (implied by existing)
+- "User follows Buffett's approach" (duplicate of existing)
+- "User is a value investor" (subset of existing)
+
+Correct Alternative:
+- "User also applies Munger's mental models" (NEW information not in existing)
+- Skip if new statement is entailed by existing memory
+
+### Anti-Pattern 4: Restatements of User Actions (Meta-chatter)
+Commentary about the conversation itself or vague requests.
+
+Examples to AVOID:
+- "User asked about stocks" (meta-commentary)
+- "User wants to learn about investing" (too vague)
+- "User is having a conversation about finance" (meta-chatter)
+- "User requested information about AAPL" (action, not preference)
+
+Correct Alternative:
+- Only extract when there's a genuine preference or insight
+- "User is studying for CFA certification" (specific learning goal)
+]]></content>
+    </change>
+  </proposedChanges>
+</story-context>
