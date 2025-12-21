@@ -82,8 +82,8 @@ development_status:
   4-1-add-negative-examples-to-extraction-prompt: done
   4-2-improve-worthiness-prompt-with-negative-cases: done
   4-3-add-semantic-entailment-check-before-storage: done
-  4-4-separate-state-from-insight-in-extraction: drafted
-  4-5-add-golden-record-consolidation-to-compaction: drafted
+  4-4-separate-state-from-insight-in-extraction: done
+  4-5-add-golden-record-consolidation-to-compaction: ready-for-dev
   epic-4-retrospective: optional
 
   # ============================================================

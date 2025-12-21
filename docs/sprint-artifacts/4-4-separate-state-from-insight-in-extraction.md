@@ -1,6 +1,6 @@
 # Story 4.4: Separate State from Insight in Extraction
 
-Status: drafted
+Status: done
 
 ## Story
 
@@ -186,3 +186,29 @@ Claude Opus 4.5
 | Date | Author | Change |
 |------|--------|--------|
 | 2025-12-20 | BMad Master | Story drafted from Epic 4 requirements (YOLO mode) |
+| 2025-12-21 | Dev Agent | Implementation complete - Story marked DONE |
+
+## Completion Notes
+
+### Changes Made (2025-12-21)
+
+**1. Added "Classify: State vs. Insight" section to EXTRACTION_PROMPT**
+- Defines STATE: quantitative data tracked by tools (holdings, values, prices)
+- Defines INSIGHT: qualitative reasoning (thesis, strategy, beliefs)
+- Clear routing rules: STATE → portfolio object only, INSIGHT → memory content
+- Three routing examples showing correct behavior
+
+**2. Updated Example 1 in EXTRACTION_PROMPT**
+- Changed to show `content: null` for pure state (finance quantity/price)
+- Added Example 1b showing insight with memory content
+
+### Test Results
+
+| Test | Input | Result |
+|------|-------|--------|
+| Pure state | "I bought 100 shares of AAPL at $150" | ✅ `content: None` + portfolio object |
+| Insight | "I bought AAPL because of services growth" | ✅ Memory content with reasoning |
+| Mixed | "I bought 100 AAPL at $150 for dividend income" | ✅ 2 entries: state + insight |
+
+### Files Modified
+- `src/services/prompts.py` - Added State vs. Insight classification section, updated Example 1

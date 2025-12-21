@@ -1,6 +1,6 @@
 # Story 4.5: Add Golden Record Consolidation to Compaction
 
-Status: drafted
+Status: ready-for-dev
 
 ## Story
 
@@ -216,7 +216,7 @@ curl -X POST 'http://localhost:8080/v1/maintenance/compact?user_id=test-consolid
 
 ### Context Reference
 
-<!-- Path(s) to story context XML will be added here by context workflow -->
+- docs/sprint-artifacts/4-5-add-golden-record-consolidation-to-compaction.context.xml
 
 ### Agent Model Used
 

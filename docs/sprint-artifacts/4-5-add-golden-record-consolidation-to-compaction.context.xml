@@ -1,0 +1,208 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>5</storyId>
+    <title>Add Golden Record Consolidation to Compaction</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/4-5-add-golden-record-consolidation-to-compaction.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>memory system</asA>
+    <iWant>compaction to merge semantically related memories into dense records</iWant>
+    <soThat>5 Buffett memories become 1 high-quality memory</soThat>
+    <tasks>
+      <task id="1" title="Add node_consolidate to Compaction Graph">
+        <subtask>1.1 Open src/services/compaction_graph.py</subtask>
+        <subtask>1.2 Add skip_consolidate: bool = True parameter to run_compaction_graph</subtask>
+        <subtask>1.3 Create node_consolidate function after node_dedup</subtask>
+        <subtask>1.4 Add node to graph: graph.add_node("consolidate", node_consolidate)</subtask>
+        <subtask>1.5 Update graph edges: dedup -> consolidate -> load</subtask>
+        <subtask>1.6 Add skip logic: if skip_consolidate is True, pass through unchanged</subtask>
+      </task>
+      <task id="2" title="Implement Topic Clustering">
+        <subtask>2.1 Create _cluster_memories(memories, threshold=0.75) function</subtask>
+        <subtask>2.2 Compute pairwise cosine similarity between memory embeddings</subtask>
+        <subtask>2.3 Group memories with similarity > threshold into clusters</subtask>
+        <subtask>2.4 Filter clusters: keep only those with 3-10 memories</subtask>
+        <subtask>2.5 Return list of clusters</subtask>
+      </task>
+      <task id="3" title="Create Consolidation Prompt">
+        <subtask>3.1 Add CONSOLIDATION_PROMPT to src/services/prompts.py</subtask>
+        <subtask>3.2 Define prompt structure for merging related memories</subtask>
+        <subtask>3.3 Define output schema: {content, confidence, tags}</subtask>
+      </task>
+      <task id="4" title="Implement LLM Consolidation">
+        <subtask>4.1 Create _consolidate_cluster(cluster) function</subtask>
+        <subtask>4.2 Format cluster memories for prompt</subtask>
+        <subtask>4.3 Call LLM with CONSOLIDATION_PROMPT</subtask>
+        <subtask>4.4 Parse response into consolidated memory</subtask>
+        <subtask>4.5 Set confidence = max(source confidences)</subtask>
+        <subtask>4.6 Set tags = union(source tags)</subtask>
+        <subtask>4.7 Add metadata: consolidated_from: [source_ids]</subtask>
+      </task>
+      <task id="5" title="Handle Storage and Deletion">
+        <subtask>5.1 Store consolidated memory via upsert_memories</subtask>
+        <subtask>5.2 Delete source memories only after successful upsert</subtask>
+        <subtask>5.3 Log consolidation: [graph.consolidate] merged {n} -> 1</subtask>
+        <subtask>5.4 Track metrics: consolidated_count, sources_removed</subtask>
+      </task>
+      <task id="6" title="Add API Parameter">
+        <subtask>6.1 Open src/app.py</subtask>
+        <subtask>6.2 Add skip_consolidate: bool = Query(default=True) to compact endpoint</subtask>
+        <subtask>6.3 Pass parameter through to run_compaction_graph</subtask>
+        <subtask>6.4 Update endpoint documentation</subtask>
+      </task>
+      <task id="7" title="Test Consolidation">
+        <subtask>7.1 Create test user with 5 similar Buffett memories</subtask>
+        <subtask>7.2 Run compaction with skip_consolidate=False</subtask>
+        <subtask>7.3 Verify: 5 source memories deleted</subtask>
+        <subtask>7.4 Verify: 1 consolidated memory created</subtask>
+        <subtask>7.5 Verify: consolidated memory contains all key facts</subtask>
+        <subtask>7.6 Verify: confidence and tags are correct</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Add consolidation step after deduplication in compaction graph - new node: node_consolidate runs after node_dedup, only runs if skip_consolidate flag is False (default: True for MVP)</criterion>
+    <criterion id="AC2">Cluster memories by topic/theme using embedding similarity - group memories with similarity > 0.75 into clusters, min cluster size: 3, max cluster size: 10</criterion>
+    <criterion id="AC3">Use LLM to synthesize cluster into single golden record - preserve key facts, generate confidence = max(source confidences), merge tags</criterion>
+    <criterion id="AC4">Preserve highest confidence, merge tags - golden record confidence = max of all source confidences, tags = union of all source tags, include metadata: consolidated_from: [list of source IDs]</criterion>
+    <criterion id="AC5">Test: 5 similar memories -> 1 consolidated memory - input: 5 Buffett-related memories with different wording, output: 1 comprehensive memory, verify source memories deleted</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-extraction-quality.md</path>
+        <title>Epic 4: Memory Extraction Quality Improvements</title>
+        <section>Story 4.5</section>
+        <snippet>Add consolidation step after deduplication in compaction graph. Cluster memories by topic/theme. Use LLM to synthesize cluster into single golden record.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Compaction Pipeline</section>
+        <snippet>Compaction graph handles TTL cleanup, deduplication, and memory re-extraction. Uses LangGraph for DAG execution.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>src/services/compaction_graph.py</path>
+        <kind>service</kind>
+        <symbol>build_compaction_graph, run_compaction_graph, node_dedup, node_apply</symbol>
+        <lines>101-373</lines>
+        <reason>Main file to modify - add node_consolidate after node_dedup, update graph edges</reason>
+      </file>
+      <file>
+        <path>src/services/compaction_ops.py</path>
+        <kind>service</kind>
+        <symbol>simple_deduplicate, ttl_cleanup</symbol>
+        <lines>44-80</lines>
+        <reason>Contains deduplication logic with similarity threshold (0.85), reference for clustering approach</reason>
+      </file>
+      <file>
+        <path>src/services/prompts.py</path>
+        <kind>prompts</kind>
+        <symbol>EXTRACTION_PROMPT, WORTHINESS_PROMPT</symbol>
+        <lines>1-600</lines>
+        <reason>Add CONSOLIDATION_PROMPT here for merging related memories</reason>
+      </file>
+      <file>
+        <path>src/services/embedding_utils.py</path>
+        <kind>utility</kind>
+        <symbol>generate_embedding</symbol>
+        <reason>Used for computing memory embeddings for similarity clustering</reason>
+      </file>
+      <file>
+        <path>src/services/storage.py</path>
+        <kind>service</kind>
+        <symbol>upsert_memories</symbol>
+        <reason>Used to store consolidated golden records</reason>
+      </file>
+      <file>
+        <path>src/app.py</path>
+        <kind>api</kind>
+        <symbol>compact_single_user</symbol>
+        <lines>1326-1352</lines>
+        <reason>Add skip_consolidate parameter to compact endpoint</reason>
+      </file>
+      <file>
+        <path>src/services/forget.py</path>
+        <kind>service</kind>
+        <symbol>run_compaction_for_user</symbol>
+        <reason>Wrapper that calls compaction graph - pass skip_consolidate parameter through</reason>
+      </file>
+      <file>
+        <path>src/models.py</path>
+        <kind>model</kind>
+        <symbol>Memory</symbol>
+        <reason>Memory model for creating consolidated memory objects</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="langgraph" version="0.2.25">Graph execution framework for compaction pipeline</package>
+        <package name="openai" version="1.40.0">LLM for consolidation prompt</package>
+        <package name="chromadb" version="0.5.3">Vector store for memory embeddings</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Default skip_consolidate=True for MVP (opt-in consolidation)</constraint>
+    <constraint>Minimum cluster size: 3 memories (don't consolidate pairs)</constraint>
+    <constraint>Maximum cluster size: 10 memories (prevent over-merging)</constraint>
+    <constraint>Transaction safety: delete source memories only after successful upsert of consolidated</constraint>
+    <constraint>Similarity threshold for clustering: 0.75</constraint>
+    <constraint>This is the most complex story in Epic 4 - requires new LLM call</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>run_compaction_graph</name>
+      <kind>function</kind>
+      <signature>def run_compaction_graph(user_id: str, *, dry_run: bool = False, limit: int = 10000, skip_reextract: bool = True, skip_consolidate: bool = True) -> Dict[str, Any]</signature>
+      <path>src/services/compaction_graph.py:334</path>
+    </interface>
+    <interface>
+      <name>compact_single_user</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /v1/maintenance/compact?user_id={user_id}&amp;skip_reextract={bool}&amp;skip_consolidate={bool}</signature>
+      <path>src/app.py:1326</path>
+    </interface>
+    <interface>
+      <name>node_consolidate</name>
+      <kind>function (NEW)</kind>
+      <signature>def node_consolidate(state: Dict[str, Any]) -> Dict[str, Any]</signature>
+      <path>src/services/compaction_graph.py (to add after node_dedup)</path>
+    </interface>
+    <interface>
+      <name>CONSOLIDATION_PROMPT</name>
+      <kind>prompt (NEW)</kind>
+      <signature>Template for LLM to merge related memories into single golden record</signature>
+      <path>src/services/prompts.py (to add)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest for unit tests. Integration tests via curl to API endpoint. Follow existing patterns in tests/ directory.</standards>
+    <locations>
+      <location>tests/</location>
+      <location>Manual API testing via curl</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test that node_consolidate is called in graph flow when skip_consolidate=False</idea>
+      <idea ac="AC2">Test clustering with 5 memories at 0.80 similarity - should form 1 cluster</idea>
+      <idea ac="AC2">Test clustering with 2 memories - should NOT consolidate (below min size 3)</idea>
+      <idea ac="AC3">Test LLM consolidation produces single memory with all key facts</idea>
+      <idea ac="AC4">Test confidence = max(source confidences), tags = union(source tags)</idea>
+      <idea ac="AC5">End-to-end: 5 Buffett memories -> 1 consolidated memory</idea>
+      <idea ac="AC5">Verify source memories deleted after consolidation</idea>
+      <idea ac="AC5">Verify metadata.consolidated_from contains source IDs</idea>
+    </ideas>
+  </tests>
+</story-context>

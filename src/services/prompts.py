@@ -217,6 +217,42 @@ Commentary about the conversation itself or vague requests without specific pref
 - "User is studying for CFA certification" (specific learning goal)
 - "User wants to understand options trading for hedging" (specific intent)
 
+## Classify: State vs. Insight (CRITICAL for Finance)
+
+For every potential memory involving quantitative data, classify before extracting:
+
+**STATE** (quantitative, changes frequently, tracked by tools):
+- Holdings quantities: "User owns X shares of Y"
+- Portfolio values: "User's position is worth $X"
+- Price targets: "User's target for X is $Y"
+- Account balances: "User has $X in savings"
+
+→ Action: Extract to `portfolio` object ONLY. Do NOT create memory content.
+  The Portfolio tool tracks this state data separately.
+
+**INSIGHT** (qualitative, stable, explains reasoning):
+- Investment thesis: "User bought X because of Y"
+- Risk tolerance: "User prefers defensive positions"
+- Strategy: "User follows Buffett's value investing"
+- Market view: "User is bearish on tech due to rate hikes"
+
+→ Action: Extract as memory content with high confidence.
+  Include `portfolio.ticker` for reference if applicable.
+
+**Routing Examples:**
+
+Input: "I bought 100 shares of AAPL at $150"
+→ portfolio: {ticker: "AAPL", quantity: 100, price: 150}
+→ content: (NONE - pure state, no insight)
+
+Input: "I bought AAPL because I love their ecosystem"
+→ portfolio: {ticker: "AAPL"}
+→ content: "User bought AAPL because of love for Apple ecosystem."
+
+Input: "I own 2810 shares of RKLB because I believe in Neutron's reusability"
+→ portfolio: {ticker: "RKLB", quantity: 2810}
+→ content: "User holds RKLB because of belief in Neutron rocket reusability."
+
 ## Domain-Specific Rules
 
 ### Basic Profile Information (Identity & Bio) (HIGHEST PRIORITY)
@@ -350,7 +386,7 @@ User: "Hi! I'm Sarah Chen, a 28-year-old software engineer living in San Francis
 ]
 ```
 
-### Example 1: Multi-faceted Input
+### Example 1: Multi-faceted Input (State + Non-Finance)
 **Input:**
 ```
 User: "I bought 100 shares of AAPL at $150 yesterday.
@@ -361,7 +397,7 @@ User: "I bought 100 shares of AAPL at $150 yesterday.
 ```json
 [
   {
-    "content": "User owns 100 shares of AAPL at $150.",
+    "content": null,
     "type": "explicit",
     "layer": "semantic",
     "confidence": 1.0,
@@ -385,6 +421,30 @@ User: "I bought 100 shares of AAPL at $150 yesterday.
   }
 ]
 ```
+**Note:** First entry has `content: null` because it's pure STATE data (quantity/price). Portfolio object captures the state. No memory content needed.
+
+### Example 1b: Finance with Insight
+**Input:**
+```
+User: "I bought AAPL because I believe in their services growth story."
+```
+
+**Output:**
+```json
+[
+  {
+    "content": "User bought AAPL because of belief in services growth.",
+    "type": "explicit",
+    "layer": "semantic",
+    "confidence": 1.0,
+    "tags": ["finance", "stocks", "ticker:AAPL", "investment_thesis"],
+    "portfolio": {
+      "ticker": "AAPL"
+    }
+  }
+]
+```
+**Note:** This has INSIGHT (the WHY), so memory content IS created. Portfolio object references the ticker.
 
 ### Example 2: Emotional + Temporal
 **Input:**
