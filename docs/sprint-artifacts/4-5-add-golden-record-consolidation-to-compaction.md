@@ -1,6 +1,6 @@
 # Story 4.5: Add Golden Record Consolidation to Compaction
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -233,3 +233,48 @@ Claude Opus 4.5
 | Date | Author | Change |
 |------|--------|--------|
 | 2025-12-20 | BMad Master | Story drafted from Epic 4 requirements (YOLO mode) |
+| 2025-12-21 | Dev Agent | Implementation complete - Story marked DONE |
+
+## Completion Notes
+
+### Changes Made (2025-12-21)
+
+**1. Added CONSOLIDATION_PROMPT to `src/services/prompts.py`**
+- System prompt for LLM to merge related memories
+- Preserves all key facts from sources
+- Returns single JSON object with consolidated content
+
+**2. Added helper functions to `src/services/compaction_graph.py`**
+- `_cluster_memories(memories, threshold=0.75)` - Clusters memories by embedding similarity using complete linkage
+- `_consolidate_cluster(user_id, cluster)` - Uses LLM via `_call_llm_json` to merge cluster into golden record
+- Minimum cluster size: 3, Maximum: 10
+
+**3. Added `node_consolidate` to compaction graph**
+- Runs after `node_dedup` and before `node_load`
+- Skipped by default (skip_consolidate=True for MVP)
+- Clusters memories, consolidates via LLM, stores golden record, deletes sources
+
+**4. Updated graph edges**
+- Flow: init → ttl → dedup → consolidate → load → reextract → apply → END
+
+**5. Added `skip_consolidate` parameter**
+- `run_compaction_graph()` in compaction_graph.py
+- `run_compaction_for_user()` in forget.py
+- `compact_single_user` endpoint in app.py
+
+### Test Results
+
+| Test | Result |
+|------|--------|
+| Created 5 Buffett memories | 5 memories in ChromaDB |
+| Run compaction with skip_consolidate=false | Completed successfully |
+| Cluster found | 1 cluster (3 memories met complete linkage threshold) |
+| Consolidation | 3 → 1 merged via LLM |
+| Sources removed | 3 source memories deleted |
+| Final state | 3 memories (1 consolidated + 2 original) |
+
+### Files Modified
+- `src/services/prompts.py` - Added CONSOLIDATION_PROMPT
+- `src/services/compaction_graph.py` - Added _cluster_memories, _consolidate_cluster, node_consolidate
+- `src/services/forget.py` - Added skip_consolidate parameter
+- `src/app.py` - Added skip_consolidate parameter to compact endpoint

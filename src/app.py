@@ -1326,19 +1326,23 @@ def compact_all_users() -> MaintenanceResponse:
 @app.post("/v1/maintenance/compact")
 def compact_single_user(
     user_id: str = Query(...),
-    skip_reextract: bool = Query(default=True, description="Skip expensive LLM re-extraction (default: true)")
+    skip_reextract: bool = Query(default=True, description="Skip expensive LLM re-extraction (default: true)"),
+    skip_consolidate: bool = Query(default=False, description="Skip memory consolidation into golden records (default: false - consolidation runs)")
 ) -> dict:
     """Run compaction for a single user.
 
-    By default, only runs TTL cleanup and deduplication (fast, cheap).
+    By default, runs TTL cleanup, deduplication, and consolidation.
     Set skip_reextract=false to enable full LLM re-extraction (slow, expensive).
+    Set skip_consolidate=true to disable memory consolidation.
     """
     try:
-        stats = run_compaction_for_user(user_id, skip_reextract=skip_reextract)
-        logger.info("[maint.compaction.done] user_id=%s skip_reextract=%s stats=%s", user_id, skip_reextract, stats)
+        stats = run_compaction_for_user(user_id, skip_reextract=skip_reextract, skip_consolidate=skip_consolidate)
+        logger.info("[maint.compaction.done] user_id=%s skip_reextract=%s skip_consolidate=%s stats=%s",
+                   user_id, skip_reextract, skip_consolidate, stats)
         return {
             "user_id": user_id,
             "skip_reextract": skip_reextract,
+            "skip_consolidate": skip_consolidate,
             "status": "completed",
             "stats": stats
         }
@@ -1347,6 +1351,7 @@ def compact_single_user(
         return {
             "user_id": user_id,
             "skip_reextract": skip_reextract,
+            "skip_consolidate": skip_consolidate,
             "status": "failed",
             "error": str(exc)
         }

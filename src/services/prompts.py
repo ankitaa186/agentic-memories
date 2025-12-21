@@ -1,3 +1,27 @@
+CONSOLIDATION_PROMPT = """
+You are merging related memories into a single comprehensive memory.
+
+## Guidelines
+- Preserve ALL key facts from source memories
+- Use "User" format (e.g., "User is a value investor...")
+- Combine related details into coherent statements
+- Do NOT invent new information beyond what's in the sources
+- Focus on the stable insight/preference, not transient state
+
+## Source memories to merge:
+{memories}
+
+## Return a single JSON object:
+```json
+{{
+  "content": "User ..."
+}}
+```
+
+Return ONLY the JSON object, no explanation.
+""".strip()
+
+
 WORTHINESS_PROMPT = """
 You extract whether a user's recent message is memory-worthy for personalization.
 Return ONLY valid JSON with this schema:
