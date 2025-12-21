@@ -1,6 +1,6 @@
 # Story 4.3: Add Semantic Entailment Check Before Storage
 
-Status: drafted
+Status: done
 
 ## Story
 
@@ -175,3 +175,34 @@ Claude Opus 4.5
 | Date | Author | Change |
 |------|--------|--------|
 | 2025-12-20 | BMad Master | Story drafted from Epic 4 requirements |
+| 2025-12-21 | Dev Agent | Implementation complete - Story marked DONE |
+
+## Completion Notes
+
+### Changes Made (2025-12-21)
+
+**1. EXTRACTION_PROMPT (src/services/prompts.py)**
+- Enhanced Rule 3: DEDUPLICATION with entailment reasoning
+- Added examples showing when to SKIP (entailed) vs EXTRACT (novel)
+
+**2. Compaction Threshold (src/services/compaction_ops.py)**
+- Changed `similarity_threshold` from 0.90 to 0.85
+- Catches more semantic duplicates during compaction
+
+**3. Context Retrieval Threshold (src/services/memory_context.py)**
+- Changed `similarity_threshold` from 0.30 to 0.15
+- Allows more existing memories to be passed to extraction LLM for entailment reasoning
+
+### Test Results
+
+| Test | Input | Expected | Actual |
+|------|-------|----------|--------|
+| Base memory | "I follow Buffett investing style and focus on moats" | Extract | ✅ 2 memories |
+| Entailed (should skip) | "I really admire Warren Buffett" | 0 memories | ✅ 0 memories |
+| Novel info | "I also use Munger mental models" | 1 memory | ✅ 1 memory |
+| Compaction dedup | 2 similar sci-fi memories | Remove 1 | ✅ Removed 1 |
+
+### Files Modified
+- `src/services/prompts.py` - Entailment reasoning in Rule 3
+- `src/services/compaction_ops.py` - Threshold 0.90 → 0.85
+- `src/services/memory_context.py` - Threshold 0.30 → 0.15

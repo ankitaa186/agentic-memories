@@ -20,7 +20,7 @@ logger = logging.getLogger("agentic_memories.memory_context")
 def get_relevant_existing_memories(
     request: TranscriptRequest,
     max_memories: int = 10,
-    similarity_threshold: float = 0.3
+    similarity_threshold: float = 0.15
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant existing memories for context during extraction.
@@ -54,7 +54,7 @@ def get_relevant_existing_memories(
                 offset=0
             )
             logger.info("[ctx.search] user_id=%s q='%s' got=%s", request.user_id, query, len(memories))
-            
+
             # Add unique memories that meet similarity threshold
             for memory in memories:
                 if (memory["id"] not in seen_ids and 

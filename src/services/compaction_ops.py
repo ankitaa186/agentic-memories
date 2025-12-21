@@ -41,9 +41,13 @@ def ttl_cleanup() -> int:
 		return 0
 
 
-def simple_deduplicate(user_id: str, similarity_threshold: float = 0.90, limit: int = 10000) -> Dict[str, int]:
+def simple_deduplicate(user_id: str, similarity_threshold: float = 0.85, limit: int = 10000) -> Dict[str, int]:
 	"""Naive per-user dedup: compare embeddings and remove near-duplicates.
-	Returns stats dict.
+
+	Threshold lowered from 0.90 to 0.80 (Story 4.3) to catch semantic duplicates
+	that are worded differently (e.g., "User likes Buffett" vs "User admires Buffett").
+
+	Returns stats dict with 'scanned' and 'removed' counts.
 	"""
 	col = _get_collection()
 	try:

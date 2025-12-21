@@ -126,10 +126,20 @@ Split compound statements:
 "I love sci-fi and run marathons" →
   ["User loves sci-fi books.", "User runs marathons."]
 
-**Rule 3: DEDUPLICATION**
+**Rule 3: DEDUPLICATION (with Entailment Check)**
 Given existing: "User loves science fiction."
 - "I'm a sci-fi fan" → SKIP (duplicate)
 - "I also like fantasy" → EXTRACT (new)
+
+**Entailment Reasoning:**
+Before storing, ask: "Does an existing memory strongly ENTAIL (logically imply) this new one?"
+- Existing: "User is a Buffett-style value investor."
+- New: "User likes Warren Buffett." → SKIP (existing implies this - redundant)
+- New: "User also follows Munger's mental models." → EXTRACT (adds novel info)
+
+Only store if:
+1. No existing memory covers this topic, OR
+2. New memory adds NOVEL information not captured by existing
 
 **Rule 4: LAYER ASSIGNMENT**
 - `short-term`: Time-bound facts ("tomorrow", "next week", "by Friday")
