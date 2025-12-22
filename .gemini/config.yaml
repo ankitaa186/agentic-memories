@@ -1,0 +1,49 @@
+# Gemini Code Assist Configuration
+# https://developers.google.com/gemini-code-assist/docs/customize-gemini-behavior-github
+
+have_fun: false
+
+memory_config:
+  disabled: false
+
+code_review:
+  disable: false
+  # Severity levels: LOW, MEDIUM, HIGH, CRITICAL
+  comment_severity_threshold: MEDIUM
+  # -1 for unlimited comments
+  max_review_comments: 15
+  pull_request_opened:
+    help: false
+    summary: true
+    code_review: true
+    include_drafts: false
+
+# Files and directories to exclude from code review
+ignore_patterns:
+  # Dependencies
+  - "node_modules/**"
+  - "**/__pycache__/**"
+  - "*.pyc"
+  - ".venv/**"
+  - "venv/**"
+
+  # Build artifacts
+  - "ui/dist/**"
+  - "*.egg-info/**"
+  - ".pytest_cache/**"
+
+  # Generated files
+  - "*.lock"
+  - "package-lock.json"
+
+  # IDE and editor
+  - ".idea/**"
+  - ".vscode/**"
+  - "*.swp"
+
+  # Sprint artifacts (BMM workflow outputs)
+  - "docs/sprint-artifacts/*.context.xml"
+
+  # Test fixtures and snapshots
+  - "**/__snapshots__/**"
+  - "**/fixtures/**/*.json"
