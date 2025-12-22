@@ -18,7 +18,7 @@ Agentic Memories v3.0 adds **Deterministic User Profiles** as a stable, API-acce
 - **Deferred to Post-MVP:** MCP developer tools, UI components, authentication
 
 **Current State:**
-Today, agentic-memories provides sophisticated memory storage and retrieval across 6 memory types (episodic, semantic, procedural, emotional, portfolio, identity) using polyglot persistence (3 databases). Memories are dynamically retrieved based on conversation context.
+Today, agentic-memories provides sophisticated memory storage and retrieval across 6 memory types (episodic, semantic, procedural, emotional, portfolio, identity) using polyglot persistence (3 databases + Redis cache). Memories are dynamically retrieved based on conversation context.
 
 **Future State (MVP):**
 With v3.0 MVP, companions will always know baseline user identity (deterministic profile) via REST APIs while continuing to use dynamic memories for context.
@@ -53,7 +53,7 @@ A companion can now say *"Based on your goal to save for a down payment (from pr
 **Context:**
 This enhancement builds on an existing sophisticated system:
 - Multi-part architecture (Python/FastAPI backend + React frontend)
-- 6 memory types across 4 databases (ChromaDB, TimescaleDB, PostgreSQL, Redis)
+- 6 memory types across 3 databases (ChromaDB, TimescaleDB, PostgreSQL) + Redis cache
 - LangGraph extraction pipeline with persona-aware retrieval
 - 15 REST API endpoints with hybrid multi-database queries
 - Production deployment with Docker orchestration

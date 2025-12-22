@@ -210,7 +210,7 @@ When creating a brownfield PRD, reference these key documents:
 **Codebase Size:**
 - Backend Python files: ~45
 - Frontend TypeScript files: ~10
-- Database migrations: 12 (across 3 databases)
+- Database migrations: 12 (across 2 databases)
 - Total documentation: 24+ markdown files
 
 **Database Tables:**
