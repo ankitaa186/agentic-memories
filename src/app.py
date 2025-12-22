@@ -38,7 +38,6 @@ from src.schemas import (
 )
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import ping_timescale
-from src.dependencies.neo4j_client import ping_neo4j
 from src.dependencies.redis_client import get_redis_client
 from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled
 from src.config import get_extraction_model_name, get_embedding_model_name
@@ -496,16 +495,6 @@ def health_full() -> dict:
 		ts_error = str(exc)
 	checks["timescale"] = {"ok": ts_ok, "error": ts_error}
 
-	# Neo4j check
-	neo_ok = False
-	neo_error: Optional[str] = None
-	try:
-		neo_ok, neo_error = ping_neo4j()
-	except Exception as exc:  # pragma: no cover
-		neo_ok = False
-		neo_error = str(exc)
-	checks["neo4j"] = {"ok": neo_ok, "error": neo_error}
-
 	# Redis check (optional)
 	redis_ok = None
 	redis_error: Optional[str] = None
@@ -560,7 +549,7 @@ def health_full() -> dict:
 		langfuse_error = str(exc)
 	checks["langfuse"] = {"ok": langfuse_ok, "error": langfuse_error, "enabled": is_langfuse_enabled()}
 
-	overall_ok = chroma_ok and ts_ok and neo_ok and portfolio_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
+	overall_ok = chroma_ok and ts_ok and portfolio_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
 	return {
 		"status": "ok" if overall_ok else "degraded",
 		"time": datetime.now(timezone.utc).isoformat(),

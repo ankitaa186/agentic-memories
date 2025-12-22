@@ -213,7 +213,6 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
   - `env`: Environment variables check
   - `chroma`: ChromaDB connectivity
   - `timescale`: TimescaleDB connectivity
-  - `neo4j`: Neo4j connectivity
   - `redis`: Redis connectivity
   - `portfolio`: Portfolio service status
   - `langfuse`: Langfuse tracing status
@@ -248,7 +247,6 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
 | **ChromaDB** | Vector embeddings, semantic search | All retrieval endpoints |
 | **TimescaleDB** | Time-series episodic/emotional data | /v1/narrative, temporal queries |
 | **PostgreSQL** | Structured procedural/portfolio data | /v1/portfolio/summary, skill queries |
-| **Neo4j** | Graph relationships (write-only currently) | Future: skill traversal |
 | **Redis** | Short-term memory cache, activity tracking | Hot path caching, session data |
 
 ---
@@ -277,7 +275,6 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
 **Connection Pooling:**
 - PostgreSQL/TimescaleDB: psycopg connection pools
 - ChromaDB: Persistent HTTP client
-- Neo4j: Session pooling
 - Redis: Connection pooling
 
 ---

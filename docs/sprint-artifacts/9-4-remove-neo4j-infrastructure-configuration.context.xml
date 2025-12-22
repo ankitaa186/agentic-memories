@@ -1,0 +1,225 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>9</epicId>
+    <storyId>9.4</storyId>
+    <title>Remove Neo4j Infrastructure Configuration</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/9-4-remove-neo4j-infrastructure-configuration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>DevOps engineer / backend developer</asA>
+    <iWant>to remove Neo4j from Docker, environment configuration, and migrations</iWant>
+    <soThat>the deployment infrastructure doesn't include Neo4j</soThat>
+    <tasks>
+      <task id="1" status="pending">Update docker-compose.yml (AC: 1)
+        <subtask id="1.1">Read current docker-compose.yml</subtask>
+        <subtask id="1.2">Remove NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD from API environment</subtask>
+        <subtask id="1.3">Remove any Neo4j service definition (if present)</subtask>
+        <subtask id="1.4">Remove Neo4j-related volumes/networks</subtask>
+      </task>
+      <task id="2" status="pending">Update .env and .env.example (AC: 2)
+        <subtask id="2.1">Read current .env file</subtask>
+        <subtask id="2.2">Remove NEO4J_* variables (lines 17-19)</subtask>
+        <subtask id="2.3">Verify no other Neo4j references</subtask>
+      </task>
+      <task id="3" status="pending">Archive migrations/neo4j/ (AC: 3)
+        <subtask id="3.1">Create migrations/_archived/ directory if not exists</subtask>
+        <subtask id="3.2">Move migrations/neo4j/ to migrations/_archived/neo4j/</subtask>
+        <subtask id="3.3">Verify move successful</subtask>
+      </task>
+      <task id="4" status="pending">Update migrations/migrate.sh (AC: 4)
+        <subtask id="4.1">Read current migrate.sh</subtask>
+        <subtask id="4.2">Remove Neo4j sections from prompt_for_db_connection (lines 106-116)</subtask>
+        <subtask id="4.3">Remove Neo4j from connection test (lines 160-169)</subtask>
+        <subtask id="4.4">Remove Neo4j from save/load config (lines 238-244)</subtask>
+        <subtask id="4.5">Remove run_neo4j_migrations function (lines 523-575)</subtask>
+        <subtask id="4.6">Remove rollback_neo4j_migration function (lines 669-697)</subtask>
+        <subtask id="4.7">Remove Neo4j from show_database_stats (lines 899-927)</subtask>
+        <subtask id="4.8">Remove Neo4j from validation loop (lines 826-836)</subtask>
+        <subtask id="4.9">Remove Neo4j from status loop (lines 995-1008 neo4j case)</subtask>
+        <subtask id="4.10">Remove Neo4j from migrate_up call (line 1128)</subtask>
+        <subtask id="4.11">Remove Neo4j from help text (lines 1344-1346)</subtask>
+        <subtask id="4.12">Update comments to reflect 3-database architecture</subtask>
+      </task>
+      <task id="5" status="pending">Verify and test (AC: 5, 6)
+        <subtask id="5.1">Confirm health check already updated (Story 9.3)</subtask>
+        <subtask id="5.2">Run docker-compose build and up</subtask>
+        <subtask id="5.3">Verify all services start correctly</subtask>
+        <subtask id="5.4">Run unit tests</subtask>
+        <subtask id="5.5">Test /health/full endpoint</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-9.4.1">
+      docker-compose.yml contains no NEO4J_* environment variables
+      - Remove NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD from API service environment (lines 22-24)
+      - Remove any Neo4j-related network/volume configurations
+    </criterion>
+    <criterion id="AC-9.4.2">
+      .env and .env.example contain no NEO4J_* variables
+      - Remove NEO4J_URI (line 17)
+      - Remove NEO4J_USER (line 18)
+      - Remove NEO4J_PASSWORD (line 19)
+      - Note: No .env.example exists in project root
+    </criterion>
+    <criterion id="AC-9.4.3">
+      migrations/neo4j/ directory is archived or deleted
+      - Archive to migrations/_archived/neo4j/ (preferred for audit trail)
+      - Files: 001_graph_constraints.up.cql, 001_graph_constraints.down.cql
+    </criterion>
+    <criterion id="AC-9.4.4">
+      migrations/migrate.sh contains no Neo4j migration handling
+      - Remove Neo4j prompts from prompt_for_db_connection
+      - Remove run_neo4j_migrations function
+      - Remove rollback_neo4j_migration function
+      - Remove Neo4j from validation, status, stats, and help
+    </criterion>
+    <criterion id="AC-9.4.5">
+      /health/full endpoint does not check Neo4j
+      - ALREADY DONE in Story 9.3 - ping_neo4j removed from src/app.py
+    </criterion>
+    <criterion id="AC-9.4.6">
+      docker-compose up succeeds without Neo4j service
+      - Application starts correctly
+      - All services healthy (api, ui, redis)
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-9.md</path>
+        <title>Epic 9 Technical Specification</title>
+        <section>AC-9.4: Infrastructure Removal</section>
+        <snippet>Remove Neo4j from docker-compose.yml, .env.example, migrations/neo4j/, migrations/migrate.sh, and health check endpoints</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-neo4j-removal.md</path>
+        <title>Epic 9: Neo4j Removal</title>
+        <section>Story 9.4: Remove Neo4j Infrastructure Configuration</section>
+        <snippet>Remove Neo4j from Docker, environment configuration, and migrations so the deployment infrastructure doesn't include Neo4j</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/9-3-remove-neo4j-client-and-dependencies.md</path>
+        <title>Story 9.3 (Completed Prerequisite)</title>
+        <section>Senior Developer Review - Advisory Notes</section>
+        <snippet>Story 9.4 should address docker-compose.yml Neo4j environment variables and archive/delete migrations/neo4j/ directory. Health check already updated in Story 9.3.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>docker-compose.yml</path>
+        <kind>infrastructure</kind>
+        <symbol>api.environment</symbol>
+        <lines>22-24</lines>
+        <reason>Remove NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables from API service</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>.env</path>
+        <kind>environment</kind>
+        <symbol>NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD</symbol>
+        <lines>17-19</lines>
+        <reason>Remove Neo4j environment variable definitions</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>migrations/neo4j/001_graph_constraints.up.cql</path>
+        <kind>migration</kind>
+        <symbol>Neo4j constraints/indexes</symbol>
+        <lines>1-41</lines>
+        <reason>Archive to migrations/_archived/neo4j/</reason>
+        <action>ARCHIVE</action>
+      </artifact>
+      <artifact>
+        <path>migrations/neo4j/001_graph_constraints.down.cql</path>
+        <kind>migration</kind>
+        <symbol>Neo4j rollback</symbol>
+        <lines>all</lines>
+        <reason>Archive to migrations/_archived/neo4j/</reason>
+        <action>ARCHIVE</action>
+      </artifact>
+      <artifact>
+        <path>migrations/migrate.sh</path>
+        <kind>script</kind>
+        <symbol>prompt_for_db_connection, run_neo4j_migrations, rollback_neo4j_migration, show_database_stats</symbol>
+        <lines>75-77, 106-116, 142-144, 160-169, 238-244, 523-575, 669-697, 826-836, 899-927, 995-1010, 1128, 1344-1346</lines>
+        <reason>Remove all Neo4j-related sections from migration script</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>migrations/.dbconfig</path>
+        <kind>config</kind>
+        <symbol>NEO4J_URI, NEO4J_USER</symbol>
+        <lines>8-10</lines>
+        <reason>Remove Neo4j connection config storage</reason>
+        <action>MODIFY</action>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="neo4j" version="5.23.1" note="ALREADY REMOVED in Story 9.3" action="VERIFIED_REMOVED" />
+      </python>
+      <docker>
+        <service name="api" note="Remove NEO4J_* env vars" />
+        <service name="redis" note="Keep as-is" />
+        <service name="ui" note="Keep as-is" />
+      </docker>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="scope">Health check already updated in Story 9.3 - AC-9.4.5 is pre-completed</constraint>
+    <constraint type="scope">No .env.example exists - only .env needs modification</constraint>
+    <constraint type="preference">Archive migrations to _archived/ rather than delete for audit trail</constraint>
+    <constraint type="testing">Run ./run_docker.sh to deploy and test changes</constraint>
+    <constraint type="testing">Verify unit tests pass: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>docker-compose.yml API environment</name>
+      <kind>docker config</kind>
+      <signature>environment: - NEO4J_URI=... - NEO4J_USER=... - NEO4J_PASSWORD=...</signature>
+      <path>docker-compose.yml:22-24</path>
+      <change>DELETE lines</change>
+    </interface>
+    <interface>
+      <name>.env Neo4j variables</name>
+      <kind>environment file</kind>
+      <signature>NEO4J_URI=bolt://... NEO4J_USER=neo4j NEO4J_PASSWORD=...</signature>
+      <path>.env:17-19</path>
+      <change>DELETE lines</change>
+    </interface>
+    <interface>
+      <name>migrations/migrate.sh run_neo4j_migrations</name>
+      <kind>bash function</kind>
+      <signature>run_neo4j_migrations()</signature>
+      <path>migrations/migrate.sh:523-575</path>
+      <change>DELETE function</change>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with unittest.mock. Run tests in docker: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v
+    </standards>
+    <locations>
+      <location>tests/unit/</location>
+      <location>tests/conftest.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-9.4.1">Verify grep -i "neo4j" docker-compose.yml returns no matches</idea>
+      <idea ac="AC-9.4.2">Verify grep -i "neo4j" .env returns no matches</idea>
+      <idea ac="AC-9.4.3">Verify ls migrations/_archived/neo4j/ shows archived files</idea>
+      <idea ac="AC-9.4.4">Verify grep -i "neo4j" migrations/migrate.sh returns no matches</idea>
+      <idea ac="AC-9.4.5">Verify curl http://localhost:8080/health/full has no neo4j key (already done)</idea>
+      <idea ac="AC-9.4.6">Verify ./run_docker.sh succeeds and docker ps shows all 3 services running</idea>
+    </ideas>
+  </tests>
+</story-context>

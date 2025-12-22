@@ -73,9 +73,6 @@ prompt_for_db_connection() {
             echo -e "${GREEN}Enter passwords for databases:${NC}"
             read -sp "PostgreSQL/TimescaleDB Password: " PG_PASSWORD
             echo ""
-            read -sp "Neo4j Password [password]: " NEO4J_PASSWORD
-            NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
-            echo ""
             echo -e "${YELLOW}ChromaDB Password (if any, or press Enter):${NC}"
             read -sp "" CHROMA_PASSWORD
             echo ""
@@ -102,19 +99,7 @@ prompt_for_db_connection() {
         read -sp "Password: " PG_PASSWORD
         echo ""
         echo ""
-        
-        echo -e "${BLUE}═══ Neo4j ═══${NC}"
-        read -p "URI [bolt://localhost:7687]: " NEO4J_URI
-        NEO4J_URI=${NEO4J_URI:-bolt://localhost:7687}
-        
-        read -p "User [neo4j]: " NEO4J_USER
-        NEO4J_USER=${NEO4J_USER:-neo4j}
-        
-        read -sp "Password [password]: " NEO4J_PASSWORD
-        NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
-        echo ""
-        echo ""
-        
+
         echo -e "${BLUE}═══ ChromaDB ═══${NC}"
         read -p "Host [localhost]: " CHROMA_HOST
         CHROMA_HOST=${CHROMA_HOST:-localhost}
@@ -138,9 +123,8 @@ prompt_for_db_connection() {
     
     # Construct DSNs
     export TIMESCALE_DSN="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}"
-    
-	# Export for Neo4j and ChromaDB usage
-	export NEO4J_URI NEO4J_USER NEO4J_PASSWORD
+
+	# Export for ChromaDB usage
 	export CHROMA_HOST CHROMA_PORT
 	# Ensure defaults for Chroma (v2 servers expect tenant/database)
 	export CHROMA_TENANT=${CHROMA_TENANT:-agentic-memories}
@@ -156,18 +140,7 @@ prompt_for_db_connection() {
         log_error "❌ PostgreSQL/TimescaleDB connection failed"
         return 1
     fi
-    
-    # Test Neo4j (if cypher-shell is available)
-    if command -v cypher-shell &> /dev/null; then
-        if cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USER" -p "$NEO4J_PASSWORD" "RETURN 1" > /dev/null 2>&1; then
-            log_success "✅ Neo4j connected"
-        else
-            log_warning "⚠️  Neo4j connection failed (will skip Neo4j migrations)"
-        fi
-    else
-        log_warning "⚠️  cypher-shell not found (will skip Neo4j migrations)"
-    fi
-    
+
     # Test ChromaDB (if python3 is available)
     if command -v python3 &> /dev/null; then
         if python3 -c "from chromadb import HttpClient; HttpClient(host='$CHROMA_HOST', port=$CHROMA_PORT).heartbeat()" > /dev/null 2>&1; then
@@ -234,10 +207,6 @@ PG_HOST="$PG_HOST"
 PG_PORT="$PG_PORT"
 PG_DATABASE="$PG_DATABASE"
 PG_USER="$PG_USER"
-
-# Neo4j
-NEO4J_URI="$NEO4J_URI"
-NEO4J_USER="$NEO4J_USER"
 
 # ChromaDB
 CHROMA_HOST="$CHROMA_HOST"
@@ -520,60 +489,6 @@ run_sql_migrations() {
     fi
 }
 
-# Run Neo4j migrations
-run_neo4j_migrations() {
-    local migrations_dir="$SCRIPT_DIR/neo4j"
-    
-    if [ ! -d "$migrations_dir" ]; then
-        log_warning "No neo4j migrations directory found"
-        return 0
-    fi
-    
-    log_info "Processing Neo4j migrations..."
-    
-    # Check if Neo4j is accessible
-    if ! command -v cypher-shell &> /dev/null; then
-        log_warning "cypher-shell not found, skipping Neo4j migrations"
-        log_info "Run manually: docker exec <neo4j-container> cypher-shell < migrations/neo4j/001_graph_constraints.cql"
-        return 0
-    fi
-    
-    local applied=0
-    local skipped=0
-    
-    for migration_file in $(ls "$migrations_dir"/*.up.cql 2>/dev/null | sort -V); do
-        local filename=$(basename "$migration_file")
-        
-        if is_applied "neo4j" "$filename"; then
-            log_info "  ⏭️  $filename (already applied)"
-            ((skipped++))
-            continue
-        fi
-        
-        if [ "$DRY_RUN" = true ]; then
-            log_info "  [DRY-RUN] Would apply $filename"
-            ((applied++))
-            continue
-        fi
-        
-        log_info "  🔄 Applying $filename..."
-        
-        # Run the migration (requires NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars)
-        if cat "$migration_file" | cypher-shell -a "${NEO4J_URI:-bolt://localhost:7687}" \
-                                                  -u "${NEO4J_USER:-neo4j}" \
-                                                  -p "${NEO4J_PASSWORD:-password}"; then
-            local checksum=$(get_checksum "$migration_file")
-            mark_applied "neo4j" "$filename" "$checksum"
-            log_success "  ✅ Applied $filename"
-            ((applied++))
-        else
-            log_warning "  ⚠️  Failed to apply $filename (may need manual intervention)"
-        fi
-    done
-    
-    log_success "Neo4j: Applied $applied, Skipped $skipped"
-}
-
 # Run ChromaDB migrations
 run_chromadb_migrations() {
     local migrations_dir="$SCRIPT_DIR/chromadb"
@@ -666,36 +581,6 @@ rollback_sql_migration() {
     fi
 }
 
-# Rollback Neo4j migration
-rollback_neo4j_migration() {
-    local up_filename="$1"
-    local down_filename="${up_filename/.up./.down.}"
-    local down_file="$SCRIPT_DIR/neo4j/$down_filename"
-    
-    if [ ! -f "$down_file" ]; then
-        log_error "Down migration not found: $down_file"
-        return 1
-    fi
-    
-    if [ "$DRY_RUN" = true ]; then
-        log_info "  [DRY-RUN] Would rollback $up_filename using $down_filename"
-        return 0
-    fi
-    
-    log_info "  🔄 Rolling back $up_filename..."
-    
-    if cat "$down_file" | cypher-shell -a "${NEO4J_URI:-bolt://localhost:7687}" \
-                                       -u "${NEO4J_USER:-neo4j}" \
-                                       -p "${NEO4J_PASSWORD:-password}"; then
-        unmark_applied "neo4j" "$up_filename"
-        log_success "  ✅ Rolled back $up_filename"
-        return 0
-    else
-        log_warning "  ⚠️  Failed to rollback $up_filename"
-        return 1
-    fi
-}
-
 # Rollback ChromaDB migration
 rollback_chromadb_migration() {
     local up_filename="$1"
@@ -772,9 +657,6 @@ rollback_last() {
             timescaledb|postgres)
                 rollback_sql_migration "$db_type" "$filename" || rollback_failed=true
                 ;;
-            neo4j)
-                rollback_neo4j_migration "$filename" || rollback_failed=true
-                ;;
             chromadb)
                 rollback_chromadb_migration "$filename" || rollback_failed=true
                 ;;
@@ -820,17 +702,6 @@ validate_migrations() {
                     fi
                 fi
             done
-        fi
-    done
-    
-    # Check Neo4j
-    for up_file in "$SCRIPT_DIR/neo4j"/*.up.cql; do
-        if [ -f "$up_file" ]; then
-            local down_file="${up_file/.up./.down.}"
-            if [ ! -f "$down_file" ]; then
-                log_warning "Missing down migration: $(basename "$down_file")"
-                ((errors++))
-            fi
         fi
     done
     
@@ -895,39 +766,7 @@ show_database_stats() {
     fi
     
     echo ""
-    
-    # Neo4j Statistics
-    echo -e "${GREEN}Neo4j:${NC}"
-    echo "─────────────────────────────────────────────────────────────"
-    
-    local neo4j_uri="${NEO4J_URI:-bolt://localhost:7687}"
-    local neo4j_user="${NEO4J_USER:-neo4j}"
-    local neo4j_pass="${NEO4J_PASSWORD:-password}"
-    
-    if command -v cypher-shell &> /dev/null; then
-        local node_count=$(cypher-shell -a "$neo4j_uri" -u "$neo4j_user" -p "$neo4j_pass" \
-            "MATCH (n) RETURN count(n) as count" --format plain 2>/dev/null | tail -n 1)
-        local rel_count=$(cypher-shell -a "$neo4j_uri" -u "$neo4j_user" -p "$neo4j_pass" \
-            "MATCH ()-[r]->() RETURN count(r) as count" --format plain 2>/dev/null | tail -n 1)
-        
-        if [ -n "$node_count" ] && [ -n "$rel_count" ]; then
-            echo -e "  Nodes:         ${node_count}"
-            echo -e "  Relationships: ${rel_count}"
-            echo ""
-            
-            echo "  Node Labels:"
-            cypher-shell -a "$neo4j_uri" -u "$neo4j_user" -p "$neo4j_pass" \
-                "CALL db.labels() YIELD label RETURN label ORDER BY label" 2>/dev/null || echo "    (unable to retrieve)"
-        else
-            echo -e "  ${YELLOW}Could not retrieve Neo4j stats (check connection)${NC}"
-        fi
-    else
-        echo -e "  ${YELLOW}cypher-shell not installed - skipping Neo4j stats${NC}"
-        echo -e "  ${YELLOW}Install with: brew install cypher-shell (macOS)${NC}"
-    fi
-    
-    echo ""
-    
+
     # ChromaDB Statistics
     echo -e "${GREEN}ChromaDB:${NC}"
     echo "─────────────────────────────────────────────────────────────"
@@ -992,11 +831,10 @@ show_status() {
     echo "Pending Migrations:"
     
     # Check each database type
-    for db_type in timescaledb postgres neo4j chromadb; do
+    for db_type in timescaledb postgres chromadb; do
         local dir="$SCRIPT_DIR/$db_type"
         if [ -d "$dir" ]; then
             local ext="up.sql"
-            [ "$db_type" = "neo4j" ] && ext="up.cql"
             [ "$db_type" = "chromadb" ] && ext="up.py"
             
             for file in $(ls "$dir"/*.$ext 2>/dev/null | sort -V); do
@@ -1123,12 +961,7 @@ migrate_up() {
         run_sql_migrations "postgres" || migration_failed=true
         echo ""
     fi
-    
-    if [ "$migration_failed" = false ]; then
-        run_neo4j_migrations || migration_failed=true
-        echo ""
-    fi
-    
+
     if [ "$migration_failed" = false ]; then
         run_chromadb_migrations || migration_failed=true
     fi
@@ -1341,9 +1174,6 @@ else
             echo ""
             echo "Environment Variables:"
             echo "  TIMESCALE_DSN            PostgreSQL/TimescaleDB connection string (optional)"
-            echo "  NEO4J_URI                Neo4j connection URI (optional, default: bolt://localhost:7687)"
-            echo "  NEO4J_USER               Neo4j username (optional, default: neo4j)"
-            echo "  NEO4J_PASSWORD           Neo4j password (optional, default: password)"
             echo "  CHROMA_HOST              ChromaDB host (optional, default: localhost)"
             echo "  CHROMA_PORT              ChromaDB port (optional, default: 8000)"
             echo ""

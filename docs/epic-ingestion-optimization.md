@@ -54,7 +54,7 @@ During comprehensive profile capture quality testing (2025-11-21), we identified
 Worthiness Check:    500-1000ms  (LLM call)
 Memory Extraction:   1000-1500ms (LLM call)
 Profile Extraction:  1000-1500ms (LLM call)
-Storage (Sequential): 400ms       (ChromaDB + PostgreSQL + Neo4j)
+Storage (Sequential): 300ms       (ChromaDB + PostgreSQL)
 -----------------------------------------------
 Total:               2900-3400ms
 ```
@@ -132,7 +132,6 @@ Total:                1350-2000ms (40-58% improvement)
 **Then** the system parallelizes storage operations:
 - ChromaDB vector storage (semantic + episodic memories)
 - PostgreSQL structured storage (all memory types + profile updates)
-- Neo4j graph storage (procedural + emotional patterns)
 
 **And** the pipeline waits for ALL storage operations to complete
 **And** if one storage fails, others continue (partial success handling)
@@ -323,8 +322,6 @@ Sequential Storage: 5 operations
                      │  │ ChromaDB │  │  ← Parallel
                      │  ├──────────┤  │
                      │  │PostgreSQL│  │  ← Parallel
-                     │  ├──────────┤  │
-                     │  │  Neo4j   │  │  ← Parallel
                      │  └──────────┘  │
                      └────────┬───────┘
                               │
@@ -412,7 +409,6 @@ async def store_all_parallel(
         {
             "chromadb": {"status": "success", "stored": 10},
             "postgresql": {"status": "success", "stored": 15},
-            "neo4j": {"status": "success", "stored": 3},
             "profile": {"status": "success", "updated": 5}
         }
     """
@@ -433,15 +429,6 @@ async def store_all_parallel(
             logger.error(f"PostgreSQL storage failed: {e}")
             return {"status": "error", "error": str(e)}
 
-    async def store_neo4j():
-        try:
-            procedural = [m for m in memories if m.memory_type == "procedural"]
-            result = await neo4j_client.store_graph(procedural)
-            return {"status": "success", "stored": len(procedural)}
-        except Exception as e:
-            logger.error(f"Neo4j storage failed: {e}")
-            return {"status": "error", "error": str(e)}
-
     async def store_profile():
         try:
             result = await profile_service.apply_updates(user_id, profile_updates)
@@ -454,7 +441,6 @@ async def store_all_parallel(
     results = await asyncio.gather(
         store_chromadb(),
         store_postgresql(),
-        store_neo4j(),
         store_profile(),
         return_exceptions=True
     )
@@ -462,8 +448,7 @@ async def store_all_parallel(
     return {
         "chromadb": results[0],
         "postgresql": results[1],
-        "neo4j": results[2],
-        "profile": results[3]
+        "profile": results[2]
     }
 
 def store_all_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -691,7 +676,6 @@ So that **storage latency is determined by the slowest operation, not the sum of
    **Then** the system parallelizes using `asyncio.gather()`:
    - ChromaDB vector storage
    - PostgreSQL structured storage
-   - Neo4j graph storage
    - Profile updates
 
 2. **And** each storage operation returns status:
@@ -699,7 +683,6 @@ So that **storage latency is determined by the slowest operation, not the sum of
    {
      "chromadb": {"status": "success", "stored": 10, "duration_ms": 120},
      "postgresql": {"status": "success", "stored": 15, "duration_ms": 85},
-     "neo4j": {"status": "error", "error": "Connection timeout", "duration_ms": 5000},
      "profile": {"status": "success", "updated": 5, "duration_ms": 60}
    }
    ```

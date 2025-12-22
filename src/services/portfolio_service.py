@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from psycopg import Connection
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
-from src.dependencies.neo4j_client import get_neo4j_driver
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ class PortfolioService:
     """Service for managing portfolio holdings and financial tracking"""
 
     def __init__(self):
-        self.neo4j_driver = get_neo4j_driver()
+        pass
 
     def upsert_holding_from_memory(self, user_id: str, portfolio_metadata: Dict[str, Any], memory_id: str) -> Optional[str]:
         """
@@ -212,9 +211,6 @@ class PortfolioService:
                 # Commit the transaction
                 conn.commit()
 
-                # Create Neo4j node and relationships (async, fire-and-forget)
-                self._create_holding_graph_node(holding_id, user_id, ticker, asset_name)
-
                 return holding_id
 
         except Exception as e:
@@ -224,28 +220,6 @@ class PortfolioService:
             logger.error("Error in _upsert_single_holding: %s", e)
             return None
 
-    def _create_holding_graph_node(self, holding_id: str, user_id: str, ticker: Optional[str], asset_name: Optional[str]) -> None:
-        """Create Neo4j node for holding (non-blocking)"""
-        if not self.neo4j_driver or not (ticker or asset_name):
-            return
-        
-        try:
-            with self.neo4j_driver.session() as session:
-                session.run("""
-                    MERGE (h:Holding {id: $holding_id})
-                    SET h.user_id = $user_id,
-                        h.ticker = $ticker,
-                        h.asset_name = $asset_name,
-                        h.updated_at = datetime()
-                """, {
-                    "holding_id": holding_id,
-                    "user_id": user_id,
-                    "ticker": ticker,
-                    "asset_name": asset_name
-                })
-        except Exception as e:
-            print(f"Error creating holding graph node: {e}")
-    
     def get_holdings(self, user_id: str) -> List[Dict[str, Any]]:
         """
         Retrieve current holdings for a user (simplified schema - Story 3.3)

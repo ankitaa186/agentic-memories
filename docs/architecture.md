@@ -81,7 +81,6 @@ LangChain:       0.3.0
 ChromaDB:        0.5.3
 Redis:           5.0.6
 PostgreSQL:      16+ (via psycopg latest)
-Neo4j:           5.23.1
 Langfuse:        2.36.0
 ```
 
@@ -1257,7 +1256,7 @@ requirements.txt
 |-------|-----------|---------|-------------|-----------------|
 | **4.1** Financial Aggregation Tool | Smart aggregation | `services/smart_aggregation.py` | Async parallel queries | None (reads only) |
 | **4.2** Financial MCP Tool | MCP tool | `mcp/tools/financial_tool.py` | Smart aggregation wrapper | None |
-| **4.3** Skills MCP Tool | MCP tool | `mcp/tools/skills_tool.py` | PostgreSQL + Neo4j query | None (reads only) |
+| **4.3** Skills MCP Tool | MCP tool | `mcp/tools/skills_tool.py` | PostgreSQL query | None (reads only) |
 | **4.4** Social MCP Tool | MCP tool | `mcp/tools/social_tool.py` | PostgreSQL + TimescaleDB query | None (reads only) |
 | **4.5** Content MCP Tool | MCP tool | `mcp/tools/content_tool.py` | ChromaDB vector search | None (reads only) |
 | **4.6-4.8** Tool Implementations | Tool classes | `mcp/tools/*.py` | BaseMCPTool abstract class | None |

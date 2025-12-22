@@ -15,6 +15,5 @@ langchain==0.3.0
 python-jose[cryptography]==3.3.0
 psycopg[binary]
 psycopg-pool==3.2.1
-neo4j==5.23.1
 langfuse==2.36.0
 debugpy==1.8.0

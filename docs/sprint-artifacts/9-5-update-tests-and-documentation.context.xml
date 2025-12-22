@@ -1,0 +1,207 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>9</epicId>
+    <storyId>9.5</storyId>
+    <title>Update Tests and Documentation</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/9-5-update-tests-and-documentation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>backend developer</asA>
+    <iWant>to update all tests and documentation to reflect Neo4j removal</iWant>
+    <soThat>tests are accurate and documentation matches the new architecture</soThat>
+    <tasks>
+      <task id="1" status="pending">Update test files (AC: 1, 2, 3)
+        <subtask id="1.1">Search tests/ for Neo4j mocks: grep -r "neo4j" tests/</subtask>
+        <subtask id="1.2">Review and update test files identified (most already done in 9.3)</subtask>
+        <subtask id="1.3">Run full test suite: pytest tests/ -v</subtask>
+        <subtask id="1.4">Verify all tests pass</subtask>
+        <subtask id="1.5">Check test coverage: pytest tests/ --cov=src --cov-report=term</subtask>
+        <subtask id="1.6">Verify coverage >= 85% baseline</subtask>
+      </task>
+      <task id="2" status="pending">Update architecture documentation (AC: 4)
+        <subtask id="2.1">Update docs/architecture.md to show 3 databases (not 4)</subtask>
+        <subtask id="2.2">Remove Neo4j from Technology Stack section (line 84)</subtask>
+        <subtask id="2.3">Update architecture diagrams (text-based)</subtask>
+        <subtask id="2.4">Update Database Schema Design section</subtask>
+        <subtask id="2.5">Remove Neo4j from System Architecture Alignment (line 1260)</subtask>
+      </task>
+      <task id="3" status="pending">Update setup documentation (AC: 5)
+        <subtask id="3.1">Search for README files: find . -name "README*"</subtask>
+        <subtask id="3.2">Review and update any Neo4j setup instructions</subtask>
+        <subtask id="3.3">Update prerequisites sections</subtask>
+        <subtask id="3.4">Update docker-compose instructions</subtask>
+      </task>
+      <task id="4" status="pending">Complete documentation sweep (AC: 6)
+        <subtask id="4.1">Run comprehensive search: grep -ri "neo4j" docs/</subtask>
+        <subtask id="4.2">Review all matches and update as needed</subtask>
+        <subtask id="4.3">Update docs/epic-neo4j-removal.md status to "Completed"</subtask>
+        <subtask id="4.4">Add completion date to epic document</subtask>
+        <subtask id="4.5">Verify no broken links</subtask>
+      </task>
+      <task id="5" status="pending">Final verification
+        <subtask id="5.1">Run full test suite one final time</subtask>
+        <subtask id="5.2">Verify all CI/CD checks pass</subtask>
+        <subtask id="5.3">Review git diff for accuracy</subtask>
+        <subtask id="5.4">Ensure no dead code remains</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-9.5.1">
+      All test files containing Neo4j mocks are updated or removed
+      - ALREADY DONE in Story 9.3: conftest.py and test_app_health.py cleaned
+      - Verify no remaining Neo4j references in tests/
+      - grep -r "neo4j" tests/ returns no matches
+    </criterion>
+    <criterion id="AC-9.5.2">
+      pytest tests/ passes with 100% success rate
+      - All tests execute successfully
+      - No skipped tests due to missing Neo4j
+      - Current baseline: 85 passed, 1 skipped
+    </criterion>
+    <criterion id="AC-9.5.3">
+      Test coverage remains at or above current baseline
+      - Coverage should be >= 85%
+      - Document any coverage changes
+    </criterion>
+    <criterion id="AC-9.5.4">
+      Architecture documentation updated to show 3 databases
+      - Update docs/architecture.md Technology Stack (line 84)
+      - Remove "Neo4j: 5.23.1" from technology list
+      - Update Skills MCP Tool reference (line 1260)
+      - Update any architecture diagrams
+    </criterion>
+    <criterion id="AC-9.5.5">
+      README or setup docs updated to remove Neo4j setup steps
+      - No README in project root (only ui/node_modules)
+      - Check any setup guides in docs/
+    </criterion>
+    <criterion id="AC-9.5.6">
+      grep -ri "neo4j" docs/ shows updated/removed references
+      - Update docs/epic-neo4j-removal.md status to "Completed"
+      - Most references are sprint artifacts (historical)
+      - Update architecture.md references
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-9.md</path>
+        <title>Epic 9 Technical Specification</title>
+        <section>AC-9.5: Tests and Documentation</section>
+        <snippet>Update tests, architecture docs, and mark epic as complete</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-neo4j-removal.md</path>
+        <title>Epic 9: Neo4j Removal</title>
+        <section>Story 9.5: Update Tests and Documentation</section>
+        <snippet>Update status to "Completed" and add completion date</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Technology Stack, System Architecture Alignment</section>
+        <snippet>Line 84: "Neo4j: 5.23.1" needs removal; Line 1260: Skills MCP Tool Neo4j reference</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <kind>documentation</kind>
+        <symbol>Technology Stack</symbol>
+        <lines>84</lines>
+        <reason>Remove Neo4j from technology stack list</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <kind>documentation</kind>
+        <symbol>Skills MCP Tool</symbol>
+        <lines>1260</lines>
+        <reason>Update to remove Neo4j query reference</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>docs/epic-neo4j-removal.md</path>
+        <kind>documentation</kind>
+        <symbol>Status</symbol>
+        <lines>6</lines>
+        <reason>Update status from "Proposed" to "Completed"</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>tests/</path>
+        <kind>test</kind>
+        <symbol>Neo4j mocks</symbol>
+        <lines>N/A</lines>
+        <reason>Already cleaned in Story 9.3 - verify no remaining references</reason>
+        <action>VERIFY</action>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="neo4j" version="5.23.1" note="ALREADY REMOVED in Story 9.3" action="VERIFIED_REMOVED" />
+        <package name="pytest" version="8.3.5" note="For running test suite" action="USE" />
+        <package name="pytest-cov" version="4.1.0" note="For coverage reporting" action="USE" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="scope">Test cleanup already done in Story 9.3 - AC-9.5.1 likely pre-completed</constraint>
+    <constraint type="scope">No project-level README exists - only ui/node_modules READMEs</constraint>
+    <constraint type="scope">Sprint artifact docs contain historical Neo4j references - keep for audit trail</constraint>
+    <constraint type="testing">Run pytest tests/ -v to verify all tests pass</constraint>
+    <constraint type="testing">Run pytest tests/ --cov=src --cov-report=term for coverage</constraint>
+    <constraint type="testing">Verify coverage >= 85% baseline from Story 9.4</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>docs/architecture.md Technology Stack</name>
+      <kind>documentation</kind>
+      <signature>Neo4j: 5.23.1</signature>
+      <path>docs/architecture.md:84</path>
+      <change>DELETE line or update section</change>
+    </interface>
+    <interface>
+      <name>docs/architecture.md Skills MCP Tool</name>
+      <kind>documentation</kind>
+      <signature>PostgreSQL + Neo4j query</signature>
+      <path>docs/architecture.md:1260</path>
+      <change>UPDATE to PostgreSQL only</change>
+    </interface>
+    <interface>
+      <name>docs/epic-neo4j-removal.md Status</name>
+      <kind>documentation</kind>
+      <signature>**Status:** Proposed</signature>
+      <path>docs/epic-neo4j-removal.md:6</path>
+      <change>UPDATE to Completed</change>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with unittest.mock. Run: docker exec agentic-memories-api-1 python -m pytest tests/ -v
+      Coverage: docker exec agentic-memories-api-1 python -m pytest tests/ --cov=src --cov-report=term
+    </standards>
+    <locations>
+      <location>tests/unit/</location>
+      <location>tests/conftest.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-9.5.1">Verify grep -r "neo4j" tests/ returns no matches</idea>
+      <idea ac="AC-9.5.2">Verify pytest tests/ passes with 85+ tests passing</idea>
+      <idea ac="AC-9.5.3">Verify coverage >= 85% with pytest --cov</idea>
+      <idea ac="AC-9.5.4">Verify grep -i "neo4j" docs/architecture.md returns only updated/historical refs</idea>
+      <idea ac="AC-9.5.5">Verify no Neo4j setup instructions remain in docs</idea>
+      <idea ac="AC-9.5.6">Verify docs/epic-neo4j-removal.md status is "Completed"</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -65,7 +65,7 @@
 **Purpose:** Service health monitoring dashboard
 **Features:**
 - Real-time service status checks
-- Database connectivity status (ChromaDB, TimescaleDB, Neo4j, Redis)
+- Database connectivity status (ChromaDB, TimescaleDB, Redis)
 - Environment validation
 - Portfolio service status
 - Langfuse integration status

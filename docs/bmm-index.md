@@ -12,7 +12,7 @@
 **Backend API (server)**
 - **Type:** Backend (Python/FastAPI)
 - **Tech Stack:** Python 3.12+, FastAPI 0.111.0, LangGraph 0.2.25
-- **Databases:** ChromaDB, TimescaleDB, PostgreSQL, Neo4j, Redis
+- **Databases:** ChromaDB, TimescaleDB, PostgreSQL, Redis
 - **Root:** `/src/`
 - **Entry Point:** `src/app.py`
 
@@ -34,7 +34,7 @@
 
 ### API & Data
 - [API Contracts - Backend](./api-contracts-server.md) - All 15 REST API endpoints documented
-- [Data Models - Backend](./data-models-server.md) - Complete database schema (11 tables across 5 databases)
+- [Data Models - Backend](./data-models-server.md) - Complete database schema (11 tables across 3 databases)
 
 ### Components & UI
 - [Component Inventory - Frontend](./component-inventory-client.md) - All React components and pages
@@ -160,20 +160,19 @@ When creating a brownfield PRD, reference these key documents:
 │ • ChromaDB :8000    │                  │ • Langfuse          │
 │ • TimescaleDB :5433 │                  │ • OpenAI GPT-4      │
 │ • PostgreSQL        │                  │ • xAI Grok          │
-│ • Neo4j :7687       │                  └─────────────────────┘
-│ • Redis :6379       │
+│ • Redis :6379       │                  └─────────────────────┘
 └─────────────────────┘
 ```
 
 ### Memory Types & Database Mapping
 
-| Memory Type | ChromaDB | TimescaleDB | PostgreSQL | Neo4j | Redis |
-|-------------|----------|-------------|------------|-------|-------|
-| **Episodic** | ✅ Vector | ✅ Time-series | - | - | Short-term |
-| **Semantic** | ✅ Vector | - | ✅ Structured | - | Short-term |
-| **Procedural** | ✅ Vector | - | ✅ Structured | ✅ Graph | Short-term |
-| **Emotional** | ✅ Vector | ✅ Time-series | Patterns | - | Short-term |
-| **Portfolio** | ✅ Vector | ✅ Snapshots | ✅ Holdings | - | Short-term |
+| Memory Type | ChromaDB | TimescaleDB | PostgreSQL | Redis |
+|-------------|----------|-------------|------------|-------|
+| **Episodic** | ✅ Vector | ✅ Time-series | - | Short-term |
+| **Semantic** | ✅ Vector | - | ✅ Structured | Short-term |
+| **Procedural** | ✅ Vector | - | ✅ Structured | Short-term |
+| **Emotional** | ✅ Vector | ✅ Time-series | Patterns | Short-term |
+| **Portfolio** | ✅ Vector | ✅ Snapshots | ✅ Holdings | Short-term |
 
 ---
 
@@ -211,13 +210,12 @@ When creating a brownfield PRD, reference these key documents:
 **Codebase Size:**
 - Backend Python files: ~45
 - Frontend TypeScript files: ~10
-- Database migrations: 14 (across 4 databases)
+- Database migrations: 12 (across 3 databases)
 - Total documentation: 24+ markdown files
 
 **Database Tables:**
 - TimescaleDB hypertables: 3
 - PostgreSQL tables: 8
-- Neo4j node types: 2 (Skill, User)
 - ChromaDB collections: 1 (memories_3072)
 
 **API Endpoints:** 15

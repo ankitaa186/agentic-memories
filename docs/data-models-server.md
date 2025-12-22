@@ -13,7 +13,6 @@
 |----------|--------|-------------|--------------|
 | **TimescaleDB** | 3 tables | Time-series data | Temporal queries |
 | **PostgreSQL** | 8 tables | Structured data | Procedural, portfolio, semantic |
-| **Neo4j** | Graph nodes/relationships | Graph relationships | (Future) skill chains, correlations |
 | **ChromaDB** | 1 collection | Vector embeddings | All retrieval (semantic search) |
 | **Redis** | Key-value cache | Hot cache, short-term layer | Transient memories, session data |
 
@@ -336,45 +335,6 @@ CREATE TABLE emotional_patterns (
 
 ---
 
-## Neo4j Graph Schema
-
-### Nodes
-
-**Skill Node:**
-```cypher
-CREATE CONSTRAINT skill_id_unique FOR (s:Skill) REQUIRE s.id IS UNIQUE;
-CREATE INDEX skill_user FOR (s:Skill) ON (s.user_id);
-
-Properties:
-- id: UUID
-- user_id: string
-- skill_name: string
-- proficiency_level: string
-- last_practiced: datetime
-```
-
-**User Node:**
-```cypher
-Properties:
-- user_id: string (primary)
-- created_at: datetime
-```
-
-### Relationships
-
-**Skill Dependencies:**
-```cypher
-(Skill)-[:REQUIRES]->(Skill)
-(Skill)-[:LEADS_TO]->(Skill)
-(User)-[:KNOWS]->(Skill)
-```
-
-**Future:**
-- `(Holding)-[:CORRELATES_WITH]->(Holding)` - Portfolio correlations
-- `(Holding)-[:IN_SECTOR]->(Sector)` - Sector classifications
-
----
-
 ## ChromaDB Collections
 
 ### memories_3072
@@ -450,7 +410,7 @@ Extraction Pipeline (LangGraph)
     ↓
 ├─→ Episodic Memory → TimescaleDB + ChromaDB
 ├─→ Semantic Memory → PostgreSQL + ChromaDB
-├─→ Procedural Memory → PostgreSQL + Neo4j + ChromaDB
+├─→ Procedural Memory → PostgreSQL + ChromaDB
 ├─→ Emotional Memory → TimescaleDB + ChromaDB
 ├─→ Portfolio Memory → PostgreSQL (holdings/transactions) + TimescaleDB (snapshots) + ChromaDB
 └─→ Short-term Memory → Redis + ChromaDB
@@ -477,7 +437,6 @@ Extraction Pipeline (LangGraph)
 **Database Types:**
 - `postgres/` - PostgreSQL schema migrations
 - `timescaledb/` - TimescaleDB hypertable migrations
-- `neo4j/` - Graph schema and constraints
 - `chromadb/` - Collection creation (Python-based)
 
 **Migration Tool:** `migrations/migrate.sh`

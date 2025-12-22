@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
-from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 from src.services.embedding_utils import get_embeddings
 from src.config import get_worthy_threshold
@@ -38,9 +37,8 @@ class EpisodicMemory:
 
 class EpisodicMemoryService:
     """Service for managing episodic memories"""
-    
+
     def __init__(self):
-        self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "episodic_memories"
     
@@ -57,13 +55,10 @@ class EpisodicMemoryService:
         try:
             # 1. Store in TimescaleDB (primary storage)
             self._store_in_timescale(memory)
-            
-            # 2. Store in Neo4j (relationships)
-            self._store_in_neo4j(memory)
-            
-            # 3. Store in ChromaDB (vector search)
+
+            # 2. Store in ChromaDB (vector search)
             self._store_in_chroma(memory)
-            
+
             return True
             
         except Exception as e:
@@ -110,41 +105,7 @@ class EpisodicMemoryService:
                 release_timescale_conn(conn)
             print(f"Error storing episodic memory in TimescaleDB: {e}")
             raise
-    
-    def _store_in_neo4j(self, memory: EpisodicMemory) -> None:
-        """Store memory relationships in Neo4j"""
-        if not self.neo4j_driver:
-            raise Exception("Neo4j connection not available")
-        
-        with self.neo4j_driver.session() as session:
-            # Create episode node
-            session.run("""
-                MERGE (e:Episode {id: $id, user_id: $user_id})
-                SET e.event_type = $event_type,
-                    e.content = $content,
-                    e.timestamp = $timestamp,
-                    e.importance_score = $importance_score
-            """, {
-                "id": memory.id,
-                "user_id": memory.user_id,
-                "event_type": memory.event_type,
-                "content": memory.content,
-                "timestamp": memory.event_timestamp.isoformat(),
-                "importance_score": memory.importance_score
-            })
-            
-            # Create relationships with participants
-            if memory.participants:
-                for participant in memory.participants:
-                    session.run("""
-                        MERGE (p:Person {name: $participant})
-                        MERGE (e:Episode {id: $episode_id})
-                        MERGE (e)-[:INVOLVES]->(p)
-                    """, {
-                        "participant": participant,
-                        "episode_id": memory.id
-                    })
-    
+
     def _store_in_chroma(self, memory: EpisodicMemory) -> None:
         """Store memory in ChromaDB for vector search"""
         if not self.chroma_client:
@@ -407,12 +368,7 @@ class EpisodicMemoryService:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM episodic_memories WHERE id = %s", (memory_id,))
                     conn.commit()
-            
-            # Delete from Neo4j
-            if self.neo4j_driver:
-                with self.neo4j_driver.session() as session:
-                    session.run("MATCH (e:Episode {id: $id}) DETACH DELETE e", {"id": memory_id})
-            
+
             # Delete from ChromaDB
             if self.chroma_client:
                 collection = self.chroma_client.get_collection(self.collection_name)

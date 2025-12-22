@@ -1,0 +1,232 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>9</epicId>
+    <storyId>9.2</storyId>
+    <title>Remove Neo4j from Storage Orchestrator and Hybrid Retrieval</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/9-2-remove-neo4j-from-storage-orchestrator-and-hybrid-retrieval.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>backend developer</asA>
+    <iWant>to remove Neo4j operations from storage orchestrator and hybrid retrieval</iWant>
+    <soThat>the orchestration and retrieval layers don't depend on Neo4j, completing the removal from core functionality</soThat>
+    <tasks>
+      <task id="1" status="pending">Analyze current Neo4j usage in orchestrator.py (AC: 1)
+        <subtask id="1.1">Identify create_episode_node() method (lines 80-92)</subtask>
+        <subtask id="1.2">Identify link_related_memories() method (lines 94-111)</subtask>
+        <subtask id="1.3">Identify Neo4j driver initialization in __init__ (line 24)</subtask>
+        <subtask id="1.4">Identify Neo4j import statement (line 7)</subtask>
+        <subtask id="1.5">Verify these operations are never queried elsewhere</subtask>
+      </task>
+      <task id="2" status="pending">Remove Neo4j from orchestrator.py (AC: 1)
+        <subtask id="2.1">Remove create_episode_node() method definition</subtask>
+        <subtask id="2.2">Remove link_related_memories() method definition</subtask>
+        <subtask id="2.3">Remove self._neo4j = get_neo4j_driver() from __init__</subtask>
+        <subtask id="2.4">Remove from src.dependencies.neo4j_client import get_neo4j_driver</subtask>
+        <subtask id="2.5">Update class docstring if it mentions Neo4j</subtask>
+      </task>
+      <task id="3" status="pending">Analyze current Neo4j usage in hybrid_retrieval.py (AC: 2)
+        <subtask id="3.1">Locate the :RELATED_TO query (lines 614-620)</subtask>
+        <subtask id="3.2">Identify any other Neo4j queries or fallback logic</subtask>
+        <subtask id="3.3">Identify Neo4j-related imports</subtask>
+        <subtask id="3.4">Confirm :RELATED_TO relationships are never created (dead code)</subtask>
+      </task>
+      <task id="4" status="pending">Remove Neo4j from hybrid_retrieval.py (AC: 2)
+        <subtask id="4.1">Remove the :RELATED_TO query code block (lines 614-620)</subtask>
+        <subtask id="4.2">Remove any Neo4j driver session handling</subtask>
+        <subtask id="4.3">Remove Neo4j imports</subtask>
+        <subtask id="4.4">Clean up any try/except blocks that only handle Neo4j</subtask>
+      </task>
+      <task id="5" status="pending">Update orchestrator tests (AC: 3)
+        <subtask id="5.1">Identify tests that call create_episode_node() or link_related_memories()</subtask>
+        <subtask id="5.2">Remove or update tests for removed methods</subtask>
+        <subtask id="5.3">Verify StorageOrchestrator tests still pass</subtask>
+      </task>
+      <task id="6" status="pending">Update hybrid retrieval tests (AC: 3, 4)
+        <subtask id="6.1">Identify tests that mock Neo4j in hybrid_retrieval</subtask>
+        <subtask id="6.2">Remove Neo4j mocks from affected tests</subtask>
+        <subtask id="6.3">Run unit tests for hybrid_retrieval</subtask>
+        <subtask id="6.4">Ensure all retrieval tests pass</subtask>
+      </task>
+      <task id="7" status="pending">Integration testing (AC: 4)
+        <subtask id="7.1">Run integration test for /v1/retrieve endpoint</subtask>
+        <subtask id="7.2">Verify retrieval returns correct results without Neo4j</subtask>
+        <subtask id="7.3">Verify no performance regression</subtask>
+        <subtask id="7.4">Document test results</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-9.2.1">
+      src/storage/orchestrator.py contains no Neo4j imports or writes
+      - The create_episode_node() method is removed (lines 80-92)
+      - The link_related_memories() method is removed (lines 94-111)
+      - Neo4j driver initialization is removed from __init__ (line 24)
+      - Neo4j import is removed (line 7)
+    </criterion>
+    <criterion id="AC-9.2.2">
+      src/services/hybrid_retrieval.py contains no :RELATED_TO query (lines 614-620 removed)
+      - The dead :RELATED_TO graph traversal query is removed
+      - Any Neo4j fallback/error handling is removed
+      - Neo4j-related imports are removed
+    </criterion>
+    <criterion id="AC-9.2.3">
+      Hybrid retrieval continues to work using ChromaDB + TimescaleDB only
+      - Hybrid retrieval tests pass without Neo4j
+    </criterion>
+    <criterion id="AC-9.2.4">
+      /v1/retrieve endpoint returns correct results without Neo4j
+      - Integration test verifies retrieval functionality is intact
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-9.md</path>
+        <title>Epic 9 Technical Specification</title>
+        <section>AC-9.2: Orchestrator and Retrieval Neo4j Removal</section>
+        <snippet>Story 9.2 removes Neo4j from orchestrator (create_episode_node, link_related_memories) and hybrid retrieval (dead :RELATED_TO query). All actual retrieval uses ChromaDB (semantic search) or TimescaleDB (temporal queries).</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-neo4j-removal.md</path>
+        <title>Epic 9: Neo4j Removal</title>
+        <section>Story 9.2: Remove Neo4j from Storage Orchestrator and Hybrid Retrieval</section>
+        <snippet>The :RELATED_TO query in hybrid_retrieval.py (lines 614-620) searches for a relationship type that doesn't exist in the graph - confirmed dead code. LED_TO relationships created by orchestrator are never queried.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Technology Stack - Neo4j: 5.23.1</section>
+        <snippet>Current stack lists Neo4j: 5.23.1. After Epic 9 removal: system will use 3 databases (ChromaDB, TimescaleDB/PostgreSQL, Redis) instead of 4.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/9-1-remove-neo4j-from-memory-services.md</path>
+        <title>Story 9.1 (Completed Prerequisite)</title>
+        <section>Implementation Notes</section>
+        <snippet>Story 9.1 removed Neo4j from all 4 memory services (episodic, procedural, portfolio, emotional). Total ~117 lines removed. All unit tests passed, integration test confirmed system works without Neo4j writes.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/storage/orchestrator.py</path>
+        <kind>orchestrator</kind>
+        <symbol>StorageOrchestrator</symbol>
+        <lines>1-166</lines>
+        <reason>Primary file to modify - contains create_episode_node() (lines 80-92) and link_related_memories() (lines 94-111) methods plus Neo4j import (line 7) and driver init (line 24)</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/hybrid_retrieval.py</path>
+        <kind>service</kind>
+        <symbol>HybridRetrievalService</symbol>
+        <lines>1-641</lines>
+        <reason>Contains dead :RELATED_TO query in get_related_memories() method (lines 595-641). Also has Neo4j import (line 17) and driver init in __init__ (line 67)</reason>
+      </artifact>
+      <artifact>
+        <path>src/dependencies/neo4j_client.py</path>
+        <kind>dependency</kind>
+        <symbol>get_neo4j_driver</symbol>
+        <lines>all</lines>
+        <reason>Provides get_neo4j_driver() imported by orchestrator.py and hybrid_retrieval.py. DO NOT DELETE - that's Story 9.3</reason>
+      </artifact>
+      <artifact>
+        <path>tests/memory_orchestrator/test_orchestrator.py</path>
+        <kind>test</kind>
+        <symbol>test_ingestion_batches_scale_with_volume</symbol>
+        <lines>1-228</lines>
+        <reason>Tests AdaptiveMemoryOrchestrator (different from StorageOrchestrator). Does not mock Neo4j - may not need changes</reason>
+      </artifact>
+      <artifact>
+        <path>tests/test_orchestrator_api.py</path>
+        <kind>test</kind>
+        <symbol>orchestrator API tests</symbol>
+        <lines>all</lines>
+        <reason>May contain tests for StorageOrchestrator methods - check for create_episode_node and link_related_memories calls</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" />
+        <package name="chromadb" version="0.5.3" />
+        <package name="redis" version="5.0.6" />
+        <package name="pydantic" version="2.8.2" />
+        <package name="langgraph" version="0.2.25" />
+        <package name="langchain" version="0.3.0" />
+        <package name="psycopg" version="binary" />
+        <package name="neo4j" version="5.23.1" note="TO BE REMOVED in Story 9.3" />
+        <package name="pytest" version="8.3.2" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="scope">Do NOT remove neo4j_client.py - that's Story 9.3</constraint>
+    <constraint type="scope">Do NOT remove Neo4j from docker-compose - that's Story 9.4</constraint>
+    <constraint type="scope">Focus only on orchestrator.py and hybrid_retrieval.py</constraint>
+    <constraint type="data">Ensure retrieval functionality remains intact (ChromaDB + TimescaleDB)</constraint>
+    <constraint type="pattern">Follow same removal pattern as Story 9.1: remove import, driver init, methods, calls</constraint>
+    <constraint type="testing">Run unit tests in docker container: docker exec agentic-memories-api-1 python -m pytest</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>StorageOrchestrator.__init__</name>
+      <kind>class constructor</kind>
+      <signature>def __init__(self) -> None</signature>
+      <path>src/storage/orchestrator.py:22-25</path>
+      <change>Remove: self._neo4j = get_neo4j_driver() (line 24)</change>
+    </interface>
+    <interface>
+      <name>StorageOrchestrator.create_episode_node</name>
+      <kind>method (to be removed)</kind>
+      <signature>def create_episode_node(self, episode_id: str, properties: Dict[str, Any]) -> None</signature>
+      <path>src/storage/orchestrator.py:80-92</path>
+      <change>DELETE entire method</change>
+    </interface>
+    <interface>
+      <name>StorageOrchestrator.link_related_memories</name>
+      <kind>method (to be removed)</kind>
+      <signature>def link_related_memories(self, episode_id: str, relationships: Dict[str, Any]) -> None</signature>
+      <path>src/storage/orchestrator.py:94-111</path>
+      <change>DELETE entire method</change>
+    </interface>
+    <interface>
+      <name>HybridRetrievalService.__init__</name>
+      <kind>class constructor</kind>
+      <signature>def __init__(self)</signature>
+      <path>src/services/hybrid_retrieval.py:66-71</path>
+      <change>Remove: self.neo4j_driver = get_neo4j_driver() (line 67)</change>
+    </interface>
+    <interface>
+      <name>HybridRetrievalService.get_related_memories</name>
+      <kind>method (to be modified)</kind>
+      <signature>def get_related_memories(self, user_id: str, memory_id: str, similarity_threshold: float = 0.7) -> List[RetrievalResult]</signature>
+      <path>src/services/hybrid_retrieval.py:595-641</path>
+      <change>Remove Neo4j query block (lines 608-636), return empty list early since Neo4j not available</change>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with unittest.mock for mocking dependencies. Run tests in docker container using: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v. Integration tests hit running API endpoints.
+    </standards>
+    <locations>
+      <location>tests/unit/</location>
+      <location>tests/services/</location>
+      <location>tests/memory_orchestrator/</location>
+      <location>tests/test_orchestrator_api.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-9.2.1">Verify grep -i "neo4j" src/storage/orchestrator.py returns no matches after removal</idea>
+      <idea ac="AC-9.2.1">Verify StorageOrchestrator can be instantiated without Neo4j driver</idea>
+      <idea ac="AC-9.2.2">Verify grep -i "neo4j" src/services/hybrid_retrieval.py returns no matches after removal</idea>
+      <idea ac="AC-9.2.2">Verify HybridRetrievalService.get_related_memories returns empty list (graceful degradation)</idea>
+      <idea ac="AC-9.2.3">Run: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v and verify all pass</idea>
+      <idea ac="AC-9.2.4">Integration test: curl POST /v1/retrieve with user_id and query, verify results returned from ChromaDB</idea>
+    </ideas>
+  </tests>
+</story-context>

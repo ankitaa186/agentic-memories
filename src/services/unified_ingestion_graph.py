@@ -549,7 +549,7 @@ def node_store_chromadb(state: IngestionState) -> IngestionState:
 
 
 def node_store_episodic(state: IngestionState) -> IngestionState:
-	"""Store episodic memories in TimescaleDB + Neo4j"""
+	"""Store episodic memories in TimescaleDB + ChromaDB"""
 	from src.services.tracing import start_span, end_span
 	
 	span = start_span("store_episodic", input={"user_id": state.get("user_id")})

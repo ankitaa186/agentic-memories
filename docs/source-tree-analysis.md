@@ -42,7 +42,6 @@ src/
 ├── dependencies/                 # Database client connections
 │   ├── chroma.py                # ChromaDB vector database client
 │   ├── timescale.py             # TimescaleDB/PostgreSQL client
-│   ├── neo4j_client.py          # Neo4j graph database client
 │   ├── redis_client.py          # Redis cache client
 │   ├── langfuse_client.py       # Langfuse observability client
 │   └── cloudflare_access.py     # Cloudflare authentication
@@ -106,7 +105,6 @@ src/
 - **ChromaDB**: Vector embeddings, semantic search (all queries)
 - **TimescaleDB**: Time-series hypertables (episodic, emotional, portfolio snapshots)
 - **PostgreSQL**: Structured data (procedural, semantic, portfolio, identity)
-- **Neo4j**: Graph relationships (skill dependencies - write-only currently)
 - **Redis**: Short-term memory cache, activity tracking
 
 ### Services Layer Architecture
@@ -194,10 +192,6 @@ migrations/
 │   ├── 001_episodic_memories.up.sql
 │   ├── 002_emotional_memories.up.sql
 │   └── 003_portfolio_snapshots.up.sql
-│
-├── neo4j/                       # Neo4j Cypher migrations
-│   ├── 001_skill_nodes.cypher
-│   └── 002_skill_relationships.cypher
 │
 └── chromadb/                    # ChromaDB collection setup
     └── init_collections.py
@@ -327,7 +321,7 @@ src/services/* (Business Logic)
     ↓
 src/dependencies/* (DB Clients)
     ↓
-[ChromaDB, TimescaleDB, PostgreSQL, Neo4j, Redis]
+[ChromaDB, TimescaleDB, PostgreSQL, Redis]
 ```
 
 ### Frontend → Backend
@@ -372,7 +366,6 @@ src/services/tracing.py (Langfuse)
    - ChromaDB (vector embedding)
    - TimescaleDB (if episodic/emotional)
    - PostgreSQL (if procedural/portfolio/semantic)
-   - Neo4j (if skill relationships)
    - Redis (short-term cache)
     ↓
 6. Response → UI (display created memories)
@@ -386,7 +379,7 @@ src/services/tracing.py (Langfuse)
 |-----------|---------|------------------|
 | `src/` | Backend API server | Python |
 | `ui/src/` | Web UI client | TypeScript/React |
-| `migrations/` | Database schemas | SQL/Cypher/Python |
+| `migrations/` | Database schemas | SQL/Python |
 | `tests/` | Test suites | Python/Playwright |
 | `docs/` | Generated documentation | Markdown |
 | `.github/workflows/` | CI/CD pipelines | YAML |
@@ -408,7 +401,6 @@ src/services/tracing.py (Langfuse)
 **Migrations:**
 - PostgreSQL: 8 migrations
 - TimescaleDB: 3 migrations
-- Neo4j: 2 migrations
 - ChromaDB: 1 initialization script
 
 **Total Source Files:** ~70 (excluding tests)

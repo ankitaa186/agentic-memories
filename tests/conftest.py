@@ -94,7 +94,6 @@ def _prepare_app(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub):
     monkeypatch.setattr(app_module, "_standard_collection_name", lambda: collection_name)
 
     monkeypatch.setattr(app_module, "ping_timescale", lambda: (True, None))
-    monkeypatch.setattr(app_module, "ping_neo4j", lambda: (True, None))
     monkeypatch.setattr(app_module, "get_redis_client", lambda: redis_stub)
 
     class _HTTPXStub:

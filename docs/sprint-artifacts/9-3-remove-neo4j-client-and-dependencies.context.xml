@@ -1,0 +1,226 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>9</epicId>
+    <storyId>9.3</storyId>
+    <title>Remove Neo4j Client and Dependencies</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/9-3-remove-neo4j-client-and-dependencies.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>backend developer</asA>
+    <iWant>to remove the Neo4j client, driver, and Python dependency</iWant>
+    <soThat>the codebase has no Neo4j-related code or dependencies</soThat>
+    <tasks>
+      <task id="1" status="pending">Delete neo4j_client.py (AC: 1)
+        <subtask id="1.1">Verify no remaining imports of neo4j_client in src/</subtask>
+        <subtask id="1.2">Delete src/dependencies/neo4j_client.py file</subtask>
+        <subtask id="1.3">Verify deletion successful</subtask>
+      </task>
+      <task id="2" status="pending">Update src/app.py (AC: 2, 3)
+        <subtask id="2.1">Remove import of ping_neo4j from neo4j_client</subtask>
+        <subtask id="2.2">Remove Neo4j health check from /health/full endpoint</subtask>
+        <subtask id="2.3">Remove neo4j from checks dict</subtask>
+      </task>
+      <task id="3" status="pending">Update src/config.py (AC: 3)
+        <subtask id="3.1">Remove get_neo4j_uri() function</subtask>
+        <subtask id="3.2">Remove get_neo4j_user() function</subtask>
+        <subtask id="3.3">Remove get_neo4j_password() function</subtask>
+      </task>
+      <task id="4" status="pending">Remove neo4j from requirements.txt (AC: 5)
+        <subtask id="4.1">Remove neo4j==5.23.1 line</subtask>
+        <subtask id="4.2">Verify removal</subtask>
+      </task>
+      <task id="5" status="pending">Update test fixtures (AC: 3, 4)
+        <subtask id="5.1">Remove ping_neo4j mock from tests/conftest.py line 97</subtask>
+        <subtask id="5.2">Remove ping_neo4j mock from tests/unit/test_app_health.py line 15</subtask>
+      </task>
+      <task id="6" status="pending">Update outdated comments (AC: 3)
+        <subtask id="6.1">Update comment in unified_ingestion_graph.py line 552</subtask>
+        <subtask id="6.2">Update comments in memory_router.py lines 5, 188</subtask>
+      </task>
+      <task id="7" status="pending">Verify codebase clean and app starts (AC: 3-7)
+        <subtask id="7.1">Run grep -r "neo4j" src/ - should return only comments</subtask>
+        <subtask id="7.2">Run grep -r "from neo4j" src/ - should return no matches</subtask>
+        <subtask id="7.3">Run unit tests in docker</subtask>
+        <subtask id="7.4">Verify application starts</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-9.3.1">
+      src/dependencies/neo4j_client.py file does not exist
+      - Delete the entire neo4j_client.py file (~40 lines)
+    </criterion>
+    <criterion id="AC-9.3.2">
+      src/dependencies/__init__.py contains no neo4j references
+      - File does not exist (already confirmed)
+    </criterion>
+    <criterion id="AC-9.3.3">
+      grep -r "neo4j" src/ returns no matches (except comments if any)
+      - All source files are clean of Neo4j imports
+      - Only explanatory comments about removal are acceptable
+    </criterion>
+    <criterion id="AC-9.3.4">
+      grep -r "from neo4j" src/ returns no matches
+      - No direct imports from neo4j package
+    </criterion>
+    <criterion id="AC-9.3.5">
+      requirements.txt/pyproject.toml contains no neo4j dependency
+      - Remove neo4j==5.23.1 from requirements.txt line 18
+    </criterion>
+    <criterion id="AC-9.3.6">
+      pip install -r requirements.txt succeeds without neo4j
+      - Dependencies install cleanly without neo4j package
+    </criterion>
+    <criterion id="AC-9.3.7">
+      Application starts successfully without Neo4j driver
+      - python -c "from src.app import app; print('OK')" works
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-9.md</path>
+        <title>Epic 9 Technical Specification</title>
+        <section>AC-9.3: Client and Dependencies Removal</section>
+        <snippet>Delete src/dependencies/neo4j_client.py entirely, remove neo4j exports from __init__.py, remove neo4j==5.23.1 from requirements.txt</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/9-2-remove-neo4j-from-storage-orchestrator-and-hybrid-retrieval.md</path>
+        <title>Story 9.2 (Completed Prerequisite)</title>
+        <section>Senior Developer Review - Advisory Notes</section>
+        <snippet>Story 9.3 should remove neo4j_client.py and update conftest.py health check mocks. Files identified: tests/conftest.py:97, tests/unit/test_app_health.py:15</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/dependencies/neo4j_client.py</path>
+        <kind>dependency</kind>
+        <symbol>get_neo4j_driver, ping_neo4j</symbol>
+        <lines>1-40</lines>
+        <reason>DELETE ENTIRE FILE - Neo4j client module with get_neo4j_driver() and ping_neo4j() functions</reason>
+        <action>DELETE</action>
+      </artifact>
+      <artifact>
+        <path>src/app.py</path>
+        <kind>application</kind>
+        <symbol>ping_neo4j import, /health/full endpoint</symbol>
+        <lines>41, 499-507</lines>
+        <reason>Remove Neo4j import (line 41) and health check block (lines 499-507)</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>src/config.py</path>
+        <kind>configuration</kind>
+        <symbol>get_neo4j_uri, get_neo4j_user, get_neo4j_password</symbol>
+        <lines>89-100</lines>
+        <reason>Remove Neo4j config functions (get_neo4j_uri, get_neo4j_user, get_neo4j_password)</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>requirements.txt</path>
+        <kind>dependencies</kind>
+        <symbol>neo4j==5.23.1</symbol>
+        <lines>18</lines>
+        <reason>Remove neo4j Python package dependency</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>tests/conftest.py</path>
+        <kind>test fixture</kind>
+        <symbol>ping_neo4j mock</symbol>
+        <lines>97</lines>
+        <reason>Remove monkeypatch.setattr(app_module, "ping_neo4j", lambda: (True, None))</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>tests/unit/test_app_health.py</path>
+        <kind>test</kind>
+        <symbol>ping_neo4j mock</symbol>
+        <lines>15</lines>
+        <reason>Remove monkeypatch.setattr("src.app.ping_neo4j", lambda: (True, None))</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>src/services/unified_ingestion_graph.py</path>
+        <kind>service</kind>
+        <symbol>store_episodic docstring</symbol>
+        <lines>552</lines>
+        <reason>Update outdated comment "Store episodic memories in TimescaleDB + Neo4j" to remove Neo4j mention</reason>
+        <action>MODIFY</action>
+      </artifact>
+      <artifact>
+        <path>src/services/memory_router.py</path>
+        <kind>service</kind>
+        <symbol>module docstring, _store_episodic docstring</symbol>
+        <lines>5, 188</lines>
+        <reason>Update outdated comments mentioning Neo4j</reason>
+        <action>MODIFY</action>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="neo4j" version="5.23.1" note="TO BE REMOVED" action="DELETE" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="scope">Do NOT remove Neo4j from docker-compose - that's Story 9.4</constraint>
+    <constraint type="scope">Do NOT delete migrations/neo4j/ - that's Story 9.4</constraint>
+    <constraint type="scope">Focus only on code and Python dependencies, not infrastructure</constraint>
+    <constraint type="testing">Run unit tests in docker container: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v</constraint>
+    <constraint type="testing">Copy updated files to container before testing if needed</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>src/dependencies/neo4j_client.py</name>
+      <kind>module (to be deleted)</kind>
+      <path>src/dependencies/neo4j_client.py</path>
+      <change>DELETE entire file</change>
+    </interface>
+    <interface>
+      <name>src/app.py - Neo4j import</name>
+      <kind>import statement</kind>
+      <signature>from src.dependencies.neo4j_client import ping_neo4j</signature>
+      <path>src/app.py:41</path>
+      <change>DELETE line</change>
+    </interface>
+    <interface>
+      <name>src/app.py - /health/full Neo4j check</name>
+      <kind>health check block</kind>
+      <path>src/app.py:499-507</path>
+      <change>DELETE Neo4j health check block and neo4j entry from checks dict</change>
+    </interface>
+    <interface>
+      <name>src/config.py - Neo4j config functions</name>
+      <kind>config functions</kind>
+      <path>src/config.py:89-100</path>
+      <change>DELETE get_neo4j_uri(), get_neo4j_user(), get_neo4j_password() functions</change>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with unittest.mock. Run tests in docker: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v
+    </standards>
+    <locations>
+      <location>tests/unit/</location>
+      <location>tests/conftest.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-9.3.1">Verify ls src/dependencies/neo4j_client.py fails (file deleted)</idea>
+      <idea ac="AC-9.3.3">Verify grep -r "neo4j" src/ returns only comments</idea>
+      <idea ac="AC-9.3.4">Verify grep -r "from neo4j" src/ returns no matches</idea>
+      <idea ac="AC-9.3.5">Verify grep -i "neo4j" requirements.txt returns no matches</idea>
+      <idea ac="AC-9.3.7">Verify python -c "from src.app import app; print('OK')" works</idea>
+      <idea ac="AC-9.3.7">Run unit tests: 85+ should pass</idea>
+    </ideas>
+  </tests>
+</story-context>

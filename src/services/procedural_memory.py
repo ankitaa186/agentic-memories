@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn  # Using Timescale for time-series skill progression
-from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 
 
@@ -61,9 +60,8 @@ class SkillProgression:
 
 class ProceduralMemoryService:
     """Service for managing procedural memories and skill development"""
-    
+
     def __init__(self):
-        self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "procedural_memories"
     
@@ -107,10 +105,7 @@ class ProceduralMemoryService:
         
         # Store in PostgreSQL
         self._store_procedural_memory(memory)
-        
-        # Store in Neo4j for skill relationships
-        self._store_skill_relationships(memory)
-        
+
         # Store in ChromaDB for semantic search
         self._store_in_chroma(memory)
         
@@ -199,57 +194,7 @@ class ProceduralMemoryService:
         finally:
             if conn:
                 release_timescale_conn(conn)
-    
-    def _store_skill_relationships(self, memory: ProceduralMemory) -> None:
-        """Store skill relationships in Neo4j"""
-        if not self.neo4j_driver:
-            return
-        
-        try:
-            with self.neo4j_driver.session() as session:
-                # Create skill node
-                session.run("""
-                    MERGE (s:Skill {id: $id, user_id: $user_id, name: $skill_name})
-                    SET s.proficiency_level = $proficiency_level,
-                        s.practice_count = $practice_count,
-                        s.last_practiced = $last_practiced
-                """, {
-                    "id": memory.id,
-                    "user_id": memory.user_id,
-                    "skill_name": memory.skill_name,
-                    "proficiency_level": memory.proficiency_level,
-                    "practice_count": memory.practice_count,
-                    "last_practiced": memory.last_practiced.isoformat() if memory.last_practiced else None
-                })
-                
-                # Create prerequisite relationships
-                if memory.prerequisites:
-                    for prereq in memory.prerequisites:
-                        session.run("""
-                            MERGE (p:Skill {name: $prereq_name, user_id: $user_id})
-                            MERGE (s:Skill {id: $skill_id})
-                            MERGE (p)-[:PREREQUISITE_FOR]->(s)
-                        """, {
-                            "prereq_name": prereq,
-                            "user_id": memory.user_id,
-                            "skill_id": memory.id
-                        })
-                
-                # Create context relationships
-                if memory.context:
-                    session.run("""
-                        MERGE (c:Context {name: $context, user_id: $user_id})
-                        MERGE (s:Skill {id: $skill_id})
-                        MERGE (s)-[:USED_IN]->(c)
-                    """, {
-                        "context": memory.context,
-                        "user_id": memory.user_id,
-                        "skill_id": memory.id
-                    })
-                
-        except Exception as e:
-            print(f"Error storing skill relationships: {e}")
-    
+
     def _store_in_chroma(self, memory: ProceduralMemory) -> None:
         """Store procedural memory in ChromaDB for semantic search"""
         if not self.chroma_client:

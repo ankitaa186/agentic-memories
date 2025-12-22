@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
-from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 
 
@@ -68,9 +67,8 @@ class EmotionalPattern:
 
 class EmotionalMemoryService:
     """Service for managing emotional memories and patterns"""
-    
+
     def __init__(self):
-        self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.collection_name = "emotional_memories"
     

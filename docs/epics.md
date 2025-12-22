@@ -982,7 +982,7 @@ So that **I can build personalized learning experiences in my application**.
 - Skill progression history with proficiency levels
 - Learning goals from user_profiles.goals.learning
 - Recent learning activities from episodic memories
-- Skill dependency graph from Neo4j (prerequisites, related skills)
+- Skill dependencies from PostgreSQL (prerequisites, related skills)
 
 **And** returns response:
 ```json
@@ -1013,7 +1013,7 @@ So that **I can build personalized learning experiences in my application**.
     }
   },
   "metadata": {
-    "sources": ["procedural_memories", "user_profiles", "neo4j_graph", "episodic_memories"],
+    "sources": ["procedural_memories", "user_profiles", "episodic_memories"],
     "confidence": 88,
     "cached": false
   }
@@ -1029,7 +1029,7 @@ So that **I can build personalized learning experiences in my application**.
 
 **Technical Notes:**
 - Implement in src/mcp/tools/skills_tool.py
-- Query Neo4j for skill graph using existing neo4j_client.py
+- Query PostgreSQL for skill dependencies using existing procedural_memory.py
 - Procedural memories from PostgreSQL procedural_memories table
 - Generate recommendations using algorithm:
   - Find skills with prerequisites met
@@ -1053,7 +1053,7 @@ So that **it's production-ready for developer integrations**.
 **Then** the tool is registered in MCP tool registry
 **And** caching and logging apply
 **And** comprehensive tests exist covering:
-- Skill retrieval from PostgreSQL and Neo4j
+- Skill retrieval from PostgreSQL
 - Skill graph construction
 - Recommendation generation
 - API endpoint validation
@@ -1066,7 +1066,7 @@ So that **it's production-ready for developer integrations**.
 **Technical Notes:**
 - Similar integration pattern to Story 3.2
 - Tests in tests/mcp/test_skills_tool.py
-- Mock Neo4j responses for unit tests
+- Mock skill data for unit tests
 - E2E test creates sample skill graph, validates retrieval
 - Test coverage >80%
 
@@ -1627,6 +1627,9 @@ This matrix validates that all 86 functional requirements are covered by at leas
 **Total Estimated MVP Timeline:** 7-9 weeks for Epics 1-4
 
 **Post-MVP Timeline:** 8-12 weeks for Epics 5-8
+
+**Technical Debt / Simplification:**
+- Epic 9: Neo4j Removal (5 stories) - 3.5 days - See [epic-neo4j-removal.md](./epic-neo4j-removal.md)
 
 **Next Steps:**
 1. **Architecture Workflow** - Add technical implementation details (database schemas, API contracts, component designs)

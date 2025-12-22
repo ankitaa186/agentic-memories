@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
-from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
 from src.services.emotional_memory import EmotionalMemory, EmotionalMemoryService
@@ -62,9 +61,8 @@ class RetrievalQuery:
 
 class HybridRetrievalService:
     """Service for hybrid memory retrieval and ranking"""
-    
+
     def __init__(self):
-        self.neo4j_driver = get_neo4j_driver()
         self.chroma_client = get_chroma_client()
         self.episodic_service = EpisodicMemoryService()
         self.emotional_service = EmotionalMemoryService()
@@ -592,49 +590,23 @@ class HybridRetrievalService:
             if conn:
                 release_timescale_conn(conn)
     
-    def get_related_memories(self, user_id: str, memory_id: str, 
+    def get_related_memories(self, user_id: str, memory_id: str,
                            similarity_threshold: float = 0.7) -> List[RetrievalResult]:
         """
-        Get memories related to a specific memory using graph relationships
-        
+        Get memories related to a specific memory.
+
+        Note: Graph-based relationship queries were removed as part of Neo4j removal.
+        This method now returns an empty list. Future implementations could use
+        semantic similarity via ChromaDB or temporal proximity via TimescaleDB.
+
         Args:
             user_id: User ID
             memory_id: Target memory ID
             similarity_threshold: Minimum similarity threshold
-            
+
         Returns:
-            List[RetrievalResult]: Related memories
+            List[RetrievalResult]: Empty list (graph relationships not available)
         """
-        if not self.neo4j_driver:
-            return []
-        
-        try:
-            with self.neo4j_driver.session() as session:
-                # Find related memories through graph relationships
-                result = session.run("""
-                    MATCH (m:Episode {id: $memory_id})-[:RELATED_TO*1..2]-(related)
-                    WHERE related.id <> $memory_id
-                    RETURN related.id as id, related.content as content, 
-                           related.timestamp as timestamp, related.importance_score as importance_score
-                    LIMIT 20
-                """, {"memory_id": memory_id})
-                
-                related_results = []
-                for record in result:
-                    related_results.append(RetrievalResult(
-                        memory_id=record["id"],
-                        memory_type="episodic",
-                        content=record["content"],
-                        relevance_score=0.8,  # High relevance for graph relationships
-                        recency_score=self._calculate_recency_score(
-                            datetime.fromisoformat(record["timestamp"])
-                        ),
-                        importance_score=record["importance_score"] or 0.5,
-                        metadata={"related_to": memory_id}
-                    ))
-                
-                return related_results
-                
-        except Exception as e:
-            print(f"Error getting related memories: {e}")
-            return []
+        # Neo4j graph relationships removed - return empty list
+        # Future: implement using ChromaDB semantic similarity or TimescaleDB temporal queries
+        return []

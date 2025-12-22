@@ -2,7 +2,7 @@
 Memory Router Service
 
 Routes extracted memories to appropriate storage layers based on memory type and content.
-Coordinates across ChromaDB, TimescaleDB, Neo4j, and PostgreSQL.
+Coordinates across ChromaDB, TimescaleDB, and PostgreSQL.
 """
 
 import logging
@@ -185,7 +185,7 @@ class MemoryRouter:
 		return None
 	
 	def _store_episodic(self, user_id: str, memory: Memory, memory_id: Optional[str]) -> bool:
-		"""Store memory in episodic storage (TimescaleDB + Neo4j + ChromaDB)"""
+		"""Store memory in episodic storage (TimescaleDB + ChromaDB)"""
 		if not self.episodic_service:
 			return False
 		

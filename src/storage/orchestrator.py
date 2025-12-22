@@ -4,7 +4,6 @@ import logging
 from typing import Any, Dict, Optional
 
 from src.dependencies.timescale import get_timescale_conn
-from src.dependencies.neo4j_client import get_neo4j_driver
 from src.dependencies.chroma import get_chroma_client
 
 
@@ -14,14 +13,13 @@ logger = logging.getLogger(__name__)
 class StorageOrchestrator:
 	"""Facade for cross-store operations.
 
-	This orchestrates writes/reads across Timescale/Postgres, Chroma, and Neo4j.
+	This orchestrates writes/reads across Timescale/Postgres and Chroma.
 	It is intentionally minimal; production concerns like retries/transactions
 	should be layered in as features roll out.
 	"""
 
 	def __init__(self) -> None:
 		self._timescale = get_timescale_conn()
-		self._neo4j = get_neo4j_driver()
 		self._chroma = get_chroma_client()
 
 	def insert_episode(self, episode: Dict[str, Any]) -> Optional[str]:
@@ -76,39 +74,6 @@ class StorageOrchestrator:
 			col.upsert(ids=[_id], embeddings=[embedding] if embedding else None, metadatas=[metadata])
 		except Exception as exc:
 			logger.info("[orchestrator] chroma upsert failed: %s", exc)
-
-	def create_episode_node(self, episode_id: str, properties: Dict[str, Any]) -> None:
-		drv = self._neo4j
-		if drv is None:
-			logger.info("[orchestrator] neo4j not configured; skip node create")
-			return
-		try:
-			with drv.session() as session:
-				session.run(
-					"MERGE (e:Episode {id: $id}) SET e += $props",
-					{"id": episode_id, "props": properties},
-				)
-		except Exception as exc:
-			logger.info("[orchestrator] neo4j create node failed: %s", exc)
-
-	def link_related_memories(self, episode_id: str, relationships: Dict[str, Any]) -> None:
-		drv = self._neo4j
-		if drv is None:
-			return
-		try:
-			led_to = relationships.get("led_to") or []
-			with drv.session() as session:
-				for tgt in led_to:
-					session.run(
-						"""
-						MERGE (a:Episode {id: $src})
-						MERGE (b:Episode {id: $dst})
-						MERGE (a)-[:LED_TO]->(b)
-						""",
-						{"src": episode_id, "dst": tgt},
-					)
-		except Exception as exc:
-			logger.info("[orchestrator] neo4j link failed: %s", exc)
 
 	def update_semantic_knowledge(self, facts: list[Dict[str, Any]]) -> None:
 		conn = self._timescale

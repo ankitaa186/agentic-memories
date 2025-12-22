@@ -1,0 +1,199 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>9</epicId>
+    <storyId>1</storyId>
+    <title>Remove Neo4j from Memory Services</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/9-1-remove-neo4j-from-memory-services.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>backend developer</asA>
+    <iWant>to remove all Neo4j write operations from memory services</iWant>
+    <soThat>memories are stored only in TimescaleDB, PostgreSQL, and ChromaDB, simplifying the architecture</soThat>
+    <tasks>
+      <task id="1" ac="1">Analyze current Neo4j usage in episodic_memory.py</task>
+      <task id="2" ac="1">Remove Neo4j from episodic_memory.py</task>
+      <task id="3" ac="2">Analyze current Neo4j usage in procedural_memory.py</task>
+      <task id="4" ac="2">Remove Neo4j from procedural_memory.py</task>
+      <task id="5" ac="3">Analyze current Neo4j usage in portfolio_service.py</task>
+      <task id="6" ac="3">Remove Neo4j from portfolio_service.py</task>
+      <task id="7" ac="4">Verify emotional_memory.py has no Neo4j operations</task>
+      <task id="8" ac="5">Update and run unit tests</task>
+      <task id="9" ac="6">Integration testing</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-9.1.1">src/services/episodic_memory.py contains no Neo4j imports or session.run() calls - remove _store_in_neo4j() method and all calls</criterion>
+    <criterion id="AC-9.1.2">src/services/procedural_memory.py contains no Neo4j imports or session.run() calls - remove _store_skill_relationships() method</criterion>
+    <criterion id="AC-9.1.3">src/services/portfolio_service.py contains no Neo4j imports or session.run() calls - remove Holding node creation</criterion>
+    <criterion id="AC-9.1.4">src/services/emotional_memory.py confirmed to have no Neo4j operations (only driver init, no usage)</criterion>
+    <criterion id="AC-9.1.5">All existing unit tests pass without Neo4j mocks being required</criterion>
+    <criterion id="AC-9.1.6">Integration test for /v1/store endpoint succeeds without Neo4j running</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-9.md</path>
+        <title>Epic 9 Technical Specification</title>
+        <section>AC-9.1: Memory Services Neo4j Removal</section>
+        <snippet>Defines acceptance criteria for removing Neo4j from memory services. Key files: episodic_memory.py, procedural_memory.py, portfolio_service.py</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-neo4j-removal.md</path>
+        <title>Epic 9: Neo4j Removal - Architecture Simplification</title>
+        <section>Story 9.1: Remove Neo4j from Memory Services</section>
+        <snippet>Neo4j writes Episode, Skill, Person, Holding nodes. All data already exists in TimescaleDB/PostgreSQL. Zero graph traversal queries executed.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Technology Stack</section>
+        <snippet>Current stack includes Neo4j 5.23.1. System uses polyglot persistence: ChromaDB, TimescaleDB, PostgreSQL, Neo4j, Redis.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <!-- PRIMARY FILES TO MODIFY (IN SCOPE) -->
+      <file>
+        <path>src/services/episodic_memory.py</path>
+        <kind>service</kind>
+        <symbol>EpisodicMemoryService._store_in_neo4j</symbol>
+        <lines>114-150 (method definition), 61-62 (method call), 411-413 (delete logic)</lines>
+        <reason>Contains _store_in_neo4j() method that creates Episode and Person nodes with INVOLVES relationships. Import at line 16.</reason>
+      </file>
+      <file>
+        <path>src/services/procedural_memory.py</path>
+        <kind>service</kind>
+        <symbol>ProceduralMemoryService._store_skill_relationships</symbol>
+        <lines>203-250 (method definition), 111-112 (method call)</lines>
+        <reason>Contains _store_skill_relationships() method that creates Skill and Context nodes with PREREQUISITE_FOR, USED_IN relationships. Import at line 17.</reason>
+      </file>
+      <file>
+        <path>src/services/portfolio_service.py</path>
+        <kind>service</kind>
+        <symbol>PortfolioService._create_neo4j_holding</symbol>
+        <lines>228-260 (method definition), 215 (method call)</lines>
+        <reason>Contains Neo4j Holding node creation logic. Import at line 20.</reason>
+      </file>
+      <file>
+        <path>src/services/emotional_memory.py</path>
+        <kind>service</kind>
+        <symbol>EmotionalMemoryService</symbol>
+        <lines>17, 73</lines>
+        <reason>Imports neo4j_client and initializes driver but does NOT appear to use it. Confirm and remove unused import/init.</reason>
+      </file>
+
+      <!-- REFERENCE FILES (NOT TO MODIFY - later stories) -->
+      <file>
+        <path>src/dependencies/neo4j_client.py</path>
+        <kind>dependency</kind>
+        <symbol>get_neo4j_driver</symbol>
+        <lines>all</lines>
+        <reason>DO NOT MODIFY - This is Story 9.3. Keep import working until all services are cleaned.</reason>
+      </file>
+      <file>
+        <path>src/storage/orchestrator.py</path>
+        <kind>orchestrator</kind>
+        <symbol>StorageOrchestrator</symbol>
+        <lines>neo4j references</lines>
+        <reason>DO NOT MODIFY - This is Story 9.2. Has Episode node creation and LED_TO relationships.</reason>
+      </file>
+
+      <!-- TEST FILES TO UPDATE -->
+      <file>
+        <path>tests/conftest.py</path>
+        <kind>test-fixture</kind>
+        <symbol>pytest fixtures</symbol>
+        <lines>neo4j mock setup</lines>
+        <reason>May contain Neo4j mock fixtures that need to be removed or updated.</reason>
+      </file>
+      <file>
+        <path>tests/unit/test_app_health.py</path>
+        <kind>test</kind>
+        <symbol>health check tests</symbol>
+        <lines>neo4j health checks</lines>
+        <reason>May test Neo4j health - verify tests still pass without Neo4j mocks.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="neo4j" version="5.23.1" action="DO NOT REMOVE YET">Story 9.3 will remove this dependency</package>
+        <package name="fastapi" version="0.111.0">Web framework</package>
+        <package name="psycopg" version="latest">PostgreSQL driver - primary storage</package>
+        <package name="chromadb" version="0.5.3">Vector database - semantic search</package>
+        <package name="redis" version="5.0.6">Cache layer</package>
+        <package name="langgraph" version="0.2.25">Ingestion pipeline</package>
+        <package name="pytest" version="8.3.2">Testing framework</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="scope">ONLY modify the 4 memory service files: episodic_memory.py, procedural_memory.py, portfolio_service.py, emotional_memory.py</constraint>
+    <constraint type="scope">DO NOT remove neo4j_client.py - that is Story 9.3</constraint>
+    <constraint type="scope">DO NOT modify storage/orchestrator.py or hybrid_retrieval.py - that is Story 9.2</constraint>
+    <constraint type="scope">DO NOT remove neo4j from requirements.txt - that is Story 9.3</constraint>
+    <constraint type="pattern">Keep existing try/except patterns but remove Neo4j-specific handling</constraint>
+    <constraint type="pattern">Verify data is already written to TimescaleDB/PostgreSQL before removing Neo4j write</constraint>
+    <constraint type="pattern">Update any logging that references Neo4j operations</constraint>
+    <constraint type="data">All Neo4j data already exists in other databases - no data migration needed</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>get_neo4j_driver</name>
+      <kind>function</kind>
+      <signature>def get_neo4j_driver() -> Optional[neo4j.Driver]</signature>
+      <path>src/dependencies/neo4j_client.py</path>
+      <note>Remove imports of this function from memory services. Keep function itself until Story 9.3.</note>
+    </interface>
+    <interface>
+      <name>EpisodicMemoryService.store_memory</name>
+      <kind>method</kind>
+      <signature>def store_memory(self, memory: EpisodicMemory) -> str</signature>
+      <path>src/services/episodic_memory.py</path>
+      <note>Main storage method. Currently calls _store_in_neo4j(). Remove that call.</note>
+    </interface>
+    <interface>
+      <name>ProceduralMemoryService.practice_skill</name>
+      <kind>method</kind>
+      <signature>def practice_skill(self, memory: ProceduralMemory) -> str</signature>
+      <path>src/services/procedural_memory.py</path>
+      <note>Main storage method. Currently calls _store_skill_relationships(). Remove that call.</note>
+    </interface>
+    <interface>
+      <name>PortfolioService.add_holding</name>
+      <kind>method</kind>
+      <signature>def add_holding(self, holding: Holding) -> str</signature>
+      <path>src/services/portfolio_service.py</path>
+      <note>Main storage method. Currently creates Neo4j node. Remove that logic.</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with fixtures defined in tests/conftest.py. Unit tests are in tests/unit/, integration tests in tests/e2e/.
+      Mock external dependencies (databases, APIs). Use FastAPI TestClient for API endpoint testing.
+      Existing tests may mock Neo4j driver - remove those mocks when Neo4j code is removed.
+    </standards>
+    <locations>
+      <location>tests/unit/</location>
+      <location>tests/e2e/</location>
+      <location>tests/conftest.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-9.1.1">Verify episodic_memory.store_memory() works without Neo4j driver initialized</idea>
+      <idea ac="AC-9.1.2">Verify procedural_memory.practice_skill() works without Neo4j driver</idea>
+      <idea ac="AC-9.1.3">Verify portfolio_service.add_holding() works without Neo4j driver</idea>
+      <idea ac="AC-9.1.4">Grep emotional_memory.py to confirm no session.run() calls exist</idea>
+      <idea ac="AC-9.1.5">Run pytest tests/unit/ and verify no failures related to missing Neo4j mocks</idea>
+      <idea ac="AC-9.1.6">Run POST /v1/store with NEO4J_URI unset and verify success response</idea>
+    </ideas>
+  </tests>
+</story-context>

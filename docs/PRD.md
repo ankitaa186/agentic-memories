@@ -18,7 +18,7 @@ Agentic Memories v3.0 adds **Deterministic User Profiles** as a stable, API-acce
 - **Deferred to Post-MVP:** MCP developer tools, UI components, authentication
 
 **Current State:**
-Today, agentic-memories provides sophisticated memory storage and retrieval across 6 memory types (episodic, semantic, procedural, emotional, portfolio, identity) using polyglot persistence (5 databases). Memories are dynamically retrieved based on conversation context.
+Today, agentic-memories provides sophisticated memory storage and retrieval across 6 memory types (episodic, semantic, procedural, emotional, portfolio, identity) using polyglot persistence (3 databases). Memories are dynamically retrieved based on conversation context.
 
 **Future State (MVP):**
 With v3.0 MVP, companions will always know baseline user identity (deterministic profile) via REST APIs while continuing to use dynamic memories for context.
@@ -53,7 +53,7 @@ A companion can now say *"Based on your goal to save for a down payment (from pr
 **Context:**
 This enhancement builds on an existing sophisticated system:
 - Multi-part architecture (Python/FastAPI backend + React frontend)
-- 6 memory types across 5 databases (ChromaDB, TimescaleDB, PostgreSQL, Neo4j, Redis)
+- 6 memory types across 4 databases (ChromaDB, TimescaleDB, PostgreSQL, Redis)
 - LangGraph extraction pipeline with persona-aware retrieval
 - 15 REST API endpoints with hybrid multi-database queries
 - Production deployment with Docker orchestration
@@ -248,7 +248,6 @@ Return aggregated JSON with metadata
    - Skill progression history
    - Learning goals from profile
    - Recent practice sessions
-   - Skill dependency graph (Neo4j)
    - Personalized recommendations
 
 3. **Social Tool** (`/mcp/tools/social`)
@@ -615,13 +614,12 @@ Check completeness score
 - Redis (existing)
 - ChromaDB (existing)
 - TimescaleDB (existing)
-- Neo4j (existing)
 - OpenAI GPT-4 or xAI Grok (existing)
 
 **Internal:**
 - Existing LangGraph extraction pipeline
 - Existing retrieval orchestrator
-- Existing database clients (psycopg, neo4j driver, redis-py)
+- Existing database clients (psycopg, redis-py)
 
 ### Risk Mitigation
 
