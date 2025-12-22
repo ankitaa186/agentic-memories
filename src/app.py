@@ -75,13 +75,16 @@ def _run_daily_compaction() -> None:
         logger.info("[maint.compaction] skipped: redis unavailable")
         return
 
-    # Distributed lock: only one worker should run compaction
+    # Use Redis Lock object for safe distributed locking
+    # - blocking=False: Don't wait if lock is held
+    # - timeout: Lock auto-expires if holder crashes
+    # - Lock.release() uses Lua script to atomically verify ownership
     lock_key = "compaction_lock:daily"
     lock_ttl = 3600  # 1 hour max lock duration
     worker_id = f"worker-{os.getpid()}"
 
-    # Try to acquire lock (NX = only set if not exists, EX = expiry)
-    acquired = r.set(lock_key, worker_id, nx=True, ex=lock_ttl)
+    lock = r.lock(lock_key, timeout=lock_ttl, blocking=False)
+    acquired = lock.acquire()
     if not acquired:
         logger.info("[maint.compaction] skipped: another worker holds lock")
         return
@@ -91,9 +94,12 @@ def _run_daily_compaction() -> None:
     try:
         _execute_compaction(r)
     finally:
-        # Release lock
-        r.delete(lock_key)
-        logger.info("[maint.compaction] lock released by %s", worker_id)
+        try:
+            lock.release()
+            logger.info("[maint.compaction] lock released by %s", worker_id)
+        except Exception as release_err:
+            # Lock may have expired - that's OK, just log it
+            logger.info("[maint.compaction] lock release skipped (may have expired): %s", release_err)
 
 def _execute_compaction(r) -> None:
     """Execute the actual compaction logic."""
