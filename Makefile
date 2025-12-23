@@ -1,16 +1,19 @@
 # Makefile for agentic-memories
 
-.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile start stop clean docker-logs docker-shell docker-test
+.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile test-coverage start stop clean clean-all lint format docker-logs docker-shell docker-test
 
 # Default target
 help: ## Show this help message
 	@echo "Available commands:"
 	@echo ""
 	@echo "  Setup:"
-	@grep -E '^(install|start|stop|clean):.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "    \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^(install|start|stop|clean|clean-all):.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "    \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Testing:"
 	@grep -E '^test[a-zA-Z0-9_-]*:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "    \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "  Code Quality:"
+	@grep -E '^(lint|format):.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "    \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Docker:"
 	@grep -E '^docker[a-zA-Z0-9_-]*:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "    \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +35,9 @@ stop: ## Stop Docker containers
 clean: ## Clean up logs, results, and volumes
 	rm -rf tests/e2e/logs/ tests/e2e/results/
 	docker-compose down -v
+
+clean-all: clean ## Clean everything including venv
+	rm -rf .venv
 
 # ============================================================
 # TESTING - Simple Commands
@@ -98,6 +104,9 @@ test-memory: venv ## Run memory-related tests
 test-profile: venv ## Run profile-related tests
 	$(VENV) pytest tests -k "profile" -v --ignore=tests/e2e
 
+test-coverage: venv ## Run tests with coverage report
+	$(VENV) pytest tests/unit tests/integration --cov=src --cov-report=term-missing --cov-report=html
+
 # ============================================================
 # DOCKER
 # ============================================================
@@ -110,3 +119,13 @@ docker-shell: ## Open shell in Docker container
 
 docker-test: ## Run tests inside Docker container
 	docker exec -it agentic-memories-app-1 pytest tests/unit tests/integration -v
+
+# ============================================================
+# CODE QUALITY
+# ============================================================
+
+lint: venv ## Run linter (ruff)
+	$(VENV) pip install -q ruff && ruff check .
+
+format: venv ## Format code (ruff)
+	$(VENV) pip install -q ruff && ruff format .
