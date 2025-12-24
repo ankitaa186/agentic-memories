@@ -29,16 +29,6 @@ router = APIRouter(prefix="/v1/intents", tags=["intents"])
 
 
 # =============================================================================
-# Error Response Model
-# =============================================================================
-
-class ErrorResponse:
-    """Standard error response format."""
-    def __init__(self, errors: List[str]):
-        self.errors = errors
-
-
-# =============================================================================
 # POST /v1/intents - Create Intent (AC1)
 # =============================================================================
 

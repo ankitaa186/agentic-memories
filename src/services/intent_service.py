@@ -18,6 +18,7 @@ from src.schemas import (
     ScheduledIntentUpdate,
     ScheduledIntentResponse,
     TriggerSchedule,
+    TriggerCondition,
     IntentFireRequest,
     IntentFireResponse,
     IntentExecutionResponse,
@@ -299,28 +300,57 @@ class IntentService:
                     logger.info("[intent.service.update] intent_id=%s not_found", intent_id)
                     return IntentServiceResult(success=False, errors=["Intent not found"])
 
-                # Determine if schedule changed (need to recalculate next_check)
-                schedule_changed = False
+                # Build merged state for validation
                 new_trigger_type = update.trigger_type or existing["trigger_type"]
                 new_trigger_schedule = None
+                new_trigger_condition = None
 
-                if update.trigger_type and update.trigger_type != existing["trigger_type"]:
-                    schedule_changed = True
-
-                if update.trigger_schedule:
-                    schedule_changed = True
+                # Merge trigger_schedule
+                if update.trigger_schedule is not None:
                     new_trigger_schedule = update.trigger_schedule
                 elif existing["trigger_schedule"]:
-                    # Convert existing JSON to TriggerSchedule
                     new_trigger_schedule = TriggerSchedule(**existing["trigger_schedule"])
 
-                # Validate merged state compatibility when trigger_type changes
-                if schedule_changed and new_trigger_schedule:
-                    validation_errors = self._validate_trigger_type_schedule_compatibility(
-                        new_trigger_type, new_trigger_schedule
+                # Merge trigger_condition
+                if update.trigger_condition is not None:
+                    new_trigger_condition = update.trigger_condition
+                elif existing["trigger_condition"]:
+                    new_trigger_condition = TriggerCondition(**existing["trigger_condition"])
+
+                # Build merged ScheduledIntentCreate for full validation
+                merged_intent = ScheduledIntentCreate(
+                    user_id=existing["user_id"],
+                    intent_name=update.intent_name or existing["intent_name"],
+                    description=update.description if update.description is not None else existing.get("description"),
+                    trigger_type=new_trigger_type,
+                    trigger_schedule=new_trigger_schedule,
+                    trigger_condition=new_trigger_condition,
+                    action_type=update.action_type or existing["action_type"],
+                    action_context=update.action_context or existing["action_context"],
+                    action_priority=update.action_priority or existing["action_priority"],
+                    expires_at=update.expires_at if update.expires_at is not None else existing.get("expires_at"),
+                    max_executions=update.max_executions if update.max_executions is not None else existing.get("max_executions"),
+                    metadata=update.metadata if update.metadata is not None else existing.get("metadata"),
+                )
+
+                # Run full validation on merged state
+                # Use validator without db connection to skip trigger count check for updates
+                # (user already has the trigger, we're just modifying it)
+                update_validator = IntentValidationService(conn=None)
+                validation_result = update_validator.validate(merged_intent)
+                if not validation_result.is_valid:
+                    logger.warning(
+                        "[intent.service.update] intent_id=%s validation_failed errors=%d",
+                        intent_id, len(validation_result.errors)
                     )
-                    if validation_errors:
-                        return IntentServiceResult(success=False, errors=validation_errors)
+                    return IntentServiceResult(success=False, errors=validation_result.errors)
+
+                # Determine if schedule changed (need to recalculate next_check)
+                schedule_changed = False
+                if update.trigger_type and update.trigger_type != existing["trigger_type"]:
+                    schedule_changed = True
+                if update.trigger_schedule is not None:
+                    schedule_changed = True
 
                 # Calculate new next_check if schedule changed
                 new_next_check = None
@@ -886,121 +916,67 @@ class IntentService:
     def _row_to_response(self, row: Dict[str, Any]) -> ScheduledIntentResponse:
         """Convert a database row to a ScheduledIntentResponse.
 
+        Note: Connection pool is configured with dict_row factory, so rows
+        are always dictionaries. No tuple fallback needed.
+
         Args:
-            row: The database row (dict-like)
+            row: The database row (dict from dict_row cursor)
 
         Returns:
             ScheduledIntentResponse instance
         """
-        # Handle both dict and tuple cursor results
-        if isinstance(row, dict):
-            return ScheduledIntentResponse(
-                id=row["id"],
-                user_id=row["user_id"],
-                intent_name=row["intent_name"],
-                description=row.get("description"),
-                trigger_type=row["trigger_type"],
-                trigger_schedule=row.get("trigger_schedule"),
-                trigger_condition=row.get("trigger_condition"),
-                action_type=row["action_type"],
-                action_context=row["action_context"],
-                action_priority=row["action_priority"],
-                next_check=row.get("next_check"),
-                last_checked=row.get("last_checked"),
-                last_executed=row.get("last_executed"),
-                execution_count=row.get("execution_count", 0),
-                last_execution_status=row.get("last_execution_status"),
-                last_execution_error=row.get("last_execution_error"),
-                last_message_id=row.get("last_message_id"),
-                enabled=row.get("enabled", True),
-                expires_at=row.get("expires_at"),
-                max_executions=row.get("max_executions"),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-                created_by=row.get("created_by"),
-                metadata=row.get("metadata"),
-            )
-        else:
-            # Tuple indexing - columns in order from SELECT *
-            # id, user_id, intent_name, description, trigger_type, trigger_schedule,
-            # trigger_condition, action_type, action_context, action_priority,
-            # next_check, last_checked, last_executed, execution_count,
-            # last_execution_status, last_execution_error, last_message_id,
-            # enabled, expires_at, max_executions, created_at, updated_at,
-            # created_by, metadata
-            return ScheduledIntentResponse(
-                id=row[0],
-                user_id=row[1],
-                intent_name=row[2],
-                description=row[3],
-                trigger_type=row[4],
-                trigger_schedule=row[5],
-                trigger_condition=row[6],
-                action_type=row[7],
-                action_context=row[8],
-                action_priority=row[9],
-                next_check=row[10],
-                last_checked=row[11],
-                last_executed=row[12],
-                execution_count=row[13] or 0,
-                last_execution_status=row[14],
-                last_execution_error=row[15],
-                last_message_id=row[16],
-                enabled=row[17] if row[17] is not None else True,
-                expires_at=row[18],
-                max_executions=row[19],
-                created_at=row[20],
-                updated_at=row[21],
-                created_by=row[22],
-                metadata=row[23],
-            )
+        return ScheduledIntentResponse(
+            id=row["id"],
+            user_id=row["user_id"],
+            intent_name=row["intent_name"],
+            description=row.get("description"),
+            trigger_type=row["trigger_type"],
+            trigger_schedule=row.get("trigger_schedule"),
+            trigger_condition=row.get("trigger_condition"),
+            action_type=row["action_type"],
+            action_context=row["action_context"],
+            action_priority=row["action_priority"],
+            next_check=row.get("next_check"),
+            last_checked=row.get("last_checked"),
+            last_executed=row.get("last_executed"),
+            execution_count=row.get("execution_count", 0),
+            last_execution_status=row.get("last_execution_status"),
+            last_execution_error=row.get("last_execution_error"),
+            last_message_id=row.get("last_message_id"),
+            enabled=row.get("enabled", True),
+            expires_at=row.get("expires_at"),
+            max_executions=row.get("max_executions"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            created_by=row.get("created_by"),
+            metadata=row.get("metadata"),
+        )
 
     def _execution_row_to_response(self, row: Dict[str, Any]) -> IntentExecutionResponse:
         """Convert an intent_executions database row to IntentExecutionResponse.
 
+        Note: Connection pool is configured with dict_row factory, so rows
+        are always dictionaries. No tuple fallback needed.
+
         Args:
-            row: The database row (dict-like or tuple)
+            row: The database row (dict from dict_row cursor)
 
         Returns:
             IntentExecutionResponse instance
         """
-        # Handle both dict and tuple cursor results
-        # Columns: id, intent_id, user_id, executed_at, trigger_type,
-        #          trigger_data, status, gate_result, message_id,
-        #          message_preview, evaluation_ms, generation_ms,
-        #          delivery_ms, error_message
-        if isinstance(row, dict):
-            return IntentExecutionResponse(
-                id=row["id"],
-                intent_id=row["intent_id"],
-                user_id=row["user_id"],
-                executed_at=row["executed_at"],
-                trigger_type=row["trigger_type"],
-                trigger_data=row.get("trigger_data"),
-                status=row["status"],
-                gate_result=row.get("gate_result"),
-                message_id=row.get("message_id"),
-                message_preview=row.get("message_preview"),
-                evaluation_ms=row.get("evaluation_ms"),
-                generation_ms=row.get("generation_ms"),
-                delivery_ms=row.get("delivery_ms"),
-                error_message=row.get("error_message"),
-            )
-        else:
-            # Tuple indexing
-            return IntentExecutionResponse(
-                id=row[0],
-                intent_id=row[1],
-                user_id=row[2],
-                executed_at=row[3],
-                trigger_type=row[4],
-                trigger_data=row[5],
-                status=row[6],
-                gate_result=row[7],
-                message_id=row[8],
-                message_preview=row[9],
-                evaluation_ms=row[10],
-                generation_ms=row[11],
-                delivery_ms=row[12],
-                error_message=row[13],
-            )
+        return IntentExecutionResponse(
+            id=row["id"],
+            intent_id=row["intent_id"],
+            user_id=row["user_id"],
+            executed_at=row["executed_at"],
+            trigger_type=row["trigger_type"],
+            trigger_data=row.get("trigger_data"),
+            status=row["status"],
+            gate_result=row.get("gate_result"),
+            message_id=row.get("message_id"),
+            message_preview=row.get("message_preview"),
+            evaluation_ms=row.get("evaluation_ms"),
+            generation_ms=row.get("generation_ms"),
+            delivery_ms=row.get("delivery_ms"),
+            error_message=row.get("error_message"),
+        )
