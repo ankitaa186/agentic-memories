@@ -1,0 +1,202 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>1</storyId>
+    <title>Timezone Support</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/6-1-timezone-support.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Annie Proactive Worker</asA>
+    <iWant>scheduled triggers to support IANA timezone configuration</iWant>
+    <soThat>users receive proactive messages at appropriate local times regardless of their geographic location</soThat>
+    <tasks>
+      <task id="1" ac="1.1">Database Migration - Create migration 019 with trigger_timezone column</task>
+      <task id="2" ac="1.2">Extend TriggerSchedule Pydantic Model with timezone field</task>
+      <task id="3" ac="1.3">Implement Timezone Validation in IntentValidationService</task>
+      <task id="4" ac="1.4">Update Next Check Calculation for timezone-aware cron/once</task>
+      <task id="5" ac="1.2,1.5">Update IntentService for timezone handling in storage/retrieval</task>
+      <task id="6" ac="1.1-1.5">Unit Tests for timezone validation and calculation</task>
+      <task id="7" ac="1.4,1.5">Integration Tests for full timezone flow</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1.1">trigger_timezone column added to scheduled_intents table with default 'UTC'</ac>
+    <ac id="1.2">TriggerSchedule model accepts timezone field with default 'UTC'</ac>
+    <ac id="1.3">Invalid timezones return validation error with IANA format example</ac>
+    <ac id="1.4">Cron next_check calculated using user timezone, stored as UTC</ac>
+    <ac id="1.5">API response includes timezone in trigger_schedule</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification</title>
+        <section>Story 6.1: Timezone Support</section>
+        <snippet>AC1.1-AC1.5 define timezone support requirements. Uses Python zoneinfo for validation. Croniter receives timezone parameter for cron triggers.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-6-intents-api-alignment.md</path>
+        <title>Epic 6: Intents API Alignment</title>
+        <section>Story 6.1: Timezone Support</section>
+        <snippet>Add trigger_timezone VARCHAR(64) DEFAULT 'UTC' column. TriggerSchedule gets timezone field. Validation via zoneinfo.ZoneInfo.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/5-8-next-check-calculation-logic.md</path>
+        <title>Story 5.8: Next Check Calculation Logic</title>
+        <section>Dev Agent Record</section>
+        <snippet>Next check methods at intent_service.py:723-809. Croniter already imported. 31 unit tests in test_next_check_calculation.py provide patterns.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Overview</title>
+        <section>Database Layer</section>
+        <snippet>PostgreSQL with psycopg3. All timestamps stored in UTC. Migrations in migrations/postgres/.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>src/schemas.py</path>
+        <kind>schema</kind>
+        <symbol>TriggerSchedule</symbol>
+        <lines>239-249</lines>
+        <reason>Extend with timezone: str = Field(default="UTC") field</reason>
+      </file>
+      <file>
+        <path>src/services/intent_validation.py</path>
+        <kind>service</kind>
+        <symbol>IntentValidationService</symbol>
+        <lines>61-141</lines>
+        <reason>Add validate_timezone() method using zoneinfo.ZoneInfo</reason>
+      </file>
+      <file>
+        <path>src/services/intent_service.py</path>
+        <kind>service</kind>
+        <symbol>_calculate_initial_next_check</symbol>
+        <lines>792-850</lines>
+        <reason>Modify to accept timezone parameter for cron/once triggers</reason>
+      </file>
+      <file>
+        <path>src/services/intent_service.py</path>
+        <kind>service</kind>
+        <symbol>_calculate_next_check_after_fire</symbol>
+        <lines>792-850</lines>
+        <reason>Modify to accept timezone parameter for cron triggers</reason>
+      </file>
+      <file>
+        <path>src/services/intent_service.py</path>
+        <kind>service</kind>
+        <symbol>_row_to_response</symbol>
+        <lines>855-890</lines>
+        <reason>Extract timezone from trigger_schedule JSONB, include in response</reason>
+      </file>
+      <file>
+        <path>src/routers/intents.py</path>
+        <kind>router</kind>
+        <symbol>create_intent, get_intent</symbol>
+        <lines>36-91, 317-355</lines>
+        <reason>Endpoints that will receive/return timezone in trigger_schedule</reason>
+      </file>
+      <file>
+        <path>migrations/postgres/017_scheduled_intents.up.sql</path>
+        <kind>migration</kind>
+        <symbol>scheduled_intents table</symbol>
+        <lines>1-106</lines>
+        <reason>Base table to extend with trigger_timezone column in migration 019</reason>
+      </file>
+      <file>
+        <path>tests/unit/test_next_check_calculation.py</path>
+        <kind>test</kind>
+        <symbol>TestCalculateInitialNextCheck, TestCroniterEdgeCases</symbol>
+        <lines>all</lines>
+        <reason>Existing test patterns to follow for timezone tests</reason>
+      </file>
+      <file>
+        <path>tests/integration/test_intents_api.py</path>
+        <kind>test</kind>
+        <symbol>test_create_intent_*</symbol>
+        <lines>all</lines>
+        <reason>Integration test patterns for intent creation with timezone</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="zoneinfo" version="stdlib">Python 3.9+ stdlib for IANA timezone validation</package>
+        <package name="croniter" version=">=1.3.8">Supports timezone parameter for cron parsing</package>
+        <package name="psycopg" version=">=3.1">PostgreSQL driver with connection pooling</package>
+        <package name="pydantic" version=">=2.0">Model validation with Field() descriptions</package>
+        <package name="fastapi" version=">=0.100">API framework with OpenAPI generation</package>
+        <package name="pytest" version=">=7.0">Testing framework</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">All timestamps stored in UTC, converted at query time</constraint>
+    <constraint source="architecture">Uses existing psycopg3 connection pooling (AD-007)</constraint>
+    <constraint source="architecture">Follows existing FastAPI router pattern (AD-008)</constraint>
+    <constraint source="tech-spec">Backward compatible - missing timezone defaults to 'UTC'</constraint>
+    <constraint source="tech-spec">Uses Python stdlib zoneinfo (no external deps for timezone)</constraint>
+    <constraint source="tech-spec">Timezone validation error format: "Invalid timezone: {tz}. Use IANA format (e.g., 'America/Los_Angeles')"</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>TriggerSchedule.timezone</name>
+      <kind>pydantic-field</kind>
+      <signature>timezone: str = Field(default="UTC", description="IANA timezone (e.g., 'America/Los_Angeles')")</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>IntentValidationService.validate_timezone</name>
+      <kind>method</kind>
+      <signature>def validate_timezone(self, tz: str) -> List[str]</signature>
+      <path>src/services/intent_validation.py</path>
+    </interface>
+    <interface>
+      <name>_calculate_initial_next_check</name>
+      <kind>method</kind>
+      <signature>def _calculate_initial_next_check(self, trigger_type: str, trigger_schedule: Optional[TriggerSchedule], timezone: str = "UTC") -> Optional[datetime]</signature>
+      <path>src/services/intent_service.py</path>
+    </interface>
+    <interface>
+      <name>POST /v1/intents</name>
+      <kind>REST endpoint</kind>
+      <signature>Request body includes trigger_schedule.timezone; Response includes timezone in trigger_schedule</signature>
+      <path>src/routers/intents.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with fixtures. Unit tests in tests/unit/, integration tests in tests/integration/.
+      Follow existing patterns from test_next_check_calculation.py (mock_conn fixture, fixed_now for deterministic time).
+      Integration tests use mock_db_connection fixture and patch get_timescale_conn.
+      All tests should pass independently and be deterministic.
+    </standards>
+    <locations>
+      <location>tests/unit/test_timezone_validation.py (new)</location>
+      <location>tests/unit/test_next_check_calculation.py (extend)</location>
+      <location>tests/integration/test_intents_api.py (extend)</location>
+    </locations>
+    <ideas>
+      <idea ac="1.1">Test migration adds trigger_timezone column with default 'UTC'</idea>
+      <idea ac="1.2">Test TriggerSchedule serializes/deserializes timezone field correctly</idea>
+      <idea ac="1.3">Test valid IANA timezones pass validation (America/Los_Angeles, Europe/London, Asia/Tokyo, UTC)</idea>
+      <idea ac="1.3">Test invalid timezones fail with descriptive error (Invalid/Zone, empty, numeric, partial)</idea>
+      <idea ac="1.4">Test cron next_check with America/Los_Angeles returns UTC datetime</idea>
+      <idea ac="1.4">Test cron next_check handles DST transition correctly</idea>
+      <idea ac="1.4">Test once trigger_at interpreted in user timezone, stored as UTC</idea>
+      <idea ac="1.5">Test GET intent returns timezone in trigger_schedule response</idea>
+      <idea ac="1.5">Test missing timezone defaults to 'UTC' in response</idea>
+      <idea ac="backward-compat">Test existing triggers without timezone continue to work</idea>
+    </ideas>
+  </tests>
+</story-context>

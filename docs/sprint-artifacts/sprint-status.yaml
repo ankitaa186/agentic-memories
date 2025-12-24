@@ -39,8 +39,9 @@
 #             Removed: Stories 1-7, 1-8 (Epic 1), Epic 5 (Scheduled Intents) with 8 stories
 #             These remain defined in epic files and can be re-added when ready to work
 # 2025-12-22: Re-added Epic 5 (Scheduled Intents API) to backlog
+# 2025-12-24: Added Epic 6 (Intents API Alignment) with 6 stories - extends Epic 5 for Annie integration
 
-generated: 2025-12-22
+generated: 2025-12-24
 project: agentic-memories
 project_key: agentic-memories
 tracking_system: file-system
@@ -126,6 +127,21 @@ development_status:
   9-4-remove-neo4j-infrastructure-configuration: done
   9-5-update-tests-and-documentation: done
   epic-9-retrospective: optional
+
+  # ============================================================
+  # EPIC 6: Intents API Alignment for Annie Proactive AI
+  # Source: docs/epic-6-intents-api-alignment.md
+  # Priority: P1 (Blocks Annie Epic 13)
+  # Dependencies: Epic 5 (Scheduled Intents API) - Must be complete
+  # ============================================================
+  epic-6: contexted
+  6-1-timezone-support: ready-for-dev
+  6-2-condition-expression-support: backlog
+  6-3-cooldown-logic: backlog
+  6-4-fire-mode-support: backlog
+  6-5-portfolio-condition-type: backlog
+  6-6-api-documentation-update: backlog
+  epic-6-retrospective: optional
 
   # ============================================================
   # EPIC (TBD): Ingestion Graph Optimization
