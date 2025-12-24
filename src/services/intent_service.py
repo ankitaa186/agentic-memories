@@ -540,6 +540,11 @@ class IntentService:
                 cur.execute(query, tuple(params) if params else None)
                 rows = cur.fetchall()
 
+                # Commit immediately to release FOR UPDATE SKIP LOCKED row locks
+                # Without this, locks are held until the connection is reused for
+                # a write operation, blocking other workers from processing these intents
+                self._conn.commit()
+
                 intents = [self._row_to_response(row) for row in rows]
 
                 logger.info(
@@ -551,6 +556,7 @@ class IntentService:
 
         except Exception as e:
             logger.error("[intent.service.pending] user_id=%s error=%s", user_id, e)
+            self._conn.rollback()
             return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
 
     def fire_intent(

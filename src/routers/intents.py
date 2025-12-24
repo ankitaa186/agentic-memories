@@ -11,6 +11,7 @@ import logging
 from fastapi import APIRouter, Query, HTTPException, Response
 from fastapi.responses import JSONResponse
 from langfuse.decorators import observe
+from psycopg import Error as DatabaseError
 
 from src.schemas import (
     ScheduledIntentCreate,
@@ -79,9 +80,12 @@ def create_intent(request: ScheduledIntentCreate):
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.create] user_id=%s database_error=%s", request.user_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.create] user_id=%s error=%s", request.user_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error creating intent: {str(e)}")
+        logger.error("[intents.api.create] user_id=%s unexpected_error=%s", request.user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -135,9 +139,12 @@ def list_intents(
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.list] user_id=%s database_error=%s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.list] user_id=%s error=%s", user_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error listing intents: {str(e)}")
+        logger.error("[intents.api.list] user_id=%s unexpected_error=%s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -180,9 +187,12 @@ def get_pending_intents(
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.pending] user_id=%s database_error=%s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.pending] user_id=%s error=%s", user_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error fetching pending intents: {str(e)}")
+        logger.error("[intents.api.pending] user_id=%s unexpected_error=%s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -234,9 +244,12 @@ def fire_intent(intent_id: UUID, request: IntentFireRequest):
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.fire] intent_id=%s database_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.fire] intent_id=%s error=%s", intent_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error firing intent: {str(e)}")
+        logger.error("[intents.api.fire] intent_id=%s unexpected_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -286,9 +299,12 @@ def get_intent_history(
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.history] intent_id=%s database_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.history] intent_id=%s error=%s", intent_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error fetching intent history: {str(e)}")
+        logger.error("[intents.api.history] intent_id=%s unexpected_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -328,9 +344,12 @@ def get_intent(intent_id: UUID):
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.get] intent_id=%s database_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.get] intent_id=%s error=%s", intent_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error fetching intent: {str(e)}")
+        logger.error("[intents.api.get] intent_id=%s unexpected_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -378,9 +397,12 @@ def update_intent(intent_id: UUID, request: ScheduledIntentUpdate):
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.update] intent_id=%s database_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.update] intent_id=%s error=%s", intent_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error updating intent: {str(e)}")
+        logger.error("[intents.api.update] intent_id=%s unexpected_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
@@ -422,9 +444,12 @@ def delete_intent(intent_id: UUID):
 
     except HTTPException:
         raise
+    except DatabaseError as e:
+        logger.error("[intents.api.delete] intent_id=%s database_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception as e:
-        logger.error("[intents.api.delete] intent_id=%s error=%s", intent_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Error deleting intent: {str(e)}")
+        logger.error("[intents.api.delete] intent_id=%s unexpected_error=%s", intent_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
     finally:
         if conn is not None:
             release_timescale_conn(conn)
