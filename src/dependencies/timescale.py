@@ -84,16 +84,18 @@ def release_timescale_conn(conn: Connection):
 
 
 def ping_timescale() -> tuple[bool, Optional[str]]:
+	conn = None
 	try:
 		conn = get_timescale_conn()
 		if not conn:
 			return False, "Connection unavailable"
-		
+
 		with conn.cursor() as cur:
 			cur.execute("SELECT 1")
 			result = cur.fetchone()
-			conn.commit()
-			release_timescale_conn(conn)
 			return bool(result), None
 	except Exception as exc:
 		return False, str(exc)
+	finally:
+		if conn:
+			release_timescale_conn(conn)
