@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story Context for Story 6.3: Cooldown Logic
+  Generated: 2025-12-24
+
+  This context file provides comprehensive reference material for implementing
+  Story 6.3 within the Epic 6 (Intents API Alignment) sprint.
+-->
+<story-context story-id="6-3-cooldown-logic" epic-id="6">
+
+  <metadata>
+    <generated>2025-12-24</generated>
+    <story-status>drafted</story-status>
+    <agent-model>Claude Opus 4.5 (claude-opus-4-5-20251101)</agent-model>
+  </metadata>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 1: STORY DEFINITION -->
+  <!-- ============================================================ -->
+
+  <story-definition>
+    <story-name>Cooldown Logic</story-name>
+    <story-description>
+      As an Annie Proactive Worker, I want cooldown logic for condition-based triggers,
+      so that users are not overwhelmed with repeated alerts and alert fatigue is prevented.
+    </story-description>
+
+    <acceptance-criteria>
+      <ac id="3.1" description="cooldown_hours and last_condition_fire columns added">
+        <detail>Add cooldown_hours INT DEFAULT 24 column (range 1-168)</detail>
+        <detail>Add last_condition_fire TIMESTAMPTZ column (nullable)</detail>
+        <detail>Add claimed_at TIMESTAMPTZ column (nullable) for atomic claim mechanism</detail>
+        <detail>Backward compatible with existing triggers</detail>
+      </ac>
+      <ac id="3.2" description="Fire endpoint checks cooldown before processing condition triggers">
+        <detail>Check if trigger_type is condition-based (price, silence, portfolio)</detail>
+        <detail>Load last_condition_fire and cooldown_hours for condition triggers</detail>
+        <detail>Calculate hours since last fire</detail>
+        <detail>Skip execution if within cooldown period</detail>
+      </ac>
+      <ac id="3.3" description="Returns cooldown_active=true with remaining hours when blocked">
+        <detail>Add cooldown_active: bool to IntentFireResponse</detail>
+        <detail>Add cooldown_remaining_hours: Optional[float] to response</detail>
+        <detail>Return remaining hours calculated as cooldown_hours - hours_since_last</detail>
+      </ac>
+      <ac id="3.4" description="Updates last_condition_fire on successful fires">
+        <detail>Update last_condition_fire = NOW() when status='success'</detail>
+        <detail>Add last_condition_fire: Optional[datetime] to IntentFireResponse</detail>
+        <detail>Only update for condition-based triggers</detail>
+      </ac>
+      <ac id="3.5" description="Pending query excludes/flags triggers in cooldown">
+        <detail>Add in_cooldown flag to pending query response</detail>
+        <detail>Calculate cooldown status based on last_condition_fire and cooldown_hours</detail>
+        <detail>Return with flag for Annie flexibility (per Open Question resolution)</detail>
+        <detail>Exclude recently claimed intents (claimed_at > NOW() - 5 minutes)</detail>
+      </ac>
+      <ac id="3.6" description="Explicit claim endpoint prevents duplicate processing">
+        <detail>Add claimed_at TIMESTAMPTZ column for worker claim tracking</detail>
+        <detail>Add POST /v1/intents/{id}/claim endpoint to claim an intent</detail>
+        <detail>Claim sets claimed_at = NOW(), fails if already claimed (within 5 min)</detail>
+        <detail>Pending query excludes recently claimed intents (read-only, no side effects)</detail>
+        <detail>Fire endpoint clears claimed_at after processing</detail>
+        <detail>Claims expire after 5 minutes (for crashed worker recovery)</detail>
+      </ac>
+    </acceptance-criteria>
+
+    <tasks>
+      <task id="1" name="Database Migration" acs="3.1, 3.6">
+        <subtask id="1.1">Create migrations/postgres/021_cooldown_logic.up.sql</subtask>
+        <subtask id="1.2">Add cooldown_hours INT DEFAULT 24 column with CHECK constraint (1-168)</subtask>
+        <subtask id="1.3">Add last_condition_fire TIMESTAMPTZ column (nullable)</subtask>
+        <subtask id="1.4">Add claimed_at TIMESTAMPTZ column (nullable) for atomic claim mechanism</subtask>
+        <subtask id="1.5">Create down migration for rollback</subtask>
+      </task>
+      <task id="2" name="Extend TriggerCondition Pydantic Model" acs="3.1">
+        <subtask id="2.1">Add cooldown_hours: int = Field(default=24, ge=1, le=168) to TriggerCondition in src/schemas.py</subtask>
+        <subtask id="2.2">Add field description for OpenAPI documentation</subtask>
+        <subtask id="2.3">Add validation for cooldown_hours in IntentValidationService</subtask>
+      </task>
+      <task id="3" name="Extend IntentFireResponse" acs="3.3, 3.4">
+        <subtask id="3.1">Add cooldown_active: bool = False to IntentFireResponse</subtask>
+        <subtask id="3.2">Add cooldown_remaining_hours: Optional[float] = None</subtask>
+        <subtask id="3.3">Add last_condition_fire: Optional[datetime] = None</subtask>
+      </task>
+      <task id="4" name="Implement Cooldown Logic in IntentService" acs="3.2, 3.4">
+        <subtask id="4.1">Add _check_cooldown() method to IntentService</subtask>
+        <subtask id="4.2">Determine if trigger_type is condition-based (price, silence, portfolio)</subtask>
+        <subtask id="4.3">Calculate hours_since_last from last_condition_fire</subtask>
+        <subtask id="4.4">Return early with cooldown_active=true if within cooldown period</subtask>
+        <subtask id="4.5">Update last_condition_fire on successful fires</subtask>
+        <subtask id="4.6">Add logging: [intents.fire] cooldown_active=true remaining_hours=X</subtask>
+      </task>
+      <task id="5" name="Update Pending Query" acs="3.5, 3.6">
+        <subtask id="5.1">Add in_cooldown calculation to pending query</subtask>
+        <subtask id="5.2">Calculate cooldown status from last_condition_fire and cooldown_hours</subtask>
+        <subtask id="5.3">Include in_cooldown flag in response</subtask>
+        <subtask id="5.4">Exclude recently claimed intents (claimed_at > NOW() - 5 minutes)</subtask>
+      </task>
+      <task id="5b" name="Implement Claim Endpoint" acs="3.6">
+        <subtask id="5b.1">Add POST /v1/intents/{id}/claim route in src/routes/intents.py</subtask>
+        <subtask id="5b.2">Add IntentClaimResponse schema with claimed_at, intent data</subtask>
+        <subtask id="5b.3">Add claim_intent() method to IntentService</subtask>
+        <subtask id="5b.4">Use FOR UPDATE SKIP LOCKED to prevent race on same intent</subtask>
+        <subtask id="5b.5">Return 409 Conflict if already claimed (within 5 min timeout)</subtask>
+        <subtask id="5b.6">Clear claimed_at in fire_intent() after processing</subtask>
+      </task>
+      <task id="6" name="Unit Tests" acs="3.1-3.6">
+        <subtask id="6.1">Test cooldown_hours validation (1-168 range)</subtask>
+        <subtask id="6.2">Test cooldown_active response when within cooldown</subtask>
+        <subtask id="6.3">Test cooldown_remaining_hours calculation</subtask>
+        <subtask id="6.4">Test last_condition_fire update on success</subtask>
+        <subtask id="6.5">Test pending query in_cooldown flag</subtask>
+        <subtask id="6.6">Test claim_intent sets claimed_at</subtask>
+        <subtask id="6.7">Test claim_intent returns 409 if already claimed</subtask>
+        <subtask id="6.8">Test recently claimed intents are excluded from pending</subtask>
+      </task>
+      <task id="7" name="Integration Tests" acs="3.2, 3.3, 3.4, 3.6">
+        <subtask id="7.1">Fire intent, verify last_condition_fire updates</subtask>
+        <subtask id="7.2">Fire intent again within cooldown, verify cooldown_active=true</subtask>
+        <subtask id="7.3">Fire intent after cooldown expires, verify success</subtask>
+        <subtask id="7.4">Verify pending endpoint returns in_cooldown flag</subtask>
+        <subtask id="7.5">Claim intent, verify second claim returns 409</subtask>
+        <subtask id="7.6">Claim then fire, verify claimed_at is cleared</subtask>
+      </task>
+    </tasks>
+  </story-definition>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 2: EPIC CONTEXT -->
+  <!-- ============================================================ -->
+
+  <epic-context>
+    <epic-name>Epic 6: Intents API Alignment for Annie Proactive AI</epic-name>
+    <epic-objective>
+      Extend the Scheduled Intents API (Epic 5) to fully support Annie's redesigned
+      LLM-driven proactive AI architecture with timezone support, flexible condition
+      expressions, cooldown logic, and fire modes.
+    </epic-objective>
+
+    <related-stories>
+      <story id="6-1" status="done">Timezone Support</story>
+      <story id="6-2" status="done">Condition Expression Support</story>
+      <story id="6-3" status="drafted">Cooldown Logic (THIS STORY)</story>
+      <story id="6-4" status="backlog">Fire Mode Support</story>
+      <story id="6-5" status="backlog">Portfolio Condition Type</story>
+      <story id="6-6" status="backlog">API Documentation Update</story>
+    </related-stories>
+
+    <learnings-from-previous-stories>
+      <learning source="Story 6.1">
+        Validation Pattern: Use _validate_field() method pattern in IntentValidationService
+      </learning>
+      <learning source="Story 6.1">
+        Error Messages: Include format example in error message (e.g., "Use IANA format...")
+      </learning>
+      <learning source="Story 6.2">
+        Migration Separate File: Each story uses its own migration file (019, 020, now 021) per user feedback
+      </learning>
+      <learning source="Story 6.2">
+        REQUIRED_FIELDS Mapping: Price/silence/portfolio have no required condition fields (can use structured OR expression)
+      </learning>
+      <learning source="Story 6.2">
+        Test Organization: Create dedicated test class per feature
+      </learning>
+      <learning source="Story 6.2">
+        Backward Compatibility: Use defaults and optional fields
+      </learning>
+    </learnings-from-previous-stories>
+  </epic-context>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 3: ARCHITECTURE REFERENCE -->
+  <!-- ============================================================ -->
+
+  <architecture-reference>
+    <key-patterns>
+      <pattern name="Service Layer">
+        Business logic in src/services/intent_service.py with IntentService class.
+        Uses dependency injection for database connection.
+      </pattern>
+      <pattern name="Validation Service">
+        Separate IntentValidationService in src/services/intent_validation.py.
+        Collects all validation errors without short-circuiting.
+      </pattern>
+      <pattern name="Pydantic Models">
+        Request/response models in src/schemas.py.
+        Use Field() with description for OpenAPI documentation.
+      </pattern>
+      <pattern name="Database Migrations">
+        PostgreSQL migrations in migrations/postgres/ directory.
+        Each story uses separate migration file (e.g., 021_cooldown_logic.up.sql).
+      </pattern>
+      <pattern name="Router Pattern">
+        FastAPI routers in src/routers/intents.py.
+        Uses @observe decorator for Langfuse tracing.
+      </pattern>
+    </key-patterns>
+
+    <condition-based-triggers>
+      <trigger-type>price</trigger-type>
+      <trigger-type>silence</trigger-type>
+      <trigger-type>portfolio</trigger-type>
+      <note>Cooldown logic only applies to these condition-based triggers, not cron/interval/once</note>
+    </condition-based-triggers>
+
+    <race-condition-solution>
+      <problem>
+        Current get_pending_intents() uses FOR UPDATE SKIP LOCKED but commits immediately
+        after the SELECT (line 547 in intent_service.py), releasing the lock before the
+        worker processes the intent. This allows multiple workers to pick up the same intent.
+      </problem>
+      <solution>
+        Explicit three-step claim flow:
+        1. GET /v1/intents/pending - Read-only, returns available intents
+        2. POST /v1/intents/{id}/claim - Reserve intent for processing (409 if already claimed)
+        3. POST /v1/intents/{id}/fire - Report result, clear claim, update next_check
+      </solution>
+      <implementation-details>
+        - Add claimed_at TIMESTAMPTZ column
+        - Use FOR UPDATE SKIP LOCKED in claim endpoint
+        - Return 409 Conflict if already claimed within 5 minutes
+        - Claims expire after 5 minutes for crashed worker recovery
+        - Fire endpoint clears claimed_at after processing
+      </implementation-details>
+    </race-condition-solution>
+  </architecture-reference>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 4: CODE ARTIFACTS -->
+  <!-- ============================================================ -->
+
+  <code-artifacts>
+    <artifact path="src/services/intent_service.py" relevance="high">
+      <description>IntentService with fire_intent() method - primary modification target</description>
+      <key-sections>
+        <section name="fire_intent" lines="563-729">
+          Main method to modify for cooldown logic. Currently updates last_checked,
+          last_executed, calculates next_check, handles auto-disable, and logs to
+          intent_executions table.
+        </section>
+        <section name="get_pending_intents" lines="482-561">
+          Returns pending intents. Needs modification to exclude claimed intents
+          and add in_cooldown flag.
+        </section>
+        <section name="_calculate_next_check_after_fire" lines="793-852">
+          Calculates next_check based on trigger type and result. Condition-based
+          triggers use check_interval_minutes or default 5.
+        </section>
+        <section name="_row_to_response" lines="950-987">
+          Converts database row to ScheduledIntentResponse. Will need to include
+          new cooldown fields when added.
+        </section>
+      </key-sections>
+      <new-methods-to-add>
+        <method name="_check_cooldown">
+          Check if intent is in cooldown period.
+          Args: trigger_type, last_condition_fire, cooldown_hours
+          Returns: (is_in_cooldown: bool, remaining_hours: float)
+        </method>
+        <method name="claim_intent">
+          Claim an intent for exclusive processing.
+          Args: intent_id
+          Returns: IntentClaimResult with claimed_at and intent data
+        </method>
+      </new-methods-to-add>
+    </artifact>
+
+    <artifact path="src/schemas.py" relevance="high">
+      <description>Pydantic models for API request/response</description>
+      <key-sections>
+        <section name="TriggerCondition" lines="255-280">
+          Model for condition configuration. Add cooldown_hours field here.
+        </section>
+        <section name="IntentFireResponse" lines="386-396">
+          Response model after firing. Add cooldown_active, cooldown_remaining_hours,
+          last_condition_fire fields.
+        </section>
+      </key-sections>
+      <new-models-to-add>
+        <model name="IntentClaimResponse">
+          Response model for claim endpoint with claimed_at and intent data.
+        </model>
+      </new-models-to-add>
+    </artifact>
+
+    <artifact path="src/routers/intents.py" relevance="high">
+      <description>FastAPI router for intents API endpoints</description>
+      <key-sections>
+        <section name="fire_intent" lines="205-255">
+          POST /v1/intents/{id}/fire endpoint. Calls service.fire_intent().
+        </section>
+        <section name="get_pending_intents" lines="157-198">
+          GET /v1/intents/pending endpoint. Calls service.get_pending_intents().
+        </section>
+      </key-sections>
+      <new-endpoints-to-add>
+        <endpoint method="POST" path="/v1/intents/{id}/claim">
+          Claim intent for exclusive processing. Returns 409 Conflict if already claimed.
+        </endpoint>
+      </new-endpoints-to-add>
+    </artifact>
+
+    <artifact path="src/services/intent_validation.py" relevance="medium">
+      <description>Validation service for intent creation/update</description>
+      <key-sections>
+        <section name="REQUIRED_FIELDS" lines="40-47">
+          Mapping of required fields by trigger type. Price/silence/portfolio
+          have empty condition requirements (can use expression).
+        </section>
+        <section name="validate" lines="102-166">
+          Main validation method. Add cooldown_hours validation here.
+        </section>
+      </key-sections>
+      <validation-to-add>
+        Validate cooldown_hours range (1-168) if provided in trigger_condition.
+      </validation-to-add>
+    </artifact>
+
+    <artifact path="migrations/postgres/020_condition_expression.up.sql" relevance="medium">
+      <description>Previous story's migration - pattern reference</description>
+      <pattern>
+        ALTER TABLE scheduled_intents ADD COLUMN column_name TYPE;
+        COMMENT ON COLUMN scheduled_intents.column_name IS 'Description';
+      </pattern>
+    </artifact>
+  </code-artifacts>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 5: TEST ARTIFACTS -->
+  <!-- ============================================================ -->
+
+  <test-artifacts>
+    <artifact path="tests/unit/test_condition_expression_validation.py" relevance="high">
+      <description>Unit tests for Story 6.2 - pattern reference for cooldown tests</description>
+      <patterns>
+        <pattern name="fixture-based-service">
+          @pytest.fixture def service_no_db(): return IntentValidationService(conn=None)
+        </pattern>
+        <pattern name="helper-function">
+          def make_condition_intent(trigger_type, condition, **kwargs): ...
+        </pattern>
+        <pattern name="test-class-organization">
+          class TestFeatureValidation: ...
+        </pattern>
+      </patterns>
+    </artifact>
+
+    <artifact path="tests/integration/test_intents_api.py" relevance="high">
+      <description>Integration tests for intents API endpoints</description>
+      <patterns>
+        <pattern name="mock-db-pattern">
+          @patch("src.routers.intents.get_timescale_conn")
+          @patch("src.routers.intents.release_timescale_conn")
+        </pattern>
+        <pattern name="test-client">
+          @pytest.fixture def client(): return TestClient(app)
+        </pattern>
+        <pattern name="sample-row-fixture">
+          @pytest.fixture def sample_intent_row(): return {...}
+        </pattern>
+      </patterns>
+      <test-classes-to-add>
+        <class name="TestCooldownLogic">Tests for cooldown in fire endpoint</class>
+        <class name="TestClaimIntent">Tests for claim endpoint</class>
+      </test-classes-to-add>
+    </artifact>
+
+    <new-test-files>
+      <file path="tests/unit/test_cooldown_logic.py">
+        Unit tests for cooldown calculation, validation, and claim logic.
+      </file>
+    </new-test-files>
+  </test-artifacts>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 6: MIGRATION TEMPLATE -->
+  <!-- ============================================================ -->
+
+  <migration-template>
+    <file-path>migrations/postgres/021_cooldown_logic.up.sql</file-path>
+    <content><![CDATA[
+-- Epic 6 Story 6.3: Cooldown Logic
+-- Add cooldown_hours, last_condition_fire, and claimed_at columns
+
+-- 1. Add cooldown_hours column (range 1-168 hours, default 24)
+ALTER TABLE scheduled_intents
+ADD COLUMN cooldown_hours INT DEFAULT 24
+CHECK (cooldown_hours >= 1 AND cooldown_hours <= 168);
+
+-- 2. Add last_condition_fire column (nullable, updated on successful condition fires)
+ALTER TABLE scheduled_intents
+ADD COLUMN last_condition_fire TIMESTAMPTZ;
+
+-- 3. Add claimed_at column (nullable, for worker claim mechanism)
+ALTER TABLE scheduled_intents
+ADD COLUMN claimed_at TIMESTAMPTZ;
+
+-- 4. Add comments for the new columns
+COMMENT ON COLUMN scheduled_intents.cooldown_hours IS 'Minimum hours between condition-based trigger fires (1-168, default 24)';
+COMMENT ON COLUMN scheduled_intents.last_condition_fire IS 'Timestamp of last successful condition-based trigger fire';
+COMMENT ON COLUMN scheduled_intents.claimed_at IS 'Timestamp when worker claimed this intent for processing (expires after 5 min)';
+
+-- Note: All columns are nullable/have defaults for backward compatibility
+]]></content>
+    <down-migration><![CDATA[
+-- Rollback: Remove cooldown and claim columns
+ALTER TABLE scheduled_intents DROP COLUMN IF EXISTS cooldown_hours;
+ALTER TABLE scheduled_intents DROP COLUMN IF EXISTS last_condition_fire;
+ALTER TABLE scheduled_intents DROP COLUMN IF EXISTS claimed_at;
+]]></down-migration>
+  </migration-template>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 7: IMPLEMENTATION FLOWS -->
+  <!-- ============================================================ -->
+
+  <implementation-flows>
+    <flow name="Cooldown Check in fire_intent">
+      <step order="1">Check if trigger_type is condition-based (price, silence, portfolio)</step>
+      <step order="2">If not condition-based, proceed with normal fire logic</step>
+      <step order="3">Load last_condition_fire and cooldown_hours from intent</step>
+      <step order="4">Calculate hours_since_last = (NOW - last_condition_fire).total_seconds() / 3600</step>
+      <step order="5">If hours_since_last &lt; cooldown_hours:
+        - Set cooldown_active = True
+        - Set cooldown_remaining_hours = cooldown_hours - hours_since_last
+        - Log: [intents.fire] cooldown_active=true remaining_hours=X
+        - Return early with IntentFireResponse (skip execution logging)
+      </step>
+      <step order="6">Continue with normal fire processing</step>
+      <step order="7">If status='success' and condition-based:
+        - Update last_condition_fire = NOW() in database
+        - Include last_condition_fire in response
+      </step>
+      <step order="8">Clear claimed_at in database after processing</step>
+    </flow>
+
+    <flow name="Claim Endpoint">
+      <step order="1">Receive POST /v1/intents/{id}/claim request</step>
+      <step order="2">Begin transaction</step>
+      <step order="3">SELECT * FROM scheduled_intents WHERE id = %s FOR UPDATE SKIP LOCKED</step>
+      <step order="4">If row is NULL (locked by another worker), return 409 Conflict</step>
+      <step order="5">If claimed_at is not NULL and claimed_at > NOW() - 5 minutes:
+        - Return 409 Conflict with message "Intent already claimed"
+      </step>
+      <step order="6">UPDATE scheduled_intents SET claimed_at = NOW() WHERE id = %s</step>
+      <step order="7">COMMIT transaction</step>
+      <step order="8">Return IntentClaimResponse with intent data and claimed_at</step>
+    </flow>
+
+    <flow name="Pending Query with Claim Exclusion">
+      <step order="1">Build base query: WHERE enabled = true AND next_check &lt;= NOW()</step>
+      <step order="2">Add claim exclusion: AND (claimed_at IS NULL OR claimed_at &lt; NOW() - INTERVAL '5 minutes')</step>
+      <step order="3">For each result, calculate in_cooldown flag:
+        - If trigger_type in (price, silence, portfolio) AND last_condition_fire is not NULL:
+          - hours_since = (NOW - last_condition_fire).hours
+          - in_cooldown = hours_since &lt; cooldown_hours
+        - Else: in_cooldown = False
+      </step>
+      <step order="4">Include in_cooldown in response (do not filter)</step>
+    </flow>
+  </implementation-flows>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 8: API CONTRACTS -->
+  <!-- ============================================================ -->
+
+  <api-contracts>
+    <new-endpoint>
+      <method>POST</method>
+      <path>/v1/intents/{id}/claim</path>
+      <description>Claim an intent for exclusive processing</description>
+      <request-body>None (empty body)</request-body>
+      <response-model>IntentClaimResponse</response-model>
+      <response-fields>
+        <field name="intent" type="ScheduledIntentResponse">Full intent data</field>
+        <field name="claimed_at" type="datetime">When the claim was made</field>
+      </response-fields>
+      <error-responses>
+        <error code="404" description="Intent not found"/>
+        <error code="409" description="Intent already claimed by another worker"/>
+        <error code="500" description="Database error"/>
+      </error-responses>
+    </new-endpoint>
+
+    <extended-response name="IntentFireResponse">
+      <existing-fields>
+        <field name="intent_id" type="UUID"/>
+        <field name="status" type="str"/>
+        <field name="next_check" type="Optional[datetime]"/>
+        <field name="enabled" type="bool"/>
+        <field name="execution_count" type="int"/>
+        <field name="was_disabled_reason" type="Optional[str]"/>
+      </existing-fields>
+      <new-fields>
+        <field name="cooldown_active" type="bool" default="False">
+          True if intent is in cooldown period
+        </field>
+        <field name="cooldown_remaining_hours" type="Optional[float]" default="None">
+          Hours remaining until cooldown expires (only if cooldown_active=True)
+        </field>
+        <field name="last_condition_fire" type="Optional[datetime]" default="None">
+          Timestamp of last successful condition-based fire
+        </field>
+      </new-fields>
+    </extended-response>
+
+    <extended-model name="TriggerCondition">
+      <new-fields>
+        <field name="cooldown_hours" type="int" default="24">
+          Minimum hours between condition-based trigger fires (range: 1-168)
+        </field>
+      </new-fields>
+    </extended-model>
+  </api-contracts>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 9: TESTING GUIDANCE -->
+  <!-- ============================================================ -->
+
+  <testing-guidance>
+    <unit-tests>
+      <test-case name="test_cooldown_hours_validation_range">
+        Test that cooldown_hours values outside 1-168 fail validation.
+        Cases: 0 (fail), 1 (pass), 168 (pass), 169 (fail), -1 (fail)
+      </test-case>
+      <test-case name="test_cooldown_active_when_within_period">
+        Fire intent with last_condition_fire 1 hour ago, cooldown_hours=24.
+        Verify cooldown_active=True, cooldown_remaining_hours=23.
+      </test-case>
+      <test-case name="test_cooldown_not_active_for_scheduled_triggers">
+        Fire cron/interval/once trigger with last_condition_fire set.
+        Verify cooldown_active=False (cooldown only for condition triggers).
+      </test-case>
+      <test-case name="test_claim_sets_claimed_at">
+        Claim an intent, verify claimed_at is set to current time.
+      </test-case>
+      <test-case name="test_claim_returns_409_if_already_claimed">
+        Claim intent, then try to claim again within 5 minutes.
+        Verify second claim returns 409 Conflict.
+      </test-case>
+      <test-case name="test_expired_claim_allows_reclaim">
+        Set claimed_at to 6 minutes ago, verify claim succeeds.
+      </test-case>
+    </unit-tests>
+
+    <integration-tests>
+      <test-case name="test_fire_updates_last_condition_fire">
+        Create price trigger, fire with status='success'.
+        GET intent, verify last_condition_fire is set.
+      </test-case>
+      <test-case name="test_fire_blocked_by_cooldown">
+        Fire price trigger successfully, then fire again immediately.
+        Verify second fire returns cooldown_active=True.
+      </test-case>
+      <test-case name="test_pending_excludes_claimed_intents">
+        Create pending intent, claim it.
+        GET /pending, verify intent is not in response.
+      </test-case>
+      <test-case name="test_claim_then_fire_clears_claim">
+        Claim intent, fire it.
+        GET /pending (after next_check), verify intent appears (claim cleared).
+      </test-case>
+    </integration-tests>
+
+    <test-patterns>
+      <pattern name="mock-db-for-unit-tests">
+        Use IntentValidationService(conn=None) for unit tests that don't need DB.
+      </pattern>
+      <pattern name="patch-timescale-for-integration">
+        @patch("src.routers.intents.get_timescale_conn") for integration tests.
+      </pattern>
+      <pattern name="fixture-for-intent-rows">
+        Create fixtures for different intent states (pending, claimed, cooldown).
+      </pattern>
+    </test-patterns>
+  </testing-guidance>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 10: DEPENDENCIES -->
+  <!-- ============================================================ -->
+
+  <dependencies>
+    <python-dependencies>
+      <dependency name="datetime" source="stdlib">For timedelta calculations</dependency>
+      <dependency name="timezone" source="datetime">For UTC timestamps</dependency>
+      <dependency name="uuid" source="stdlib">For UUID handling</dependency>
+      <dependency name="pydantic" source="existing">For Field() with validation</dependency>
+      <dependency name="psycopg" source="existing">For database operations</dependency>
+      <dependency name="fastapi" source="existing">For HTTPException, Response</dependency>
+    </python-dependencies>
+
+    <no-new-dependencies>
+      All required dependencies are already installed. No pip install needed.
+    </no-new-dependencies>
+  </dependencies>
+
+</story-context>

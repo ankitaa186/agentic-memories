@@ -1,0 +1,129 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>6</storyId>
+    <title>API Documentation Update</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/6-6-api-documentation-update.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>API consumer (Annie integration developer)</asA>
+    <iWant>complete OpenAPI documentation for all Epic 6 fields</iWant>
+    <soThat>I can correctly integrate with the extended Scheduled Intents API without needing to read source code</soThat>
+    <tasks>
+      <task id="1" name="Review Current Field Descriptions" ac="6.1">
+        <subtask id="1.1">Audit src/schemas.py for all Epic 6 fields</subtask>
+        <subtask id="1.2">List fields missing description= parameter</subtask>
+        <subtask id="1.3">List fields with inadequate descriptions</subtask>
+      </task>
+      <task id="2" name="Add OpenAPI Descriptions to TriggerSchedule" ac="6.1">
+        <subtask id="2.1">Ensure timezone field has complete IANA description</subtask>
+        <subtask id="2.2">Verify check_interval_minutes description mentions portfolio default</subtask>
+      </task>
+      <task id="3" name="Add OpenAPI Descriptions to TriggerCondition" ac="6.1">
+        <subtask id="3.1">Verify condition_type field has valid values</subtask>
+        <subtask id="3.2">Verify expression field has format examples</subtask>
+        <subtask id="3.3">Verify cooldown_hours with valid range and default</subtask>
+        <subtask id="3.4">Verify fire_mode explaining behavior difference</subtask>
+      </task>
+      <task id="4" name="Add OpenAPI Descriptions to Response Models" ac="6.1">
+        <subtask id="4.1">Verify IntentFireResponse new fields</subtask>
+        <subtask id="4.2">Add description to was_disabled_reason with possible values</subtask>
+      </task>
+      <task id="5" name="Document action_context Field" ac="6.2">
+        <subtask id="5.1">Add comprehensive description to action_context field</subtask>
+        <subtask id="5.2">Document that action_context is passed to LLM on fire</subtask>
+      </task>
+      <task id="6" name="Create Migration Notes" ac="6.3">
+        <subtask id="6.1">Document default values in field descriptions</subtask>
+        <subtask id="6.2">Add backward compatibility note to module docstring</subtask>
+      </task>
+      <task id="7" name="Verify OpenAPI Schema Generation" ac="6.1, 6.2, 6.3">
+        <subtask id="7.1">Start server and access /docs endpoint</subtask>
+        <subtask id="7.2">Verify all new fields appear with descriptions</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC6.1" title="All new fields have OpenAPI descriptions">
+      <requirement>timezone, condition_type, expression, cooldown_hours, fire_mode have descriptions</requirement>
+      <requirement>Response fields (cooldown_active, cooldown_remaining_hours, last_condition_fire, was_disabled_reason) have descriptions</requirement>
+    </criterion>
+    <criterion id="AC6.2" title="action_context guidance documented">
+      <requirement>Add description to action_context explaining its purpose</requirement>
+      <requirement>Document that action_context is passed to LLM when firing</requirement>
+    </criterion>
+    <criterion id="AC6.3" title="Migration notes for existing triggers">
+      <requirement>Document default values for new fields on existing triggers</requirement>
+      <requirement>Explain backward compatibility</requirement>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-6.md" title="Epic 6 Tech Spec" section="Data Models and Contracts">
+        Defines all new fields and their descriptions. AC6.1-AC6.3 specify documentation requirements.
+      </doc>
+      <doc path="docs/epic-6-intents-api-alignment.md" title="Epic 6: Intents API Alignment" section="Story 6.6">
+        Story definition: All new fields have OpenAPI descriptions, action_context guidance, migration notes.
+      </doc>
+    </docs>
+    <code>
+      <file path="src/schemas.py" kind="models" symbol="TriggerSchedule" lines="239-252" reason="Contains timezone field - already has description, verify completeness">
+        timezone: str = Field(default="America/Los_Angeles", description="IANA timezone for scheduling...")
+      </file>
+      <file path="src/schemas.py" kind="models" symbol="TriggerCondition" lines="255-294" reason="Contains Epic 6 condition fields - most have descriptions, verify all">
+        condition_type, expression, cooldown_hours, fire_mode - all have Field(description=...) already
+      </file>
+      <file path="src/schemas.py" kind="models" symbol="ScheduledIntentCreate" lines="297-314" reason="Contains action_context field - MISSING description">
+        action_context: str - needs description added
+      </file>
+      <file path="src/schemas.py" kind="models" symbol="IntentFireResponse" lines="400-425" reason="Contains cooldown response fields - have descriptions, verify was_disabled_reason">
+        cooldown_active, cooldown_remaining_hours, last_condition_fire have descriptions. was_disabled_reason needs possible values.
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="pydantic" version="^2.0">BaseModel, Field for model definition and OpenAPI generation</package>
+        <package name="fastapi" version="^0.100">Automatic OpenAPI schema generation from Pydantic models</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="Architecture">Use Pydantic Field(description=...) for OpenAPI generation</constraint>
+    <constraint source="Architecture">Descriptions should be concise but complete</constraint>
+    <constraint source="Dev Notes">This is primarily a documentation task - minimal code changes</constraint>
+    <constraint source="Dev Notes">No new files expected - modifications to schemas.py only</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Field(description=...)" kind="pydantic-api" path="src/schemas.py">
+      Use Field(description="...") for OpenAPI field documentation. Examples automatically appear in Swagger UI.
+    </interface>
+    <interface name="GET /docs" kind="REST endpoint" path="FastAPI auto-generated">
+      Swagger UI endpoint showing OpenAPI documentation with field descriptions.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      This is a documentation story. Testing involves manual verification of OpenAPI schema.
+      Optional: automated test parsing OpenAPI JSON to verify descriptions exist.
+    </standards>
+    <locations>
+      <location>Manual verification via /docs endpoint</location>
+      <location>Optional: tests/unit/test_openapi_docs.py (if automated)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC6.1">Verify /docs endpoint shows all Epic 6 fields with descriptions</idea>
+      <idea ac="AC6.2">Verify action_context has description explaining LLM usage</idea>
+      <idea ac="AC6.3">Verify existing triggers work unchanged (backward compatibility)</idea>
+    </ideas>
+  </tests>
+</story-context>
+

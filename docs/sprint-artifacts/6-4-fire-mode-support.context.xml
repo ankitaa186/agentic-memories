@@ -1,0 +1,166 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>4</storyId>
+    <title>Fire Mode Support</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/6-4-fire-mode-support.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Annie Proactive Worker</asA>
+    <iWant>fire mode support for condition-based triggers</iWant>
+    <soThat>condition triggers can optionally auto-disable after first successful fire</soThat>
+    <tasks>
+      <task id="1" name="Database Migration" ac="4.1">
+        <subtask id="1.1">Create migrations/postgres/022_fire_mode.up.sql</subtask>
+        <subtask id="1.2">Add fire_mode VARCHAR(16) DEFAULT 'recurring' column</subtask>
+        <subtask id="1.3">Add CHECK constraint fire_mode IN ('once', 'recurring')</subtask>
+        <subtask id="1.4">Create down migration for rollback</subtask>
+      </task>
+      <task id="2" name="Extend TriggerCondition Pydantic Model" ac="4.2">
+        <subtask id="2.1">Add fire_mode: Literal["once", "recurring"] = "recurring" to TriggerCondition</subtask>
+        <subtask id="2.2">Add field description for OpenAPI documentation</subtask>
+        <subtask id="2.3">Ensure fire_mode is stored in database on create/update</subtask>
+      </task>
+      <task id="3" name="Implement Fire Mode Logic in IntentService" ac="4.3, 4.4">
+        <subtask id="3.1">Load fire_mode from database in fire_intent()</subtask>
+        <subtask id="3.2">Check if fire_mode='once' after successful condition trigger fire</subtask>
+        <subtask id="3.3">Set enabled = false when fire_mode='once' and status='success'</subtask>
+        <subtask id="3.4">Set was_disabled_reason = 'fire_mode_once' in response</subtask>
+        <subtask id="3.5">Add logging: [intents.fire] fire_mode_once disabled intent_id=X</subtask>
+      </task>
+      <task id="4" name="Unit Tests" ac="4.1-4.4">
+        <subtask id="4.1">Test fire_mode defaults to 'recurring' in TriggerCondition</subtask>
+        <subtask id="4.2">Test fire_mode validation ('once' and 'recurring' only)</subtask>
+        <subtask id="4.3">Test fire_mode='once' disables intent on success</subtask>
+        <subtask id="4.4">Test fire_mode='recurring' does NOT disable intent on success</subtask>
+        <subtask id="4.5">Test was_disabled_reason='fire_mode_once' in response</subtask>
+        <subtask id="4.6">Test fire_mode='once' with non-success status does NOT disable</subtask>
+        <subtask id="4.7">Test fire_mode only affects condition triggers (price, silence, portfolio)</subtask>
+      </task>
+      <task id="5" name="Integration Tests" ac="4.3, 4.4">
+        <subtask id="5.1">Create intent with fire_mode='once', fire with success, verify disabled</subtask>
+        <subtask id="5.2">Create intent with fire_mode='recurring', fire with success, verify still enabled</subtask>
+        <subtask id="5.3">Verify disabled intent no longer appears in pending query</subtask>
+        <subtask id="5.4">Verify was_disabled_reason in fire response</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC4.1" title="fire_mode column added with default 'recurring'">
+      <requirement>Add fire_mode VARCHAR(16) DEFAULT 'recurring' column</requirement>
+      <requirement>Add CHECK constraint: fire_mode IN ('once', 'recurring')</requirement>
+      <requirement>Backward compatible with existing triggers (default to recurring)</requirement>
+    </criterion>
+    <criterion id="AC4.2" title="TriggerCondition model accepts fire_mode field">
+      <requirement>Add fire_mode: Literal["once", "recurring"] = "recurring" to TriggerCondition</requirement>
+      <requirement>Add field description for OpenAPI documentation</requirement>
+      <requirement>fire_mode applies to condition triggers (price, silence, portfolio)</requirement>
+    </criterion>
+    <criterion id="AC4.3" title="Fire endpoint disables intent when fire_mode='once' and status='success'">
+      <requirement>Check fire_mode on successful condition trigger fires</requirement>
+      <requirement>Set enabled = false when fire_mode='once' and status='success'</requirement>
+      <requirement>Log: [intents.fire] fire_mode_once disabled intent_id=X</requirement>
+    </criterion>
+    <criterion id="AC4.4" title="Response includes was_disabled_reason='fire_mode_once'">
+      <requirement>Set was_disabled_reason = 'fire_mode_once' in IntentFireResponse</requirement>
+      <requirement>Return enabled = false in response when disabled</requirement>
+      <requirement>Clear intent from pending queue after disable</requirement>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-6.md" title="Epic 6 Tech Spec" section="Story 6.4: Fire Mode Support">
+        AC4.1-AC4.4 define fire mode requirements: column with default 'recurring', TriggerCondition field, disable on fire_mode='once' and success, was_disabled_reason in response.
+      </doc>
+      <doc path="docs/epic-6-intents-api-alignment.md" title="Epic 6: Intents API Alignment" section="Story 6.4: Fire Mode Support">
+        Goal: Support once vs recurring for condition triggers. Fire mode extends condition triggers to optionally disable after first successful fire.
+      </doc>
+      <doc path="docs/sprint-artifacts/6-3-cooldown-logic.md" title="Story 6.3: Cooldown Logic" section="Dev Agent Record">
+        Previous story provides patterns: migration file structure (021_cooldown_logic.up.sql), CONDITION_TRIGGER_TYPES constant, fire_intent() flow, test organization.
+      </doc>
+    </docs>
+    <code>
+      <file path="src/schemas.py" kind="models" symbol="TriggerCondition" lines="255-288" reason="Add fire_mode field to TriggerCondition model - currently has cooldown_hours, needs fire_mode: Literal['once', 'recurring']">
+        TriggerCondition model at line 255 already has cooldown_hours. Add fire_mode field with Literal type and default 'recurring'.
+      </file>
+      <file path="src/schemas.py" kind="models" symbol="IntentFireResponse" lines="394-419" reason="Already has was_disabled_reason field - no changes needed for response model">
+        IntentFireResponse already includes was_disabled_reason: Optional[str] = None field at line 405.
+      </file>
+      <file path="src/services/intent_service.py" kind="service" symbol="fire_intent" lines="733-944" reason="Main implementation location - add fire_mode disable logic after cooldown check, before response">
+        fire_intent() method handles execution state updates. Add fire_mode check around line 840-854 where auto-disable conditions are checked.
+      </file>
+      <file path="src/services/intent_service.py" kind="service" symbol="CONDITION_TRIGGER_TYPES" lines="93" reason="Constant defining condition triggers - reuse for fire_mode applicability check">
+        CONDITION_TRIGGER_TYPES = {"price", "silence", "portfolio"} - fire_mode only applies to these trigger types.
+      </file>
+      <file path="migrations/postgres/021_cooldown_logic.up.sql" kind="migration" lines="1-24" reason="Pattern for migration file structure - follow same format for 022_fire_mode">
+        Shows pattern: ALTER TABLE, ADD COLUMN with CHECK constraint, COMMENT ON COLUMN.
+      </file>
+      <file path="tests/unit/test_cooldown_logic.py" kind="test" symbol="TestCooldownHoursValidation" lines="31-69" reason="Pattern for unit test structure - follow for fire_mode validation tests">
+        Test class pattern for Pydantic field validation tests.
+      </file>
+      <file path="tests/integration/test_intents_api.py" kind="test" reason="Add TestFireMode class following existing test patterns for cooldown and claim tests">
+        Integration test file - add new test class for fire mode scenarios.
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="pydantic" version="^2.0">BaseModel, Field, Literal for model definition</package>
+        <package name="pytest" version="^7.0">Testing framework for unit and integration tests</package>
+        <package name="psycopg[binary]" version="^3.1">PostgreSQL driver for database operations</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="Architecture">Use existing TriggerCondition model pattern in src/schemas.py</constraint>
+    <constraint source="Architecture">Follow existing fire_intent() flow in intent_service.py</constraint>
+    <constraint source="Architecture">Migration must be backward compatible with default 'recurring'</constraint>
+    <constraint source="Dev Notes">fire_mode only applies to CONDITION_TRIGGER_TYPES: price, silence, portfolio</constraint>
+    <constraint source="Dev Notes">Order of operations: cooldown check → process → update last_condition_fire → check fire_mode</constraint>
+    <constraint source="Dev Notes">Use separate migration file 022 per project convention</constraint>
+    <constraint source="Testing">Create dedicated test class per feature in tests/unit/</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TriggerCondition.fire_mode" kind="pydantic-field" path="src/schemas.py">
+      fire_mode: Literal["once", "recurring"] = Field(
+          default="recurring",
+          description="'once' disables after first fire, 'recurring' continues"
+      )
+    </interface>
+    <interface name="IntentFireResponse.was_disabled_reason" kind="pydantic-field" path="src/schemas.py">
+      was_disabled_reason: Optional[str] = None  # Already exists - use 'fire_mode_once' value
+    </interface>
+    <interface name="POST /v1/intents/{id}/fire" kind="REST endpoint" path="src/routers/intents.py">
+      Returns IntentFireResponse with was_disabled_reason='fire_mode_once' when fire_mode='once' and status='success'
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      pytest framework with fixtures for database setup. Unit tests mock database connections.
+      Integration tests use real database with test isolation. Test class naming: Test{FeatureName}.
+      Follow existing patterns in test_cooldown_logic.py and test_intents_api.py.
+    </standards>
+    <locations>
+      <location>tests/unit/test_fire_mode.py (new file)</location>
+      <location>tests/integration/test_intents_api.py (extend with TestFireMode class)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC4.1">Test fire_mode column default is 'recurring' via TriggerCondition instantiation</idea>
+      <idea ac="AC4.2">Test fire_mode Literal validation rejects invalid values like 'invalid'</idea>
+      <idea ac="AC4.3">Test fire_intent() with fire_mode='once' and status='success' sets enabled=false</idea>
+      <idea ac="AC4.3">Test fire_intent() with fire_mode='once' and status='failed' does NOT disable</idea>
+      <idea ac="AC4.3">Test fire_intent() with fire_mode='recurring' and status='success' stays enabled</idea>
+      <idea ac="AC4.4">Test IntentFireResponse includes was_disabled_reason='fire_mode_once' when disabled</idea>
+      <idea ac="AC4.4">Test disabled intent does not appear in get_pending_intents() results</idea>
+      <idea ac="Integration">Full flow: create with fire_mode='once' → claim → fire success → verify disabled</idea>
+    </ideas>
+  </tests>
+</story-context>

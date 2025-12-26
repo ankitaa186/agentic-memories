@@ -1,0 +1,128 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>2</storyId>
+    <title>Condition Expression Support</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/6-2-condition-expression-support.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Annie Proactive Worker</asA>
+    <iWant>flexible condition expressions for triggers</iWant>
+    <soThat>users can define complex conditions like "NVDA &lt; 130" or "any_holding_change > 5%" in human-readable format</soThat>
+    <tasks>
+      <task id="1" ac="2.1">Database Migration - Add condition_type and condition_expression columns</task>
+      <task id="2" ac="2.2">Extend TriggerCondition Pydantic Model with new fields</task>
+      <task id="3" ac="2.3,2.4">Implement Expression Validation for price, portfolio, silence</task>
+      <task id="4" ac="2.5">Backward Compatibility Logic - expression precedence</task>
+      <task id="5" ac="2.2">Update IntentService for condition fields</task>
+      <task id="6" ac="2.1-2.5">Unit Tests for expression validation</task>
+      <task id="7" ac="2.3-2.5">Integration Tests for API behavior</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="2.1">Schema Migration adds condition_type VARCHAR(32) and condition_expression TEXT columns (nullable)</ac>
+    <ac id="2.2">TriggerCondition model accepts condition_type and expression fields with backward compatibility</ac>
+    <ac id="2.3">Price expressions validated as "TICKER OP VALUE" format with regex</ac>
+    <ac id="2.4">Portfolio expressions validated against supported keywords (any_holding_change, total_value, etc.)</ac>
+    <ac id="2.5">Backward compatible - existing structured fields work, expression takes precedence if both provided</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-6-intents-api-alignment.md" title="Epic 6: Intents API Alignment" section="Story 6.2">
+        Defines condition expression requirements including expression field, condition_type, and validation rules for price/portfolio/silence expressions.
+      </doc>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-6.md" title="Tech Spec Epic 6" section="Story 6.2">
+        Technical specification with schema changes, validation patterns, and acceptance criteria for condition expression support.
+      </doc>
+      <doc path="docs/sprint-artifacts/6-1-timezone-support.md" title="Story 6.1 Timezone Support" section="Dev Agent Record">
+        Previous story with patterns to follow: _validate_<field>() method pattern, error message format with examples, test organization.
+      </doc>
+    </docs>
+
+    <code>
+      <file path="src/schemas.py" kind="model" symbol="TriggerCondition" lines="255-268" reason="Extend with condition_type and expression fields"/>
+      <file path="src/services/intent_validation.py" kind="service" symbol="IntentValidationService" lines="338-363" reason="Add _validate_condition_expression() method following timezone pattern"/>
+      <file path="src/services/intent_service.py" kind="service" symbol="IntentService" lines="319" reason="Uses TriggerCondition - verify expression fields flow through"/>
+      <file path="migrations/postgres/019_intents_alignment.up.sql" kind="migration" reason="Add condition_type and condition_expression columns"/>
+      <file path="tests/unit/test_timezone_validation.py" kind="test" reason="Pattern to follow for test organization"/>
+      <file path="tests/unit/test_intent_validation.py" kind="test" reason="Extend with expression validation tests"/>
+      <file path="tests/integration/test_intents_api.py" kind="test" symbol="TestTimezoneSupport" reason="Pattern for integration tests - add TestConditionExpression class"/>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="pydantic" version=">=2.9.0" reason="Model validation with Optional fields"/>
+        <package name="psycopg" version="binary" reason="PostgreSQL driver for migration"/>
+        <package name="pytest" version="8.3.2" reason="Unit and integration testing"/>
+        <package name="fastapi" version="0.111.0" reason="API router"/>
+      </python>
+      <stdlib>
+        <module name="re" reason="Regex validation for expression patterns"/>
+        <module name="typing" reason="Optional, List type hints"/>
+        <module name="logging" reason="Warning logs for dual-field scenarios"/>
+      </stdlib>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="backward-compatibility">Existing triggers with ticker/operator/value must continue to work unchanged</constraint>
+    <constraint type="validation">Expression validation ONLY checks format - Annie evaluates actual conditions</constraint>
+    <constraint type="database">New columns must be nullable for backward compatibility</constraint>
+    <constraint type="pattern">Follow _validate_<field>() method pattern from Story 6.1</constraint>
+    <constraint type="error-messages">Include format example in validation errors</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TriggerCondition" kind="pydantic-model" path="src/schemas.py:255">
+      <current>
+        ticker: Optional[str]
+        operator: Optional[str]  # '&lt;', '>', '&lt;=', '>=', '=='
+        value: Optional[float]
+        threshold_hours: Optional[int]
+      </current>
+      <additions>
+        condition_type: Optional[str] = None  # 'price', 'portfolio', 'silence'
+        expression: Optional[str] = None      # "NVDA &lt; 130", "any_holding_change > 5%"
+      </additions>
+    </interface>
+    <interface name="_validate_condition_expression" kind="method" path="src/services/intent_validation.py">
+      <signature>def _validate_condition_expression(self, condition: TriggerCondition) -> List[str]</signature>
+      <behavior>Validates expression format based on condition_type, returns list of errors</behavior>
+    </interface>
+    <interface name="PRICE_EXPR_PATTERN" kind="regex" path="src/services/intent_validation.py">
+      <pattern>^[A-Z]{1,5}\s*[&lt;>=!]{1,2}\s*[0-9.]+$</pattern>
+      <examples>NVDA &lt; 130, AAPL >= 200, TSLA == 250</examples>
+    </interface>
+    <interface name="PORTFOLIO_KEYWORDS" kind="set" path="src/services/intent_validation.py">
+      <values>any_holding_change, any_holding_up, any_holding_down, total_value, total_change</values>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with fixtures. Follow patterns from test_timezone_validation.py: create helper function (make_intent), use service_no_db fixture. Organize tests in dedicated TestConditionExpressionValidation class.
+    </standards>
+    <locations>
+      <location>tests/unit/test_condition_expression_validation.py (new)</location>
+      <location>tests/unit/test_intent_validation.py (extend)</location>
+      <location>tests/integration/test_intents_api.py (extend with TestConditionExpression)</location>
+    </locations>
+    <ideas>
+      <idea ac="2.1">Test condition_type and expression fields serialize to/from JSONB</idea>
+      <idea ac="2.2">Test TriggerCondition accepts new fields with defaults</idea>
+      <idea ac="2.3">Test valid price expressions: "NVDA &lt; 130", "AAPL >= 200.50"</idea>
+      <idea ac="2.3">Test invalid price expressions: "nvda &lt; 130" (lowercase), "NVDA130" (no space)</idea>
+      <idea ac="2.4">Test valid portfolio expressions: "any_holding_change > 5%"</idea>
+      <idea ac="2.4">Test invalid portfolio keywords: "unknown_metric > 5%"</idea>
+      <idea ac="2.5">Test backward compat: intent with only ticker/operator/value still works</idea>
+      <idea ac="2.5">Test precedence: expression overrides structured fields when both provided</idea>
+      <idea ac="2.5">Test warning log when both expression and structured fields provided</idea>
+    </ideas>
+  </tests>
+</story-context>

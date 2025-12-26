@@ -1,0 +1,129 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>6</storyId>
+    <title>Fire Endpoint with State Management</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-6-fire-endpoint-with-state-management.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Annie Proactive AI Worker</asA>
+    <iWant>a `/fire` endpoint that reports execution results and manages state transitions</iWant>
+    <soThat>intent state is updated correctly after each execution attempt and I receive the next check time</soThat>
+    <tasks>
+      <task id="1" acs="1">Create IntentFireRequest/Response models (already exist in schemas.py)</task>
+      <task id="2" acs="2,3,4,5,6,7">Add fire_intent() method to IntentService</task>
+      <task id="3" acs="4">Add _calculate_next_check_after_fire() helper</task>
+      <task id="4" acs="1,7,8">Add fire endpoint to router</task>
+      <task id="5" acs="1-8">Write integration tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">POST /v1/intents/{id}/fire accepts IntentFireRequest, returns IntentFireResponse</ac>
+    <ac id="2">Always updates last_checked = NOW() on every call</ac>
+    <ac id="3">On success: updates last_executed, increments execution_count, updates last_execution_status/last_message_id</ac>
+    <ac id="4">Calculates next_check based on trigger_type and status (cron→croniter, interval→+minutes, once→NULL+disable, condition→+check_interval, not_met/blocked→+5min, failed→+15min)</ac>
+    <ac id="5">Auto-disables: one-time after success, max_executions reached, expires_at passed</ac>
+    <ac id="6">Logs execution to intent_executions table with timing/status data</ac>
+    <ac id="7">Returns 404 for non-existent intent</ac>
+    <ac id="8">Langfuse tracing with @observe decorator</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5: Scheduled Intents API" section="Story 5.6" snippet="Fire endpoint owns state transitions: updates last_checked, last_executed, calculates next_check, auto-disables, logs to intent_executions" />
+      <doc path="docs/sprint-artifacts/5-5-pending-endpoint.md" title="Story 5.5: Pending Endpoint" section="Dev Agent Record" snippet="Previous story patterns: IntentServiceResult, route placement before /{id}, @observe decorator, connection management" />
+      <doc path="docs/sprint-artifacts/5-4-crud-endpoints.md" title="Story 5.4: CRUD Endpoints" section="Dev Agent Record" snippet="Base CRUD patterns established: IntentService class, _row_to_response helper, test patterns with mocked DB" />
+    </docs>
+    <code>
+      <file path="src/schemas.py" kind="models" symbol="IntentFireRequest" lines="353-367" reason="Request model already exists - verify fields match AC requirements" />
+      <file path="src/schemas.py" kind="models" symbol="IntentFireResponse" lines="370-379" reason="Response model already exists - may need was_disabled_reason field" />
+      <file path="src/schemas.py" kind="models" symbol="IntentExecutionResponse" lines="382-402" reason="Execution history model for intent_executions logging" />
+      <file path="src/services/intent_service.py" kind="service" symbol="IntentService" lines="42-570" reason="Add fire_intent() method following existing patterns" />
+      <file path="src/services/intent_service.py" kind="helper" symbol="_calculate_initial_next_check" lines="462-497" reason="Reference for creating _calculate_next_check_after_fire() - similar logic with status handling" />
+      <file path="src/services/intent_service.py" kind="helper" symbol="_row_to_response" lines="499-569" reason="Reuse for DB row conversion" />
+      <file path="src/routers/intents.py" kind="router" symbol="router" lines="1-327" reason="Add POST /{intent_id}/fire endpoint - place before DELETE to avoid conflicts" />
+      <file path="tests/integration/test_intents_api.py" kind="test" symbol="TestPendingIntents" lines="389-509" reason="Follow existing test patterns with mocked DB cursor" />
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" />
+        <package name="pydantic" version="2.8.2" />
+        <package name="langfuse" version="2.36.0" />
+        <package name="croniter" version="2.0.1" />
+        <package name="psycopg" />
+        <package name="pytest" version="8.3.2" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="IntentFireRequest" kind="pydantic-model" path="src/schemas.py">
+      <signature>class IntentFireRequest(BaseModel):
+    status: Literal["success", "failed", "gate_blocked", "condition_not_met"]
+    trigger_data: Optional[Dict[str, Any]]
+    gate_result: Optional[Dict[str, Any]]
+    message_id: Optional[str]
+    message_preview: Optional[str]
+    evaluation_ms: Optional[int]
+    generation_ms: Optional[int]
+    delivery_ms: Optional[int]
+    error_message: Optional[str]</signature>
+    </interface>
+    <interface name="IntentFireResponse" kind="pydantic-model" path="src/schemas.py">
+      <signature>class IntentFireResponse(BaseModel):
+    intent_id: UUID
+    status: str
+    next_check: Optional[datetime]
+    enabled: bool
+    execution_count: int
+    # Consider adding: was_disabled_reason: Optional[str]</signature>
+    </interface>
+    <interface name="POST /v1/intents/{intent_id}/fire" kind="REST-endpoint" path="src/routers/intents.py">
+      <signature>@router.post("/{intent_id}/fire", response_model=IntentFireResponse)
+@observe(name="intents.fire")
+def fire_intent(intent_id: UUID, request: IntentFireRequest) -> IntentFireResponse</signature>
+    </interface>
+    <interface name="IntentService.fire_intent" kind="method" path="src/services/intent_service.py">
+      <signature>def fire_intent(self, intent_id: UUID, request: IntentFireRequest) -> IntentServiceResult:
+    """Report execution result and update intent state.
+
+    Returns IntentServiceResult with updated intent or errors.
+    Logs to intent_executions table."""</signature>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint source="Epic 5">State transitions owned by agentic-memories, not Annie</constraint>
+    <constraint source="Story 5.5">Route placement: Place specific routes BEFORE /{intent_id} to avoid FastAPI matching conflicts</constraint>
+    <constraint source="Architecture">Connection management: Use get_timescale_conn()/release_timescale_conn() pattern with try/finally</constraint>
+    <constraint source="Architecture">All endpoints must have @observe decorator for Langfuse tracing</constraint>
+    <constraint source="Story 5.4">Use IntentServiceResult pattern for service method returns</constraint>
+    <constraint source="Epic 5">next_check calculation rules: cron→croniter, interval→NOW+minutes, once→NULL+disable, failed→+15min backoff</constraint>
+    <constraint source="Database">intent_executions table requires: intent_id, user_id, executed_at, trigger_type, status (see migration)</constraint>
+  </constraints>
+
+  <tests>
+    <standards>Integration tests use pytest with FastAPI TestClient. Mock database cursor for unit tests. Follow existing patterns in test_intents_api.py with @patch decorators for get_timescale_conn/release_timescale_conn.</standards>
+    <locations>
+      <location>tests/integration/test_intents_api.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test fire returns IntentFireResponse with correct fields</idea>
+      <idea ac="2">Test last_checked always updated regardless of status</idea>
+      <idea ac="3">Test execution_count incremented only on success</idea>
+      <idea ac="4">Test next_check calculation for each trigger_type (cron, interval, once, price, silence)</idea>
+      <idea ac="4">Test next_check backoff for failed/gate_blocked/condition_not_met</idea>
+      <idea ac="5">Test one-time trigger disabled after success</idea>
+      <idea ac="5">Test max_executions limit disables trigger</idea>
+      <idea ac="5">Test expires_at disables trigger</idea>
+      <idea ac="6">Test execution logged to intent_executions table</idea>
+      <idea ac="7">Test 404 returned for non-existent intent</idea>
+      <idea ac="8">Test Langfuse trace created via decorator check</idea>
+    </ideas>
+  </tests>
+</story-context>

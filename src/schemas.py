@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Message(BaseModel):
@@ -229,4 +230,280 @@ class NarrativeResponse(BaseModel):
     narrative: str
     summary: Optional[str] = None
     sources: List[dict] = Field(default_factory=list)
+
+
+# =============================================================================
+# Scheduled Intents API Models (Epic 5 + Epic 6 Extensions)
+# =============================================================================
+#
+# Backward Compatibility Notes (Epic 6):
+# - New fields have sensible defaults for existing triggers
+# - trigger_timezone defaults to 'America/Los_Angeles' for existing triggers
+# - cooldown_hours defaults to 24 (1 day)
+# - fire_mode defaults to 'recurring' (no behavior change for existing triggers)
+# - check_interval_minutes defaults to 5 (15 for portfolio triggers)
+# - Existing triggers continue to work unchanged without modification
+#
+
+class TriggerSchedule(BaseModel):
+    """Schedule configuration for time-based triggers (cron, interval, once).
+
+    Used within ScheduledIntentCreate to define when a trigger should fire.
+    Only one of cron, interval_minutes, or trigger_at should be set based on trigger_type.
+    """
+    cron: Optional[str] = None
+    interval_minutes: Optional[int] = None
+    trigger_at: Optional[datetime] = None  # For 'once' trigger type
+    check_interval_minutes: Optional[int] = Field(
+        default=5,
+        ge=5,
+        description="Polling interval in minutes for condition-based triggers (min 5). "
+                    "Default: 5 for most triggers, 15 for portfolio triggers."
+    )
+    timezone: str = Field(
+        default="America/Los_Angeles",
+        description="IANA timezone for scheduling (e.g., 'America/Los_Angeles', 'Europe/London', 'UTC')"
+    )
+
+
+class TriggerCondition(BaseModel):
+    """Condition configuration for condition-based triggers (price, silence, portfolio).
+
+    Used within ScheduledIntentCreate to define the conditions that must be met.
+    Fields used depend on trigger_type:
+    - price: ticker, operator, value OR expression (e.g., "NVDA < 130")
+    - silence: threshold_hours OR expression (e.g., "inactive_hours > 48")
+    - portfolio: expression (e.g., "any_holding_change > 5%")
+
+    New expression field takes precedence over structured fields when both are provided.
+    """
+    # Legacy structured fields (backward compatible)
+    ticker: Optional[str] = None
+    operator: Optional[str] = None  # '<', '>', '<=', '>=', '=='
+    value: Optional[float] = None
+    threshold_hours: Optional[int] = None
+
+    # New flexible expression fields (Story 6.2)
+    condition_type: Optional[str] = Field(
+        default=None,
+        description="Condition category: 'price', 'portfolio', 'silence'"
+    )
+    expression: Optional[str] = Field(
+        default=None,
+        description="Human-readable condition expression (e.g., 'NVDA < 130', 'any_holding_change > 5%')"
+    )
+
+    # Cooldown configuration (Story 6.3)
+    cooldown_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Minimum hours between condition-based trigger fires (1-168, default 24)"
+    )
+
+    # Fire mode configuration (Story 6.4)
+    fire_mode: Literal["once", "recurring"] = Field(
+        default="recurring",
+        description="Fire mode: 'once' disables after first successful fire, 'recurring' (default) continues"
+    )
+
+
+class ScheduledIntentCreate(BaseModel):
+    """Request model for creating a new scheduled intent.
+
+    Defines a proactive trigger that can fire based on time (cron/interval/once)
+    or conditions (price/silence/portfolio).
+    """
+    user_id: str
+    intent_name: str
+    description: Optional[str] = None
+    trigger_type: Literal["cron", "interval", "once", "price", "silence", "portfolio"]
+    trigger_schedule: Optional[TriggerSchedule] = None
+    trigger_condition: Optional[TriggerCondition] = None
+    action_type: Literal["notify", "check_in", "briefing", "analysis", "reminder"] = Field(
+        default="notify",
+        description="Type of action to perform when trigger fires"
+    )
+    action_context: str = Field(
+        description="Context passed to the LLM when firing this intent. "
+                    "Should include instructions for the AI assistant on how to respond "
+                    "to the trigger condition. Example: 'Alert the user about the price change "
+                    "and suggest reviewing their position.'"
+    )
+    action_priority: Literal["low", "normal", "high", "critical"] = Field(
+        default="normal",
+        description="Priority level affecting notification urgency and display"
+    )
+    expires_at: Optional[datetime] = None
+    max_executions: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ScheduledIntentUpdate(BaseModel):
+    """Request model for updating an existing scheduled intent (PATCH/PUT).
+
+    All fields are optional to support partial updates.
+    """
+    intent_name: Optional[str] = None
+    description: Optional[str] = None
+    trigger_type: Optional[Literal["cron", "interval", "once", "price", "silence", "portfolio"]] = None
+    trigger_schedule: Optional[TriggerSchedule] = None
+    trigger_condition: Optional[TriggerCondition] = None
+    action_type: Optional[Literal["notify", "check_in", "briefing", "analysis", "reminder"]] = Field(
+        default=None,
+        description="Type of action to perform when trigger fires"
+    )
+    action_context: Optional[str] = Field(
+        default=None,
+        description="Context passed to the LLM when firing this intent"
+    )
+    action_priority: Optional[Literal["low", "normal", "high", "critical"]] = Field(
+        default=None,
+        description="Priority level affecting notification urgency and display"
+    )
+    enabled: Optional[bool] = None
+    expires_at: Optional[datetime] = None
+    max_executions: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ScheduledIntentResponse(BaseModel):
+    """Response model for a scheduled intent with all database fields.
+
+    Represents the complete state of a scheduled intent including
+    scheduling state and execution results.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    # Identity
+    id: UUID
+    user_id: str
+    intent_name: str
+    description: Optional[str] = None
+
+    # Trigger definition
+    trigger_type: str
+    trigger_schedule: Optional[Dict[str, Any]] = None
+    trigger_condition: Optional[Dict[str, Any]] = None
+
+    # Action configuration
+    action_type: str
+    action_context: str
+    action_priority: str
+
+    # Scheduling state
+    next_check: Optional[datetime] = None
+    last_checked: Optional[datetime] = None
+    last_executed: Optional[datetime] = None
+    execution_count: int = 0
+
+    # Execution results
+    last_execution_status: Optional[str] = None
+    last_execution_error: Optional[str] = None
+    last_message_id: Optional[str] = None
+
+    # Control
+    enabled: bool = True
+    expires_at: Optional[datetime] = None
+    max_executions: Optional[int] = None
+
+    # Audit
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class IntentFireRequest(BaseModel):
+    """Request model for reporting intent execution results.
+
+    Sent by the proactive worker after attempting to fire an intent.
+    Records the execution outcome and timing metrics.
+    """
+    status: Literal["success", "failed", "gate_blocked", "condition_not_met"]
+    trigger_data: Optional[Dict[str, Any]] = None
+    gate_result: Optional[Dict[str, Any]] = None
+    message_id: Optional[str] = None
+    message_preview: Optional[str] = None
+    evaluation_ms: Optional[int] = None
+    generation_ms: Optional[int] = None
+    delivery_ms: Optional[int] = None
+    error_message: Optional[str] = None
+
+
+class IntentFireResponse(BaseModel):
+    """Response model after firing an intent.
+
+    Returns the updated intent state including next_check calculation.
+    Includes cooldown status for condition-based triggers (Story 6.3).
+    """
+    intent_id: UUID
+    status: str = Field(
+        description="Execution result: 'success', 'failed', 'gate_blocked', 'condition_not_met', 'cooldown_active'"
+    )
+    next_check: Optional[datetime] = Field(
+        default=None,
+        description="Next scheduled time for this intent to be checked (UTC)"
+    )
+    enabled: bool = Field(
+        description="Whether the intent is still active. May be set to false by fire_mode='once' or max_executions"
+    )
+    execution_count: int = Field(
+        description="Total number of successful executions for this intent"
+    )
+    was_disabled_reason: Optional[str] = Field(
+        default=None,
+        description="Reason if intent was disabled by this fire. "
+                    "Possible values: 'fire_mode_once' (condition trigger with fire_mode='once' succeeded), "
+                    "'max_executions_reached', 'expired', 'manual'"
+    )
+
+    # Cooldown fields (Story 6.3)
+    cooldown_active: bool = Field(
+        default=False,
+        description="True if intent is in cooldown period and fire was blocked"
+    )
+    cooldown_remaining_hours: Optional[float] = Field(
+        default=None,
+        description="Hours remaining until cooldown expires (only set if cooldown_active=True)"
+    )
+    last_condition_fire: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp of last successful condition-based trigger fire"
+    )
+
+
+class IntentClaimResponse(BaseModel):
+    """Response model for claiming an intent for exclusive processing (Story 6.3).
+
+    Returns the claimed intent data and claim timestamp.
+    Used to prevent duplicate processing in multi-worker scenarios.
+    """
+    intent: ScheduledIntentResponse
+    claimed_at: datetime = Field(
+        description="Timestamp when the claim was made (expires after 5 minutes)"
+    )
+
+
+class IntentExecutionResponse(BaseModel):
+    """Response model for an intent execution history record.
+
+    Represents a single execution attempt with timing and result details.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    intent_id: UUID
+    user_id: str
+    executed_at: datetime
+    trigger_type: str
+    trigger_data: Optional[Dict[str, Any]] = None
+    status: str
+    gate_result: Optional[Dict[str, Any]] = None
+    message_id: Optional[str] = None
+    message_preview: Optional[str] = None
+    evaluation_ms: Optional[int] = None
+    generation_ms: Optional[int] = None
+    delivery_ms: Optional[int] = None
+    error_message: Optional[str] = None
 

@@ -20,7 +20,8 @@ agentic-memories/
 ├── docker-compose.yml            # Container orchestration
 ├── Dockerfile                    # API container definition
 ├── requirements.txt              # Python dependencies
-├── run_docker.sh                 # Docker startup script
+├── scripts/
+│   └── run_docker.sh             # Docker startup script
 └── README.md                     # 📖 Main documentation (primary source of truth)
 ```
 
@@ -273,7 +274,7 @@ docs/
 docker-compose.yml               # Multi-container orchestration
 Dockerfile                       # API container definition
 ui/Dockerfile                    # (If exists) UI container
-run_docker.sh                    # Docker startup automation
+scripts/run_docker.sh            # Docker startup automation
 ```
 
 ---

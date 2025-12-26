@@ -117,7 +117,7 @@ ls migrations/_archived/neo4j/  # Should show archived files
 grep -i "neo4j" migrations/migrate.sh  # Should return nothing
 
 # Verify docker starts
-./run_docker.sh  # Should succeed
+./scripts/run_docker.sh  # Should succeed
 
 # Verify health check
 curl http://localhost:8080/health/full  # Should not include neo4j

@@ -11,10 +11,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Separate test job that can run in parallel
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,24 +25,38 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: 'pip'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: make install
 
       - name: Run unit tests
-        run: |
-          pytest tests --ignore=tests/e2e --ignore=tests/evals --ignore=tests/fixtures
+        run: make test-unit PYTEST_ARGS="--junitxml=test-results/unit.xml"
 
-  # Build job that only runs on main branch or when needed
+      - name: Run integration tests
+        run: make test-integration PYTEST_ARGS="--junitxml=test-results/integration.xml"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results/
+
+      - name: Publish test results
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: 'test-results/*.xml'
+          check_name: 'Test Results'
+          fail_on_failure: true
+
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    environment: prod
+    # prod for main branch pushes, dev for all PR builds
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
     permissions:
       contents: read
       packages: write
@@ -49,29 +65,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare environment variables
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Load environment variables
         env:
-          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
-          EXTRACTION_MODEL_OPENAI: ${{ vars.EXTRACTION_MODEL_OPENAI }}
-          EXTRACTION_MODEL_XAI: ${{ vars.EXTRACTION_MODEL_XAI }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || vars.OPENAI_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY || vars.XAI_API_KEY }}
-          XAI_BASE_URL: ${{ vars.XAI_BASE_URL }}
-          CHROMA_HOST: ${{ vars.CHROMA_HOST }}
-          CHROMA_PORT: ${{ vars.CHROMA_PORT }}
-          REDIS_URL: ${{ vars.REDIS_URL }}
-          CF_ACCESS_AUD: ${{ secrets.CF_ACCESS_AUD || vars.CF_ACCESS_AUD }}
-          CF_ACCESS_TEAM_DOMAIN: ${{ vars.CF_ACCESS_TEAM_DOMAIN }}
-          SCHEDULED_MAINTENANCE_ENABLED: ${{ vars.SCHEDULED_MAINTENANCE_ENABLED }}
-          TIMESCALE_DSN: ${{ secrets.TIMESCALE_DSN || vars.TIMESCALE_DSN }}
-          NEO4J_URI: ${{ vars.NEO4J_URI }}
-          NEO4J_USER: ${{ vars.NEO4J_USER }}
-          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD || vars.NEO4J_PASSWORD }}
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY || vars.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY || vars.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Secrets must be passed explicitly (GitHub security requirement)
+          # Variables are fetched dynamically from the environment
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          TIMESCALE_DSN: ${{ secrets.TIMESCALE_DSN }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          CF_ACCESS_AUD: ${{ secrets.CF_ACCESS_AUD }}
         run: |
-          python scripts/merge_env.py --env-example env.example --local-env .env --output .env.ci
+          ENV_NAME=${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+          python scripts/ci_env.py --env $ENV_NAME --output .env.ci
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

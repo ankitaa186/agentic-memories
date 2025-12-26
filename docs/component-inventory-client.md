@@ -284,7 +284,7 @@
 ## Development Workflow
 
 **Local Development:**
-1. Start backend API: `./run_docker.sh` or `uvicorn src.app:app --reload`
+1. Start backend API: `./scripts/run_docker.sh` or `uvicorn src.app:app --reload`
 2. Start UI dev server: `cd ui && npm run dev`
 3. Access UI: `http://localhost:5173`
 

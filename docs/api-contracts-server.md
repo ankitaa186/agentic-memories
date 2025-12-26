@@ -297,6 +297,121 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
 
 ---
 
+## Scheduled Intents API (Epic 5 & 6)
+
+API for managing proactive AI triggers. Used by Annie's proactive worker to schedule and execute user-defined alerts and check-ins.
+
+### Intent CRUD
+
+#### POST /v1/intents
+**Description:** Create a new scheduled intent/trigger
+**Request:** `ScheduledIntentCreate`
+- `user_id`: string (required)
+- `intent_name`: string (required)
+- `trigger_type`: string (cron, interval, once, price, silence, portfolio)
+- `trigger_schedule`: TriggerSchedule object (for time-based triggers)
+- `trigger_condition`: TriggerCondition object (for condition-based triggers)
+- `action_context`: string (briefing document for wake-up LLM)
+- `action_priority`: string (low, normal, high, urgent)
+
+**Response:** `ScheduledIntentResponse` with generated id, next_check
+
+#### GET /v1/intents
+**Description:** List intents for a user
+**Query Parameters:**
+- `user_id`: string (required)
+- `trigger_type`: string (optional filter)
+- `enabled`: boolean (optional filter)
+- `limit`: integer (default: 50)
+- `offset`: integer (default: 0)
+
+**Response:** Array of `ScheduledIntentResponse`
+
+#### GET /v1/intents/{id}
+**Description:** Get a single intent by ID
+**Response:** `ScheduledIntentResponse`
+
+#### PUT /v1/intents/{id}
+**Description:** Update an existing intent
+**Request:** `ScheduledIntentUpdate` (partial update)
+**Response:** `ScheduledIntentResponse`
+
+#### DELETE /v1/intents/{id}
+**Description:** Delete an intent
+**Response:** 204 No Content
+
+### Worker Endpoints
+
+#### GET /v1/intents/pending
+**Description:** Get intents due for execution (read-only query)
+**Query Parameters:**
+- `user_id`: string (optional - filter by user)
+- `limit`: integer (optional - for batch processing)
+
+**Response:** Array of `ScheduledIntentResponse` where `enabled=true` AND `next_check <= NOW()`
+
+**Notes:**
+- Excludes recently claimed intents (claimed_at > NOW() - 5 minutes)
+- Excludes intents in cooldown (for condition triggers)
+- Returns `in_cooldown` flag for transparency
+- Read-only - does not modify any state
+
+#### POST /v1/intents/{id}/claim
+**Description:** Claim an intent for processing (prevents duplicate execution)
+**Response:** `IntentClaimResponse`
+- `intent`: Full intent data
+- `claimed_at`: Timestamp when claimed
+
+**Error Responses:**
+- `404 Not Found`: Intent does not exist
+- `409 Conflict`: Intent already claimed by another worker (within 5 min timeout)
+
+**Multi-Worker Safety:**
+- Uses `FOR UPDATE SKIP LOCKED` to prevent race conditions
+- Claims expire after 5 minutes (for crashed worker recovery)
+- Worker flow: `get_pending` → `claim` → process → `fire`
+
+#### POST /v1/intents/{id}/fire
+**Description:** Report execution result and update intent state
+**Request:** `IntentFireRequest`
+- `status`: string (success, failed, gate_blocked, condition_not_met, skipped)
+- `message_id`: string (optional - Telegram message ID)
+- `message_preview`: string (optional - first 100 chars)
+- `trigger_data`: object (optional - price at fire time, etc.)
+- `gate_result`: object (optional - subconscious gate details)
+- `evaluation_ms`: integer (optional - condition eval time)
+- `generation_ms`: integer (optional - LLM generation time)
+- `delivery_ms`: integer (optional - message delivery time)
+- `error_message`: string (optional - for failed status)
+
+**Response:** `IntentFireResponse`
+- `intent_id`: UUID
+- `status`: string
+- `next_check`: datetime (next scheduled check)
+- `enabled`: boolean
+- `execution_count`: integer
+- `was_disabled_reason`: string (if auto-disabled)
+- `cooldown_active`: boolean (if blocked by cooldown)
+- `cooldown_remaining_hours`: float (if in cooldown)
+- `last_condition_fire`: datetime (for condition triggers)
+
+**Side Effects:**
+- Clears `claimed_at` (releases claim)
+- Updates `last_checked`, `last_executed`, `execution_count`
+- Calculates and sets `next_check`
+- Auto-disables if: once-trigger success, max_executions reached, expires_at passed
+- Logs to `intent_executions` table for audit trail
+
+#### GET /v1/intents/{id}/history
+**Description:** Get execution history for an intent
+**Query Parameters:**
+- `limit`: integer (default: 50, max: 100)
+- `offset`: integer (default: 0)
+
+**Response:** Array of `IntentExecutionResponse` ordered by `executed_at DESC`
+
+---
+
 ## Scheduled Jobs
 
 **Daily Compaction (Optional):**

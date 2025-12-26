@@ -8,9 +8,11 @@ ENVIRONMENT="${ENVIRONMENT:-production}"
 
 # Check if dev environment (enable remote debugging)
 if [ "$ENVIRONMENT" = "dev" ]; then
-    echo "🔧 Dev mode - remote debugger listening on port $API_DEBUG_PORT (internal: $DEBUGGER_PORT)"
-    # Start uvicorn with debugpy (non-blocking)
-    python -m debugpy --listen 0.0.0.0:$DEBUGGER_PORT -m uvicorn src.app:app --host 0.0.0.0 --port 8080
+    WORKERS=3
+    echo "🔧 Dev mode - starting uvicorn with $WORKERS workers (debugger on port $API_DEBUG_PORT)"
+    # Start uvicorn with workers - debugpy doesn't work well with multiple workers
+    # so we prioritize concurrency over debugging in dev mode
+    python -m debugpy --listen 0.0.0.0:$DEBUGGER_PORT -m uvicorn src.app:app --host 0.0.0.0 --port 8080 --workers $WORKERS
 else
     echo "🚀 Production mode - starting uvicorn with 10 workers"
     # Start uvicorn with multiple workers for concurrent request handling

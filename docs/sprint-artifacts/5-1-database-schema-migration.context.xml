@@ -1,0 +1,128 @@
+<story-context id="5-1-database-schema-migration" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>1</storyId>
+    <title>Database Schema Migration</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-1-database-schema-migration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>PostgreSQL tables created for scheduled intents and execution history</iWant>
+    <soThat>Annie's proactive triggers have durable, queryable storage with audit trail</soThat>
+    <tasks>
+      <task id="1" acs="1,3,4">Create scheduled_intents migration
+        <subtask>1.1 Create migrations/postgres/017_scheduled_intents.up.sql</subtask>
+        <subtask>1.2 Define all columns with appropriate types and defaults</subtask>
+        <subtask>1.3 Add CHECK constraints for trigger_type, action_type, action_priority</subtask>
+        <subtask>1.4 Create partial indexes for pending queries and user lookups</subtask>
+        <subtask>1.5 Add COMMENT statements for documentation</subtask>
+      </task>
+      <task id="2" acs="2,4">Create intent_executions migration
+        <subtask>2.1 Create migrations/postgres/018_intent_executions.up.sql</subtask>
+        <subtask>2.2 Define FK relationship to scheduled_intents with ON DELETE CASCADE</subtask>
+        <subtask>2.3 Add CHECK constraint for status values</subtask>
+        <subtask>2.4 Create indexes for intent and user lookups</subtask>
+      </task>
+      <task id="3" acs="5">Create down migrations
+        <subtask>3.1 Create migrations/postgres/017_scheduled_intents.down.sql</subtask>
+        <subtask>3.2 Create migrations/postgres/018_intent_executions.down.sql</subtask>
+        <subtask>3.3 Ensure proper DROP order (executions before intents)</subtask>
+      </task>
+      <task id="4" acs="1-5">Verify migration execution
+        <subtask>4.1 Run migrations against local PostgreSQL</subtask>
+        <subtask>4.2 Verify tables created with \d commands</subtask>
+        <subtask>4.3 Verify indexes created with \di</subtask>
+        <subtask>4.4 Test down migration and re-up cycle</subtask>
+        <subtask>4.5 Insert sample data to verify constraints</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Migration creates scheduled_intents table with all columns (identity, trigger, action, state, control, audit)</ac>
+    <ac id="2">Migration creates intent_executions table with FK to scheduled_intents, timing columns, and status</ac>
+    <ac id="3">CHECK constraints enforced for trigger_type, action_type, action_priority, status enums</ac>
+    <ac id="4">All indexes created: idx_intents_user_enabled, idx_intents_pending, idx_intents_type, idx_executions_intent, idx_executions_user</ac>
+    <ac id="5">Down migration drops tables cleanly with proper order (executions before intents)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-5.md" title="Epic 5 Tech Spec" section="Data Models and Contracts">
+        Complete SQL DDL for scheduled_intents and intent_executions tables with all columns, constraints, and indexes defined.
+      </doc>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5 Definition" section="Technical Design">
+        Database schema design with table structures, JSONB fields for trigger_schedule and trigger_condition, constraint definitions.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Database Schema Design">
+        Existing PostgreSQL patterns for migrations, psycopg usage, and schema conventions used in profile tables.
+      </doc>
+    </docs>
+    <code>
+      <file path="migrations/postgres/009_user_profiles.up.sql" kind="migration" reason="Reference pattern for table creation with CHECK constraints, indexes, and COMMENT statements">
+        <pattern>CREATE TABLE IF NOT EXISTS with proper types</pattern>
+        <pattern>ALTER TABLE ADD CONSTRAINT for CHECK constraints</pattern>
+        <pattern>CREATE INDEX IF NOT EXISTS for indexes</pattern>
+        <pattern>COMMENT ON TABLE/COLUMN for documentation</pattern>
+      </file>
+      <file path="migrations/postgres/012_profile_sources.up.sql" kind="migration" reason="Reference pattern for FK relationships with ON DELETE CASCADE"/>
+      <file path="migrations/migrate.sh" kind="script" reason="Migration execution script - use for running migrations"/>
+    </code>
+    <dependencies>
+      <python>
+        <package name="psycopg" version="latest">PostgreSQL adapter - psycopg[binary]</package>
+        <package name="psycopg-pool" version="3.2.1">Connection pooling</package>
+      </python>
+      <database>
+        <system name="PostgreSQL" version="16+">Primary database for structured data</system>
+      </database>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="naming">Migration files must follow pattern: NNN_description.up.sql and NNN_description.down.sql</constraint>
+    <constraint type="naming">Next available migration number is 017 (not 020 as stated in story - UPDATE STORY)</constraint>
+    <constraint type="pattern">Use gen_random_uuid() for UUID primary keys (PostgreSQL 13+ built-in)</constraint>
+    <constraint type="pattern">Use TIMESTAMPTZ for all timestamp columns (UTC storage)</constraint>
+    <constraint type="pattern">Use JSONB for flexible schema fields (trigger_schedule, trigger_condition, metadata)</constraint>
+    <constraint type="pattern">Use IF NOT EXISTS for idempotent migrations</constraint>
+    <constraint type="pattern">Add COMMENT statements for self-documenting schema</constraint>
+    <constraint type="fk">FK constraints must use ON DELETE CASCADE for executions referencing intents</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="PostgreSQL psycopg" kind="database-client">
+      <usage>from src.dependencies.timescale import get_timescale_conn</usage>
+      <note>Connection obtained via get_timescale_conn() - returns psycopg connection</note>
+    </interface>
+    <interface name="migrate.sh" kind="cli-script">
+      <usage>bash migrations/migrate.sh up postgres/017_scheduled_intents</usage>
+      <note>Script handles migration execution order</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Manual verification via psql commands. No automated migration tests in current codebase. Verify table structure with \d, indexes with \di, and constraints by inserting invalid data.</standards>
+    <locations>
+      <location>Manual psql verification</location>
+      <location>tests/integration/ (for future API tests using these tables)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Verify scheduled_intents table exists with all 20+ columns using \d scheduled_intents</idea>
+      <idea ac="2">Verify intent_executions table exists with FK using \d intent_executions</idea>
+      <idea ac="3">Insert row with invalid trigger_type and verify CHECK constraint rejects it</idea>
+      <idea ac="3">Insert row with invalid action_priority and verify CHECK constraint rejects it</idea>
+      <idea ac="4">Run EXPLAIN ANALYZE on pending query to verify index usage</idea>
+      <idea ac="5">Run down migration, verify tables dropped, run up migration again</idea>
+    </ideas>
+  </tests>
+
+  <notes>
+    <note type="correction">Story file references migration numbers 020/021 but actual next number is 017/018. Update story file task descriptions.</note>
+    <note type="pattern">Follow exact pattern from 009_user_profiles.up.sql for consistency</note>
+  </notes>
+</story-context>

@@ -1,9 +1,9 @@
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
-chromadb==0.5.3
+chromadb==1.4.0
 openai==1.40.0
 redis==5.0.6
-pydantic==2.8.2
+pydantic>=2.9.0
 apscheduler==3.10.4
 httpx==0.27.0
 python-dotenv==1.0.1
@@ -17,3 +17,4 @@ psycopg[binary]
 psycopg-pool==3.2.1
 langfuse==2.36.0
 debugpy==1.8.0
+croniter==2.0.1

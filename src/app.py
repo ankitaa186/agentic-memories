@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 import logging
 import os
@@ -59,13 +60,67 @@ except Exception:
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
 from src.services.persona_retrieval import PersonaCoPilot
-from src.routers import profile, portfolio
+from src.routers import profile, portfolio, intents
 
-app = FastAPI(title="Agentic Memories API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup: Check LLM configuration
+    if not is_llm_configured():
+        raise RuntimeError("LLM not configured. Set LLM_PROVIDER and corresponding API key.")
+    
+    # Startup: Log configuration
+    try:
+        provider = get_llm_provider()
+        extraction_model = get_extraction_model_name()
+        embedding_model = get_embedding_model_name()
+        chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
+        if provider == "openai":
+            key_present = bool(get_openai_api_key())
+            logging.getLogger("agentic_memories.api").info(
+                "[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
+                extraction_model, embedding_model, key_present
+            )
+        elif provider == "xai":
+            from src.config import get_xai_api_key
+            key_present = bool(get_xai_api_key())
+            base_url = get_xai_base_url()
+            logging.getLogger("agentic_memories.api").info(
+                "[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s base_url=%s",
+                extraction_model, embedding_model, key_present, base_url
+            )
+        logging.getLogger("agentic_memories.api").info(
+            "[startup] ChromaDB=%s:%s", chroma_host, chroma_port
+        )
+    except Exception as exc:
+        logging.getLogger("agentic_memories.api").warning("[startup] config log error: %s", exc)
+    
+    # Startup: Check Chroma connectivity
+    logging.getLogger("agentic_memories.api").info("Starting Agentic Memories API...")
+    try:
+        client = get_chroma_client()
+        if client is None:
+            logging.getLogger("agentic_memories.api").warning("Chroma client not available - some features may not work")
+        else:
+            collections = client.list_collections()
+            logging.getLogger("agentic_memories.api").info(f"Chroma connected. Collections: {len(collections)}")
+    except Exception as e:
+        logging.getLogger("agentic_memories.api").warning(f"Chroma connection warning: {e}")
+    
+    # Startup: Start scheduler
+    _start_scheduler()
+    
+    yield
+    
+    # Shutdown: Close memory orchestrator
+    await _memory_orchestrator.shutdown()
+
+app = FastAPI(title="Agentic Memories API", version="0.1.0", lifespan=lifespan)
 
 # Include routers
 app.include_router(profile.router)
 app.include_router(portfolio.router)
+app.include_router(intents.router)
 # Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
 _scheduler: Optional[BackgroundScheduler] = None
 
@@ -145,14 +200,7 @@ def _start_scheduler() -> None:
     except Exception as exc:
         logger.info("[sched] failed to start: %s", exc)
 
-@app.on_event("startup")
-def _on_startup() -> None:
-    _start_scheduler()
-
-
-@app.on_event("shutdown")
-async def _on_shutdown() -> None:
-    await _memory_orchestrator.shutdown()
+# Startup and shutdown events moved to lifespan context manager
 logger = logging.getLogger("agentic_memories.api")
 if not logger.handlers:
     _handler = logging.StreamHandler()
@@ -326,49 +374,7 @@ def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[Retrieve
     return items
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Check Chroma connectivity on startup."""
-    logger.info("Starting Agentic Memories API...")
-    
-    # Log configuration
-    provider = get_llm_provider()
-    logger.info(f"LLM Provider: {provider}")
-    
-    # Check Chroma connectivity
-    try:
-        client = get_chroma_client()
-        if client is None:
-            logger.warning("Chroma client not available - some features may not work")
-        else:
-            logger.info(f"Chroma host: {get_chroma_host()}:{get_chroma_port()}")
-            if client.health_check(max_retries=5):
-                logger.info("Chroma database is healthy and ready")
-
-                # Check for required collections
-                try:
-                    required_collection = _standard_collection_name()
-                    existing_collections = [col.name for col in client.list_collections()]
-
-                    if required_collection not in existing_collections:
-                        error_msg = f"Required ChromaDB collection '{required_collection}' not found. This collection stores memory embeddings and is required for the application to function. Please ensure ChromaDB is properly initialized with the required collections before starting the application."
-                        logger.error(error_msg)
-                        raise RuntimeError(error_msg)
-                    else:
-                        logger.info(f"Required collection '{required_collection}' found")
-
-                except RuntimeError as e:
-                    # Re-raise intentional failures (like missing collections)
-                    raise e
-                except Exception as e:
-                    logger.warning(f"Failed to check ChromaDB collections: {e}")
-
-            else:
-                logger.warning("Chroma database is not ready - some features may not work")
-    except Exception as e:
-        logger.warning(f"Failed to check Chroma connectivity: {e}")
-    
-    logger.info("Agentic Memories API startup complete")
+# Chroma connectivity check moved to lifespan context manager
 # Auth dependency: validate Cloudflare Access JWT if provided
 def get_identity(
     cf_access_jwt_assertion: Optional[str] = Header(default=None),
@@ -433,33 +439,7 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def require_llm_key() -> None:
-	# Provider-aware LLM configuration check
-	if not is_llm_configured():
-		raise RuntimeError("LLM not configured. Set LLM_PROVIDER and corresponding API key.")
-	# Log selected provider and models for observability
-	try:
-		provider = get_llm_provider()
-		extraction_model = get_extraction_model_name()
-		embedding_model = get_embedding_model_name()
-		chroma_host, chroma_port = get_chroma_host(), get_chroma_port()
-		if provider == "openai":
-			key_present = bool(get_openai_api_key())
-			logger.info("[startup] LLM provider=openai model=%s embedding_model=%s openai_key_present=%s",
-				extraction_model, embedding_model, key_present)
-		elif provider == "xai":
-			# Do not log the API key; only presence and base URL
-			key_present = bool(get_openai_api_key())  # placeholder to avoid unused var if refactor; we won't use it
-			xai_key_present = bool(os.getenv("XAI_API_KEY"))
-			xai_base = get_xai_base_url()
-			logger.info("[startup] LLM provider=xai model=%s embedding_model=%s xai_key_present=%s xai_base=%s",
-				extraction_model, embedding_model, xai_key_present, xai_base)
-		else:
-			logger.info("[startup] LLM provider=%s model=%s embedding_model=%s", provider, extraction_model, embedding_model)
-		logger.info("[startup] Chroma host=%s port=%s", chroma_host, chroma_port)
-	except Exception as _exc:  # pragma: no cover
-		logger.info("[startup] config logging failed: %s", _exc)
+# LLM configuration check moved to lifespan context manager
 
 
 @app.get("/health")
@@ -542,8 +522,9 @@ def health_full() -> dict:
 	portfolio_ok = False
 	portfolio_error: Optional[str] = None
 	portfolio_tables = []
+	conn = None
 	try:
-		from src.dependencies.timescale import get_timescale_conn
+		from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 		conn = get_timescale_conn()
 		if conn:
 			with conn.cursor() as cur:
@@ -559,6 +540,9 @@ def health_full() -> dict:
 					portfolio_error = f"Missing tables: {set(['portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences']) - set(portfolio_tables)}"
 	except Exception as exc:
 		portfolio_error = str(exc)
+	finally:
+		if conn:
+			release_timescale_conn(conn)
 	checks["portfolio"] = {"ok": portfolio_ok, "error": portfolio_error, "tables": portfolio_tables}
 
 	# Langfuse check (optional - tracing)

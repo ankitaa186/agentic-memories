@@ -126,7 +126,7 @@ Followed by DEEP DIVE into each memory type with:
 # TL;DR for Docker users
 cd agentic-memories-storage && ./docker-up.sh
 cd ../agentic-memories/migrations && ./migrate.sh
-cd .. && ./run_docker.sh
+cd .. && ./scripts/run_docker.sh
 
 # Followed by 7 detailed steps with code examples
 ```

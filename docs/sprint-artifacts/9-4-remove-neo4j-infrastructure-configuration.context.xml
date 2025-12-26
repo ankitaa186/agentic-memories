@@ -177,7 +177,7 @@
     <constraint type="scope">Health check already updated in Story 9.3 - AC-9.4.5 is pre-completed</constraint>
     <constraint type="scope">No .env.example exists - only .env needs modification</constraint>
     <constraint type="preference">Archive migrations to _archived/ rather than delete for audit trail</constraint>
-    <constraint type="testing">Run ./run_docker.sh to deploy and test changes</constraint>
+    <constraint type="testing">Run ./scripts/run_docker.sh to deploy and test changes</constraint>
     <constraint type="testing">Verify unit tests pass: docker exec agentic-memories-api-1 python -m pytest tests/unit/ -v</constraint>
   </constraints>
 
@@ -219,7 +219,7 @@
       <idea ac="AC-9.4.3">Verify ls migrations/_archived/neo4j/ shows archived files</idea>
       <idea ac="AC-9.4.4">Verify grep -i "neo4j" migrations/migrate.sh returns no matches</idea>
       <idea ac="AC-9.4.5">Verify curl http://localhost:8080/health/full has no neo4j key (already done)</idea>
-      <idea ac="AC-9.4.6">Verify ./run_docker.sh succeeds and docker ps shows all 3 services running</idea>
+      <idea ac="AC-9.4.6">Verify ./scripts/run_docker.sh succeeds and docker ps shows all 3 services running</idea>
     </ideas>
   </tests>
 </story-context>

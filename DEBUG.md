@@ -20,7 +20,7 @@ ENVIRONMENT=dev
 
 Then start the services:
 ```bash
-bash run_docker.sh
+bash scripts/run_docker.sh
 ```
 
 ### Option 2: Command Line
@@ -72,7 +72,7 @@ API_DEBUG_PORT=5682  # Use a different port
 
 1. **Start the container in dev mode**:
    ```bash
-   ENVIRONMENT=dev bash run_docker.sh
+   ENVIRONMENT=dev bash scripts/run_docker.sh
    ```
 
 2. **Wait for the message**:
@@ -126,7 +126,7 @@ The VS Code launch configuration (`.vscode/launch.json`) is already set up:
 
 ```bash
 # 1. Enable dev mode
-ENVIRONMENT=dev bash run_docker.sh
+ENVIRONMENT=dev bash scripts/run_docker.sh
 
 # 2. Wait for "Dev mode - remote debugger listening on port 5681" message
 

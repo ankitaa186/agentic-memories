@@ -69,26 +69,33 @@ def release_timescale_conn(conn: Connection):
 	"""
 	Return a connection back to the pool.
 	Services should call this after completing their transaction.
+
+	Note: Always rollback before returning to ensure clean transaction state.
+	This prevents 'connection in INTRANS state' warnings from the pool.
+	If the caller already committed, rollback is a no-op.
 	"""
 	pool = get_timescale_pool()
 	if pool and conn:
 		try:
+			conn.rollback()  # Ensure clean transaction state before returning to pool
 			pool.putconn(conn)
 		except Exception as e:
 			print(f"Failed to return connection to pool: {e}")
 
 
 def ping_timescale() -> tuple[bool, Optional[str]]:
+	conn = None
 	try:
 		conn = get_timescale_conn()
 		if not conn:
 			return False, "Connection unavailable"
-		
+
 		with conn.cursor() as cur:
 			cur.execute("SELECT 1")
 			result = cur.fetchone()
-			conn.commit()
-			release_timescale_conn(conn)
 			return bool(result), None
 	except Exception as exc:
 		return False, str(exc)
+	finally:
+		if conn:
+			release_timescale_conn(conn)

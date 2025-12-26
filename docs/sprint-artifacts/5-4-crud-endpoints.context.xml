@@ -1,0 +1,105 @@
+<story-context id="5-4-crud-endpoints" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>4</storyId>
+    <title>CRUD Endpoints</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-4-crud-endpoints.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer integrating with the Scheduled Intents API</asA>
+    <iWant>complete CRUD endpoints for managing scheduled intents</iWant>
+    <soThat>I can create, read, update, and delete trigger definitions programmatically</soThat>
+    <tasks>
+      <task id="1">Create intents router (src/routers/intents.py)</task>
+      <task id="2">Implement IntentService (src/services/intent_service.py)</task>
+      <task id="3">Implement POST /v1/intents with validation</task>
+      <task id="4">Implement GET /v1/intents with filters</task>
+      <task id="5">Implement GET /v1/intents/{id}</task>
+      <task id="6">Implement PUT /v1/intents/{id} with next_check recalculation</task>
+      <task id="7">Implement DELETE /v1/intents/{id}</task>
+      <task id="8">Add Langfuse tracing</task>
+      <task id="9">Write integration tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">POST /v1/intents creates intent with validation and initial next_check</criterion>
+    <criterion id="AC2">GET /v1/intents?user_id=X lists intents with optional filters (trigger_type, enabled, limit, offset)</criterion>
+    <criterion id="AC3">GET /v1/intents/{id} gets single intent by ID (404 if not found)</criterion>
+    <criterion id="AC4">PUT /v1/intents/{id} updates intent and recalculates next_check if schedule changes</criterion>
+    <criterion id="AC5">DELETE /v1/intents/{id} deletes intent (CASCADE deletes executions)</criterion>
+    <criterion id="AC6">Langfuse tracing on all endpoints with user_id, intent_id, operation metadata</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5: Scheduled Intents API" section="Story 5.4" snippet="CRUD endpoints for intents: POST creates with initial next_check, GET lists with filters, PUT updates and recalculates next_check, DELETE removes intent." />
+      <doc path="docs/architecture.md" title="Architecture" section="AD-008 Router Structure" snippet="FastAPI routers in src/routers/ with prefix /v1/{resource}, tags for grouping, dependency injection for DB connections." />
+      <doc path="docs/sprint-artifacts/5-3-input-validation.md" title="Story 5.3: Input Validation" section="Dev Agent Record" snippet="IntentValidationService created at src/services/intent_validation.py with ValidationResult dataclass. Use validate(intent) method." />
+    </docs>
+    <code>
+      <file path="src/routers/portfolio.py" kind="router" symbol="router" lines="1-523" reason="Reference pattern for CRUD router implementation - shows get_timescale_conn, HTTPException, response models, error handling" />
+      <file path="src/services/intent_validation.py" kind="service" symbol="IntentValidationService" lines="61-140" reason="Validation service to integrate - call validate(intent) before create/update" />
+      <file path="src/schemas.py" kind="models" symbol="ScheduledIntentCreate, ScheduledIntentResponse, ScheduledIntentUpdate" lines="239-350" reason="Pydantic models for request/response validation" />
+      <file path="src/app.py" kind="application" symbol="app.include_router" lines="66-68" reason="Router registration pattern - add intents router here" />
+      <file path="migrations/postgres/017_scheduled_intents.up.sql" kind="migration" symbol="scheduled_intents, intent_executions" reason="Database schema - columns, constraints, indexes" />
+      <file path="src/dependencies/timescale.py" kind="dependency" symbol="get_timescale_conn, release_timescale_conn" reason="Database connection management pattern" />
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" />
+        <package name="pydantic" version="2.8.2" />
+        <package name="psycopg" version="binary" />
+        <package name="langfuse" version="2.36.0" />
+        <package name="croniter" version="2.0.1" />
+        <package name="pytest" version="8.3.2" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing router pattern from src/routers/portfolio.py - same structure, error handling, logging</constraint>
+    <constraint type="pattern">Use dependency injection for DB connection via get_timescale_conn()/release_timescale_conn()</constraint>
+    <constraint type="pattern">Service layer handles business logic, router handles HTTP concerns</constraint>
+    <constraint type="pattern">Return Pydantic response models for type safety</constraint>
+    <constraint type="validation">Integrate IntentValidationService.validate() before creating/updating intents</constraint>
+    <constraint type="database">Use parameterized queries to prevent SQL injection</constraint>
+    <constraint type="database">Use idx_intents_user_enabled index for efficient user queries</constraint>
+    <constraint type="observability">Add @observe decorator from langfuse for tracing</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="POST /v1/intents" kind="REST endpoint" signature="POST /v1/intents -> ScheduledIntentResponse (201) | ErrorResponse (400)" path="src/routers/intents.py" />
+    <interface name="GET /v1/intents" kind="REST endpoint" signature="GET /v1/intents?user_id=X&amp;trigger_type=Y&amp;enabled=Z&amp;limit=N&amp;offset=M -> List[ScheduledIntentResponse]" path="src/routers/intents.py" />
+    <interface name="GET /v1/intents/{id}" kind="REST endpoint" signature="GET /v1/intents/{id} -> ScheduledIntentResponse (200) | 404" path="src/routers/intents.py" />
+    <interface name="PUT /v1/intents/{id}" kind="REST endpoint" signature="PUT /v1/intents/{id} -> ScheduledIntentResponse (200) | 404" path="src/routers/intents.py" />
+    <interface name="DELETE /v1/intents/{id}" kind="REST endpoint" signature="DELETE /v1/intents/{id} -> 204 | 404" path="src/routers/intents.py" />
+    <interface name="IntentValidationService.validate" kind="function" signature="validate(intent: ScheduledIntentCreate) -> ValidationResult" path="src/services/intent_validation.py" />
+    <interface name="calculate_next_check" kind="function" signature="calculate_next_check(trigger_type: str, trigger_schedule: TriggerSchedule) -> datetime" path="src/services/intent_service.py" />
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest with FastAPI TestClient for integration tests. Follow existing test patterns in tests/integration/. Mock database or use test fixtures. Test both success and error cases for each endpoint.</standards>
+    <locations>
+      <location>tests/integration/test_intents_api.py</location>
+      <location>tests/unit/test_intent_validation.py (existing - 43 tests)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test POST creates intent with correct next_check calculation for each trigger type</idea>
+      <idea ac="AC1">Test POST returns 400 with validation errors for invalid intent</idea>
+      <idea ac="AC2">Test GET list returns intents filtered by trigger_type, enabled</idea>
+      <idea ac="AC2">Test GET list pagination with limit/offset</idea>
+      <idea ac="AC3">Test GET single returns 404 for non-existent UUID</idea>
+      <idea ac="AC3">Test GET single returns 400 for invalid UUID format</idea>
+      <idea ac="AC4">Test PUT updates intent and recalculates next_check when schedule changes</idea>
+      <idea ac="AC4">Test PUT returns 404 for non-existent intent</idea>
+      <idea ac="AC5">Test DELETE removes intent and cascades to executions</idea>
+      <idea ac="AC5">Test DELETE returns 404 for non-existent intent</idea>
+      <idea ac="AC6">Test Langfuse traces are created with correct metadata</idea>
+    </ideas>
+  </tests>
+</story-context>

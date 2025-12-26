@@ -1,0 +1,252 @@
+<story-context id="5-2-pydantic-models" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>2</storyId>
+    <title>Pydantic Models</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-2-pydantic-models.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>Pydantic request and response models for the Scheduled Intents API</iWant>
+    <soThat>API inputs are validated consistently and responses are properly serialized</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Create TriggerSchedule and TriggerCondition models
+        <subtask>1.1 Create src/schemas/intents.py file following existing patterns</subtask>
+        <subtask>1.2 Implement TriggerSchedule with all fields and Field constraints</subtask>
+        <subtask>1.3 Implement TriggerCondition with all fields</subtask>
+        <subtask>1.4 Add docstrings explaining each model's purpose</subtask>
+      </task>
+      <task id="2" ac="3">Create ScheduledIntentCreate model
+        <subtask>2.1 Define all required and optional fields</subtask>
+        <subtask>2.2 Use Literal types for enum fields matching DB CHECK constraints</subtask>
+        <subtask>2.3 Set appropriate defaults (action_type='notify', action_priority='normal')</subtask>
+        <subtask>2.4 Add Field validators if needed</subtask>
+      </task>
+      <task id="3" ac="4">Create IntentFireRequest model
+        <subtask>3.1 Define status as Literal with valid execution statuses</subtask>
+        <subtask>3.2 Define optional fields for execution details</subtask>
+        <subtask>3.3 Add timing fields (evaluation_ms, generation_ms, delivery_ms)</subtask>
+      </task>
+      <task id="4" ac="5">Create Response models
+        <subtask>4.1 Implement ScheduledIntentResponse with all DB columns</subtask>
+        <subtask>4.2 Implement IntentFireResponse for fire endpoint</subtask>
+        <subtask>4.3 Implement IntentExecutionResponse for history endpoint</subtask>
+        <subtask>4.4 Implement ScheduledIntentUpdate for partial updates</subtask>
+        <subtask>4.5 Add model_config with from_attributes=True for ORM mapping</subtask>
+      </task>
+      <task id="5" ac="1-5">Add model exports and tests
+        <subtask>5.1 Export all models from schemas module</subtask>
+        <subtask>5.2 Write unit tests for validation rules</subtask>
+        <subtask>5.3 Test serialization/deserialization of sample data</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">TriggerSchedule model validates: cron (Optional[str]), interval_minutes (Optional[int]), datetime (Optional[datetime]), check_interval_minutes (Optional[int] = Field(default=5, ge=5))</criterion>
+    <criterion id="AC2">TriggerCondition model validates: ticker (Optional[str]), operator (Optional[str] for comparison operators), value (Optional[float]), keywords (Optional[List[str]]), threshold_hours (Optional[int])</criterion>
+    <criterion id="AC3">ScheduledIntentCreate model enforces required fields (user_id, intent_name, action_context) and valid enum Literals matching DB CHECK constraints</criterion>
+    <criterion id="AC4">IntentFireRequest model validates execution reporting with status Literal and optional timing/error fields</criterion>
+    <criterion id="AC5">Response models serialize all database fields correctly: ScheduledIntentResponse (24 columns), IntentFireResponse, IntentExecutionResponse (14 columns), ScheduledIntentUpdate</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-5.md" title="Epic 5 Tech Spec" section="Pydantic Models">
+        Complete Pydantic model definitions for all intents API models. Contains TriggerSchedule, TriggerCondition, ScheduledIntentCreate, IntentFireRequest, ScheduledIntentResponse, IntentFireResponse model specifications.
+      </doc>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5 Definition" section="Story 5.2">
+        Story acceptance criteria and business requirements for Pydantic models story.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Technology Stack">
+        Pydantic 2.8.2 with FastAPI 0.111.0. Uses Literal types, Field constraints, BaseModel patterns.
+      </doc>
+      <doc path="docs/sprint-artifacts/5-1-database-schema-migration.md" title="Story 5.1 - DB Schema" section="Dev Agent Record">
+        Previous story learnings: CHECK constraints define enum values that Pydantic Literal types must match exactly.
+      </doc>
+    </docs>
+    <code>
+      <file path="src/schemas.py" kind="schemas" reason="Existing Pydantic patterns to follow">
+        <symbol>BaseModel imports from pydantic</symbol>
+        <symbol>Literal, Optional, Field, List, Dict type patterns</symbol>
+        <symbol>datetime from Python stdlib</symbol>
+        <symbol>Field(default_factory=list) pattern</symbol>
+        <symbol>Field(default=X, ge=Y, le=Z) constraint pattern</symbol>
+        <symbol>model_rebuild() for forward references</symbol>
+        <lines>1-233</lines>
+      </file>
+      <file path="migrations/postgres/017_scheduled_intents.up.sql" kind="migration" reason="DB schema defines columns and CHECK constraints">
+        <symbol>scheduled_intents table - 24 columns</symbol>
+        <symbol>chk_trigger_type: cron, interval, once, price, silence, event, calendar, news</symbol>
+        <symbol>chk_action_type: notify, check_in, briefing, analysis, reminder</symbol>
+        <symbol>chk_action_priority: low, normal, high, critical</symbol>
+        <lines>1-106</lines>
+      </file>
+      <file path="migrations/postgres/018_intent_executions.up.sql" kind="migration" reason="DB schema for execution history">
+        <symbol>intent_executions table - 14 columns</symbol>
+        <symbol>chk_execution_status: success, failed, gate_blocked, condition_not_met</symbol>
+        <lines>1-81</lines>
+      </file>
+      <file path="src/routers/profile.py" kind="router" reason="Example FastAPI router pattern for future intents router">
+        <symbol>APIRouter with prefix and tags</symbol>
+        <symbol>Dependency injection pattern</symbol>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="pydantic" version="2.8.2">Core validation library - use BaseModel, Field, Literal</package>
+        <package name="fastapi" version="0.111.0">API framework - models integrate with endpoints</package>
+        <package name="pytest" version="8.3.2">Testing framework for unit tests</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="enum-matching" priority="critical">
+      Pydantic Literal types MUST exactly match DB CHECK constraints from Story 5.1:
+      - trigger_type: Literal['cron', 'interval', 'once', 'price', 'silence', 'event', 'calendar', 'news']
+      - action_type: Literal['notify', 'check_in', 'briefing', 'analysis', 'reminder']
+      - action_priority: Literal['low', 'normal', 'high', 'critical']
+      - status: Literal['success', 'failed', 'gate_blocked', 'condition_not_met']
+    </constraint>
+    <constraint type="field-defaults" priority="high">
+      Match DB column defaults: action_type='notify', action_priority='normal', enabled=true, execution_count=0
+    </constraint>
+    <constraint type="pydantic-v2" priority="high">
+      Use Pydantic v2 patterns: model_config dict instead of Config class, from_attributes=True for ORM mapping
+    </constraint>
+    <constraint type="existing-patterns" priority="medium">
+      Follow src/schemas.py patterns: from __future__ import annotations, Optional with explicit None defaults, Field for constraints
+    </constraint>
+    <constraint type="file-location" priority="medium">
+      Add models to existing src/schemas.py or create new src/schemas/intents.py module with proper exports
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="TriggerSchedule" kind="pydantic-model">
+      <signature>class TriggerSchedule(BaseModel):
+    cron: Optional[str] = None
+    interval_minutes: Optional[int] = None
+    datetime: Optional[datetime] = None
+    check_interval_minutes: Optional[int] = Field(default=5, ge=5)</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="TriggerCondition" kind="pydantic-model">
+      <signature>class TriggerCondition(BaseModel):
+    ticker: Optional[str] = None
+    operator: Optional[str] = None  # '&lt;', '&gt;', '&lt;=', '&gt;=', '=='
+    value: Optional[float] = None
+    keywords: Optional[List[str]] = None
+    threshold_hours: Optional[int] = None</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="ScheduledIntentCreate" kind="pydantic-model">
+      <signature>class ScheduledIntentCreate(BaseModel):
+    user_id: str
+    intent_name: str
+    description: Optional[str] = None
+    trigger_type: Literal['cron', 'interval', 'once', 'price', 'silence', 'event', 'calendar', 'news']
+    trigger_schedule: Optional[TriggerSchedule] = None
+    trigger_condition: Optional[TriggerCondition] = None
+    action_type: Literal['notify', 'check_in', 'briefing', 'analysis', 'reminder'] = 'notify'
+    action_context: str
+    action_priority: Literal['low', 'normal', 'high', 'critical'] = 'normal'
+    expires_at: Optional[datetime] = None
+    max_executions: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="ScheduledIntentResponse" kind="pydantic-model">
+      <signature>class ScheduledIntentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    user_id: str
+    intent_name: str
+    description: Optional[str]
+    trigger_type: str
+    trigger_schedule: Optional[Dict[str, Any]]
+    trigger_condition: Optional[Dict[str, Any]]
+    action_type: str
+    action_context: str
+    action_priority: str
+    next_check: Optional[datetime]
+    last_checked: Optional[datetime]
+    last_executed: Optional[datetime]
+    execution_count: int
+    last_execution_status: Optional[str]
+    last_execution_error: Optional[str]
+    last_message_id: Optional[str]
+    enabled: bool
+    expires_at: Optional[datetime]
+    max_executions: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[str]
+    metadata: Optional[Dict[str, Any]]</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="IntentFireRequest" kind="pydantic-model">
+      <signature>class IntentFireRequest(BaseModel):
+    status: Literal['success', 'failed', 'gate_blocked', 'condition_not_met']
+    trigger_data: Optional[Dict[str, Any]] = None
+    gate_result: Optional[Dict[str, Any]] = None
+    message_id: Optional[str] = None
+    message_preview: Optional[str] = None
+    evaluation_ms: Optional[int] = None
+    generation_ms: Optional[int] = None
+    delivery_ms: Optional[int] = None
+    error_message: Optional[str] = None</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="IntentFireResponse" kind="pydantic-model">
+      <signature>class IntentFireResponse(BaseModel):
+    intent_id: UUID
+    status: str
+    next_check: Optional[datetime]
+    enabled: bool
+    execution_count: int</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+    <interface name="IntentExecutionResponse" kind="pydantic-model">
+      <signature>class IntentExecutionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    intent_id: UUID
+    user_id: str
+    executed_at: datetime
+    trigger_type: str
+    trigger_data: Optional[Dict[str, Any]]
+    status: str
+    gate_result: Optional[Dict[str, Any]]
+    message_id: Optional[str]
+    message_preview: Optional[str]
+    evaluation_ms: Optional[int]
+    generation_ms: Optional[int]
+    delivery_ms: Optional[int]
+    error_message: Optional[str]</signature>
+      <path>src/schemas.py or src/schemas/intents.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Project uses pytest 8.3.2 for testing. Tests directory exists at tests/. Pydantic models should have unit tests verifying validation rules, required field enforcement, Literal type rejection of invalid values, Field constraints (ge, le), and serialization/deserialization of sample data.
+    </standards>
+    <locations>
+      <location>tests/</location>
+      <location>tests/unit/test_intents_schemas.py (suggested)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test TriggerSchedule accepts valid cron expressions and intervals, rejects check_interval_minutes less than 5</idea>
+      <idea ac="2">Test TriggerCondition accepts valid operators and threshold values</idea>
+      <idea ac="3">Test ScheduledIntentCreate rejects missing required fields (user_id, intent_name, action_context), rejects invalid trigger_type values not in Literal set</idea>
+      <idea ac="4">Test IntentFireRequest rejects invalid status values, accepts all optional fields as None</idea>
+      <idea ac="5">Test ScheduledIntentResponse serializes all 24 DB columns correctly, test IntentExecutionResponse serializes all 14 columns</idea>
+    </ideas>
+  </tests>
+</story-context>

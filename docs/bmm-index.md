@@ -95,7 +95,7 @@
 3. **Development:**
    - Backend: `uvicorn src.app:app --reload`
    - Frontend: `cd ui && npm run dev`
-   - Docker: `./run_docker.sh`
+   - Docker: `./scripts/run_docker.sh`
 
 ### For Planning New Features (Brownfield PRD)
 
@@ -259,7 +259,7 @@ cd ui && npm run dev
 
 **Production (Docker):**
 ```bash
-./run_docker.sh
+./scripts/run_docker.sh
 ```
 
 **Services:**

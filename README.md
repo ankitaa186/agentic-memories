@@ -252,7 +252,7 @@ cd migrations
 bash migrate.sh up
 
 # 6. Start the application
-cd .. && ./run_docker.sh
+cd .. && ./scripts/run_docker.sh
 
 # 7. Verify everything is working
 curl http://localhost:8080/health/full | jq
@@ -414,7 +414,7 @@ bash migrate.sh status
 **Using run_docker.sh (recommended)**:
 ```bash
 cd ..  # Back to project root
-./run_docker.sh
+./scripts/run_docker.sh
 ```
 
 This script will automatically:

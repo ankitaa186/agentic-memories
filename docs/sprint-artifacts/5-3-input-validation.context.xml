@@ -1,0 +1,189 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>3</storyId>
+    <title>Input Validation</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-3-input-validation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>robust input validation for the Scheduled Intents API</iWant>
+    <soThat>bad triggers are rejected at creation time with clear error messages</soThat>
+    <tasks>
+      <task id="1">Create IntentValidationService with ValidationResult dataclass</task>
+      <task id="2">Implement trigger count validation (max 25 per user)</task>
+      <task id="3">Implement cron validation (60s min interval, 96/day max)</task>
+      <task id="4">Implement interval validation (5 min minimum)</task>
+      <task id="5">Implement one-time validation (future only)</task>
+      <task id="6">Implement required fields validation by trigger type</task>
+      <task id="7">Implement validate() orchestrator collecting all errors</task>
+      <task id="8">Write unit tests for all validation rules</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Rejects creation if user has 25+ active triggers (HTTP 400)</ac>
+    <ac id="2">Rejects cron expressions firing more frequently than every 60 seconds</ac>
+    <ac id="3">Rejects cron expressions that would fire more than 96 times per day</ac>
+    <ac id="4">Rejects interval less than 5 minutes</ac>
+    <ac id="5">Rejects one-time triggers with trigger_at in the past</ac>
+    <ac id="6">Validates required fields by trigger type (cron/interval/once/price/silence/event/news)</ac>
+    <ac id="7">Returns all validation errors in single response (no short-circuit)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-5.md</path>
+        <title>Epic 5 Technical Specification</title>
+        <section>Story 5.3: Input Validation</section>
+        <snippet>Validation rules: max 25 triggers per user, cron min 60s/max 96/day, interval min 5m, one-time future only. IntentValidationService handles all checks before database mutations.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-5-scheduled-intents.md</path>
+        <title>Epic 5: Scheduled Intents API</title>
+        <section>Story 5.3: Input Validation</section>
+        <snippet>Goal: Reject bad triggers at creation time. Validates max triggers per user, cron frequency, interval minimum, one-time future, required fields by trigger type.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>AD-014: Error Handling</section>
+        <snippet>Graceful degradation - return partial data if source unavailable. APIs return {data, warnings, errors} structure. Use structured validation results.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/5-1-database-schema-migration.md</path>
+        <title>Story 5.1: Database Schema Migration</title>
+        <section>Dev Agent Record</section>
+        <snippet>scheduled_intents table created with idx_intents_user_enabled index for efficient user trigger count query. CHECK constraints on trigger_type, action_type, action_priority.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/5-2-pydantic-models.md</path>
+        <title>Story 5.2: Pydantic Models</title>
+        <section>Dev Agent Record</section>
+        <snippet>8 Pydantic models created: ScheduledIntentCreate, TriggerSchedule (trigger_at field), TriggerCondition. Literal types match DB CHECK constraints. check_interval_minutes has ge=5 constraint.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>src/schemas.py</path>
+        <kind>schema</kind>
+        <symbol>ScheduledIntentCreate, TriggerSchedule, TriggerCondition</symbol>
+        <lines>267-304</lines>
+        <reason>Pydantic models for validation input - ScheduledIntentCreate is the input to validation service</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/profile_storage.py</path>
+        <kind>service</kind>
+        <symbol>ProfileStorageService</symbol>
+        <lines>35-100</lines>
+        <reason>Example service pattern with get_timescale_conn(), cursor handling, transaction management</reason>
+      </artifact>
+      <artifact>
+        <path>src/dependencies/timescale.py</path>
+        <kind>dependency</kind>
+        <symbol>get_timescale_conn, release_timescale_conn</symbol>
+        <lines>1-50</lines>
+        <reason>Database connection pattern for PostgreSQL queries (trigger count validation)</reason>
+      </artifact>
+      <artifact>
+        <path>tests/unit/test_intents_schemas.py</path>
+        <kind>test</kind>
+        <symbol>TestScheduledIntentCreate, TestTriggerSchedule</symbol>
+        <lines>1-489</lines>
+        <reason>Existing tests for Pydantic models - follow same patterns for validation tests</reason>
+      </artifact>
+      <artifact>
+        <path>migrations/postgres/020_scheduled_intents.up.sql</path>
+        <kind>migration</kind>
+        <symbol>scheduled_intents table</symbol>
+        <lines>1-50</lines>
+        <reason>Table schema and idx_intents_user_enabled index for trigger count query</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0" />
+        <package name="pydantic" version="2.8.2" />
+        <package name="psycopg" version="latest" note="binary driver" />
+        <package name="psycopg-pool" version="3.2.1" />
+        <package name="croniter" version="2.0.1" note="NEW - add to requirements.txt for cron parsing" />
+        <package name="pytest" version="8.3.2" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing service pattern from ProfileStorageService with dependency injection</constraint>
+    <constraint type="pattern">Return ValidationResult dataclass instead of raising exceptions immediately</constraint>
+    <constraint type="pattern">All validation runs before any database mutations (Story 5.4 will call this)</constraint>
+    <constraint type="pattern">Use graceful degradation - collect all errors before returning (AD-014)</constraint>
+    <constraint type="database">Query scheduled_intents with idx_intents_user_enabled index for trigger count</constraint>
+    <constraint type="naming">Field trigger_at (not datetime) in TriggerSchedule to avoid Python naming conflict</constraint>
+    <constraint type="dependency">Add croniter==2.0.1 to requirements.txt for cron expression parsing</constraint>
+    <constraint type="trigger-types">Valid types: cron, interval, once, price, silence, event, calendar, news</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>IntentValidationService.validate</name>
+      <kind>service method</kind>
+      <signature>def validate(self, intent: ScheduledIntentCreate, user_id: str) -> ValidationResult</signature>
+      <path>src/services/intent_validation.py (NEW)</path>
+    </interface>
+    <interface>
+      <name>ValidationResult</name>
+      <kind>dataclass</kind>
+      <signature>@dataclass class ValidationResult: is_valid: bool; errors: List[str]</signature>
+      <path>src/services/intent_validation.py (NEW)</path>
+    </interface>
+    <interface>
+      <name>get_timescale_conn</name>
+      <kind>function</kind>
+      <signature>def get_timescale_conn() -> psycopg.Connection</signature>
+      <path>src/dependencies/timescale.py</path>
+    </interface>
+    <interface>
+      <name>ScheduledIntentCreate</name>
+      <kind>Pydantic model</kind>
+      <signature>class ScheduledIntentCreate(BaseModel): user_id, intent_name, trigger_type, trigger_schedule, trigger_condition, action_context, ...</signature>
+      <path>src/schemas.py:267-284</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with unittest.mock for database mocking. Tests in tests/unit/ directory.
+      Follow existing test patterns from test_intents_schemas.py and test_profile_api.py.
+      Use pytest.raises for ValidationError testing. Test both valid and invalid cases.
+      Name tests: test_{validation_rule}_{valid|invalid}_{case}.
+    </standards>
+    <locations>
+      <location>tests/unit/test_intent_validation.py (NEW)</location>
+      <location>tests/unit/test_intents_schemas.py (existing Pydantic tests)</location>
+    </locations>
+    <ideas>
+      <idea acId="1">test_trigger_count_24_ok - 24 triggers allows creation</idea>
+      <idea acId="1">test_trigger_count_25_fails - 25 triggers rejects with "Limit reached" error</idea>
+      <idea acId="2">test_cron_every_minute_fails - "* * * * *" rejects with 60s minimum error</idea>
+      <idea acId="2">test_cron_every_2_minutes_ok - "*/2 * * * *" passes frequency check</idea>
+      <idea acId="3">test_cron_1440_fires_per_day_fails - every minute = 1440/day exceeds 96 limit</idea>
+      <idea acId="3">test_cron_96_fires_per_day_ok - every 15 min = 96/day at limit</idea>
+      <idea acId="4">test_interval_4_minutes_fails - interval_minutes=4 rejects</idea>
+      <idea acId="4">test_interval_5_minutes_ok - interval_minutes=5 passes</idea>
+      <idea acId="5">test_once_past_fails - trigger_at in past rejects</idea>
+      <idea acId="5">test_once_future_ok - trigger_at in future passes</idea>
+      <idea acId="6">test_cron_missing_schedule_fails - cron type without cron field rejects</idea>
+      <idea acId="6">test_price_missing_ticker_fails - price type without ticker rejects</idea>
+      <idea acId="6">test_all_trigger_types_required_fields - parameterized test for all 8 types</idea>
+      <idea acId="7">test_multiple_errors_returned - intent with 3 violations returns 3 errors</idea>
+      <idea acId="7">test_no_short_circuit - all validations run even if first fails</idea>
+    </ideas>
+  </tests>
+</story-context>

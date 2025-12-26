@@ -1,0 +1,135 @@
+<story-context id="bmm/story-context" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>5</storyId>
+    <title>Pending Endpoint</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-5-pending-endpoint.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Annie Proactive AI Worker</asA>
+    <iWant>a `/pending` endpoint that returns due triggers</iWant>
+    <soThat>I can poll for intents that need to be evaluated and potentially fired</soThat>
+    <tasks>
+      <task id="1" ac="1,2,3,4">Add `get_pending_intents()` to IntentService
+        <subtask id="1.1">Add method signature with optional `user_id` parameter</subtask>
+        <subtask id="1.2">Build query with `WHERE enabled = true AND next_check &lt;= NOW()`</subtask>
+        <subtask id="1.3">Add optional user_id filter condition</subtask>
+        <subtask id="1.4">Add `ORDER BY next_check ASC`</subtask>
+        <subtask id="1.5">Reuse `_row_to_response()` for result mapping</subtask>
+        <subtask id="1.6">Return `IntentServiceResult` with `intents` list</subtask>
+      </task>
+      <task id="2" ac="1,2,5">Add pending endpoint to router
+        <subtask id="2.1">Add `GET /pending` endpoint to `src/routers/intents.py`</subtask>
+        <subtask id="2.2">Add optional `user_id` query parameter</subtask>
+        <subtask id="2.3">Add `@observe(name="intents.pending")` decorator</subtask>
+        <subtask id="2.4">Call `IntentService.get_pending_intents()`</subtask>
+        <subtask id="2.5">Return list of intents with 200 status</subtask>
+      </task>
+      <task id="3" ac="4">Verify index usage
+        <subtask id="3.1">Run EXPLAIN ANALYZE on pending query</subtask>
+        <subtask id="3.2">Confirm `idx_intents_pending` is used</subtask>
+        <subtask id="3.3">Document query plan in Dev Notes</subtask>
+      </task>
+      <task id="4" ac="1-5">Write integration tests
+        <subtask id="4.1">Add tests to `tests/integration/test_intents_api.py`</subtask>
+        <subtask id="4.2">Test pending returns due intents only</subtask>
+        <subtask id="4.3">Test pending with user_id filter</subtask>
+        <subtask id="4.4">Test pending returns empty array when none due</subtask>
+        <subtask id="4.5">Test ordering is by next_check ASC</subtask>
+        <subtask id="4.6">Test Langfuse trace is created</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="GET /v1/intents/pending returns due triggers">
+      <description>Query: WHERE enabled = true AND next_check &lt;= NOW(). Returns array of ScheduledIntentResponse objects. Empty array if no pending intents.</description>
+    </criterion>
+    <criterion id="AC2" title="Optional user_id filter">
+      <description>If user_id query param provided, filter by user. If not provided, return all users' pending intents.</description>
+    </criterion>
+    <criterion id="AC3" title="Ordered by next_check ASC">
+      <description>Oldest due triggers first (most overdue). Ensures consistent processing order.</description>
+    </criterion>
+    <criterion id="AC4" title="Uses idx_intents_pending index">
+      <description>Query should use the partial index for efficient lookup. Verify with EXPLAIN ANALYZE.</description>
+    </criterion>
+    <criterion id="AC5" title="Langfuse tracing">
+      <description>Wrap endpoint with @observe decorator. Log user_id filter and result count.</description>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5: Scheduled Intents API" section="Story 5.5">
+        <snippet>Implement `/pending` for Annie's worker. GET /v1/intents/pending returns due triggers with query WHERE enabled = true AND next_check &lt;= NOW().</snippet>
+      </doc>
+      <doc path="docs/sprint-artifacts/5-4-crud-endpoints.md" title="Story 5.4: CRUD Endpoints" section="Dev Agent Record">
+        <snippet>IntentService with _row_to_response() method available. IntentServiceResult pattern for list queries. Router pattern with @observe decorator.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/services/intent_service.py" kind="service" symbol="IntentService" lines="42-519" reason="Service class to extend with get_pending_intents() method. Reuse _row_to_response() and IntentServiceResult pattern."/>
+      <artifact path="src/services/intent_service.py" kind="dataclass" symbol="IntentServiceResult" lines="27-39" reason="Return type for service methods. Has intents field for list queries."/>
+      <artifact path="src/services/intent_service.py" kind="method" symbol="list_intents" lines="158-212" reason="Pattern to follow for get_pending_intents() - query building, filtering, _row_to_response() usage."/>
+      <artifact path="src/services/intent_service.py" kind="method" symbol="_row_to_response" lines="448-518" reason="Reuse for converting DB rows to ScheduledIntentResponse."/>
+      <artifact path="src/routers/intents.py" kind="router" symbol="router" lines="25" reason="Router to extend with /pending endpoint. Prefix is /v1/intents."/>
+      <artifact path="src/routers/intents.py" kind="endpoint" symbol="list_intents" lines="101-150" reason="Pattern to follow for pending endpoint - connection management, error handling, response format."/>
+      <artifact path="tests/integration/test_intents_api.py" kind="test" symbol="TestListIntents" lines="177-246" reason="Test pattern to follow - fixtures, mocking, assertions."/>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0"/>
+        <package name="langfuse" version="2.36.0"/>
+        <package name="psycopg" version="binary"/>
+        <package name="pytest" version="8.3.2"/>
+        <package name="pydantic" version="2.8.2"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing IntentService method pattern from list_intents()</constraint>
+    <constraint type="pattern">Use get_timescale_conn()/release_timescale_conn() for connection management</constraint>
+    <constraint type="pattern">Add @observe decorator for Langfuse tracing on all endpoints</constraint>
+    <constraint type="database">Query must use idx_intents_pending partial index for performance</constraint>
+    <constraint type="testing">Follow existing test patterns with mocked DB connections</constraint>
+    <constraint type="response">Return List[ScheduledIntentResponse] with 200 status</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="IntentService.get_pending_intents" kind="method">
+      <signature>def get_pending_intents(self, user_id: Optional[str] = None) -> IntentServiceResult</signature>
+      <path>src/services/intent_service.py</path>
+    </interface>
+    <interface name="GET /v1/intents/pending" kind="REST endpoint">
+      <signature>GET /v1/intents/pending?user_id=X -> List[ScheduledIntentResponse]</signature>
+      <path>src/routers/intents.py</path>
+    </interface>
+    <interface name="IntentServiceResult" kind="dataclass">
+      <signature>@dataclass IntentServiceResult(success: bool, intent: Optional, intents: Optional[List], errors: Optional[List[str]])</signature>
+      <path>src/services/intent_service.py:27-39</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest with FastAPI TestClient. Mock database connections with MagicMock. Follow existing test class structure (TestListIntents pattern). Verify Langfuse decorator presence.</standards>
+    <locations>
+      <location>tests/integration/test_intents_api.py</location>
+      <location>tests/unit/test_intent_validation.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test pending returns only intents with next_check &lt;= NOW()</idea>
+      <idea ac="1">Test pending returns empty array when no due intents</idea>
+      <idea ac="2">Test pending with user_id filter reduces results to that user only</idea>
+      <idea ac="2">Test pending without user_id returns all users' due intents</idea>
+      <idea ac="3">Test ordering is by next_check ASC (oldest first)</idea>
+      <idea ac="4">Verify query uses idx_intents_pending index via EXPLAIN ANALYZE</idea>
+      <idea ac="5">Test @observe decorator is present on endpoint</idea>
+    </ideas>
+  </tests>
+</story-context>

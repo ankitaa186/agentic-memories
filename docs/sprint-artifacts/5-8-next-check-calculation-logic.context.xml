@@ -1,0 +1,136 @@
+<story-context id="5-8-next-check-calculation-logic" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>8</storyId>
+    <title>Next Check Calculation Logic</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/5-8-next-check-calculation-logic.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Agentic Memories API</asA>
+    <iWant>accurate and well-tested next_check calculation logic for all trigger types</iWant>
+    <soThat>scheduled intents fire at the correct times and Annie's proactive worker can reliably poll pending triggers</soThat>
+    <tasks>
+      <task id="1" ac="3,5">Create unit test file for next_check calculations
+        <subtask>1.1 Create tests/unit/test_next_check_calculation.py</subtask>
+        <subtask>1.2 Set up pytest fixtures with mock datetime</subtask>
+        <subtask>1.3 Import IntentService for isolated testing</subtask>
+      </task>
+      <task id="2" ac="1,3">Test _calculate_initial_next_check() for each trigger type
+        <subtask>2.1 Test cron type with valid expression</subtask>
+        <subtask>2.2 Test cron type with invalid expression</subtask>
+        <subtask>2.3 Test interval type with various intervals</subtask>
+        <subtask>2.4 Test once type with future datetime</subtask>
+        <subtask>2.5 Test once type with past datetime (edge case)</subtask>
+        <subtask>2.6 Test price type returns immediate check</subtask>
+        <subtask>2.7 Test silence type returns immediate check</subtask>
+        <subtask>2.8 Test missing schedule returns None</subtask>
+      </task>
+      <task id="3" ac="2,3">Test _calculate_next_check_after_fire() for each status
+        <subtask>3.1 Test success + cron → croniter.get_next()</subtask>
+        <subtask>3.2 Test success + interval → NOW + interval_minutes</subtask>
+        <subtask>3.3 Test success + once → None</subtask>
+        <subtask>3.4 Test success + price → NOW + check_interval_minutes</subtask>
+        <subtask>3.5 Test condition_not_met → NOW + 5 minutes</subtask>
+        <subtask>3.6 Test gate_blocked → NOW + 5 minutes</subtask>
+        <subtask>3.7 Test failed → NOW + 15 minutes</subtask>
+      </task>
+      <task id="4" ac="4">Test croniter edge cases
+        <subtask>4.1 Test end-of-month cron expressions</subtask>
+        <subtask>4.2 Test leap year handling</subtask>
+        <subtask>4.3 Test timezone edge cases</subtask>
+        <subtask>4.4 Verify UTC consistency</subtask>
+      </task>
+      <task id="5" ac="1,2">Verify existing integration tests cover calculations
+        <subtask>5.1 Review test_intents_api.py for calculation coverage</subtask>
+        <subtask>5.2 Add any missing integration test cases</subtask>
+        <subtask>5.3 Document test coverage summary</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">_calculate_initial_next_check() works for all trigger types: cron (croniter), interval (NOW + minutes), once (trigger_at), price/silence/event (NOW), invalid/missing (None)</ac>
+    <ac id="2">_calculate_next_check_after_fire() handles all status outcomes: success variants by trigger type, condition_not_met (+5min), gate_blocked (+5min), failed (+15min)</ac>
+    <ac id="3">Unit tests cover all trigger types and status combinations: minimum 15 test cases, edge cases, mocked time for determinism</ac>
+    <ac id="4">Croniter edge cases handled gracefully: invalid expressions return default, end-of-month correct, UTC consistent</ac>
+    <ac id="5">Methods are exposed for testing: can be tested in isolation without database, clear input/output contracts</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-5-scheduled-intents.md" title="Epic 5: Scheduled Intents API" section="Story 5.8">
+        Defines next_check calculation requirements: calculate_next_check() for creation, calculate_next_check_after_fire() for post-execution, handles all trigger types, uses croniter, unit tests required.
+      </doc>
+      <doc path="docs/sprint-artifacts/5-6-fire-endpoint-with-state-management.md" title="Story 5.6" section="next_check Calculation Table">
+        Documents the expected behavior: cron→croniter.get_next(), interval→NOW+minutes, once→NULL+disabled, price/silence→check_interval, condition_not_met→+5min, gate_blocked→+5min, failed→+15min.
+      </doc>
+    </docs>
+    <code>
+      <file path="src/services/intent_service.py" kind="service" symbol="_calculate_next_check_after_fire" lines="723-772" reason="Main method for post-fire calculation - target of AC2 tests"/>
+      <file path="src/services/intent_service.py" kind="service" symbol="_calculate_initial_next_check" lines="774-809" reason="Main method for initial calculation - target of AC1 tests"/>
+      <file path="src/schemas.py" kind="model" symbol="TriggerSchedule" lines="295-305" reason="Input model for calculation methods - cron, interval_minutes, trigger_at, check_interval_minutes"/>
+      <file path="tests/unit/test_intent_validation.py" kind="test" symbol="TestIntentValidation" reason="Existing unit test patterns for intent-related testing"/>
+      <file path="tests/unit/test_intents_schemas.py" kind="test" symbol="TestScheduledIntentSchemas" reason="Existing unit test patterns for intent schemas"/>
+      <file path="tests/integration/test_intents_api.py" kind="test" symbol="TestFireIntent" lines="579-886" reason="Integration tests that exercise fire calculations - review for coverage gaps"/>
+    </code>
+    <dependencies>
+      <python>
+        <package name="croniter" version="2.0.1" reason="Core dependency for cron expression parsing"/>
+        <package name="pytest" version="8.3.2" reason="Test framework"/>
+        <package name="pydantic" version="2.8.2" reason="TriggerSchedule model"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="testing">Use unittest.mock.patch or freezegun for deterministic time mocking</constraint>
+    <constraint type="testing">Minimum 15 test cases required per AC3</constraint>
+    <constraint type="pattern">Methods are private (_prefix) but can be tested via IntentService instance</constraint>
+    <constraint type="pattern">All datetime operations use UTC (timezone.utc)</constraint>
+    <constraint type="architecture">Methods should not require database connection for testing</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="_calculate_initial_next_check" kind="method">
+      <signature>def _calculate_initial_next_check(self, trigger_type: str, trigger_schedule: Optional[TriggerSchedule]) -> Optional[datetime]</signature>
+      <path>src/services/intent_service.py:774</path>
+    </interface>
+    <interface name="_calculate_next_check_after_fire" kind="method">
+      <signature>def _calculate_next_check_after_fire(self, trigger_type: str, trigger_schedule: Optional[TriggerSchedule], status: str, now: datetime) -> Optional[datetime]</signature>
+      <path>src/services/intent_service.py:723</path>
+    </interface>
+    <interface name="TriggerSchedule" kind="model">
+      <signature>class TriggerSchedule(BaseModel): cron, interval_minutes, trigger_at, check_interval_minutes</signature>
+      <path>src/schemas.py:295</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest with fixtures. Mock datetime.now() for deterministic tests. Follow existing patterns in tests/unit/test_intent_validation.py. Each test should be independent and test one scenario. Use parameterized tests (@pytest.mark.parametrize) for trigger type variations.</standards>
+    <locations>
+      <location>tests/unit/test_next_check_calculation.py (new file)</location>
+      <location>tests/integration/test_intents_api.py (review for gaps)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">test_initial_cron_valid_expression - verify croniter returns next occurrence</idea>
+      <idea ac="1">test_initial_cron_invalid_expression - verify fallback to NOW</idea>
+      <idea ac="1">test_initial_interval_30_minutes - verify NOW + 30 min</idea>
+      <idea ac="1">test_initial_once_future - verify returns trigger_at</idea>
+      <idea ac="1">test_initial_price_immediate - verify returns NOW</idea>
+      <idea ac="1">test_initial_missing_schedule - verify returns None</idea>
+      <idea ac="2">test_after_fire_success_cron - verify croniter.get_next()</idea>
+      <idea ac="2">test_after_fire_success_interval - verify NOW + interval_minutes</idea>
+      <idea ac="2">test_after_fire_success_once - verify returns None</idea>
+      <idea ac="2">test_after_fire_condition_not_met - verify NOW + 5 min</idea>
+      <idea ac="2">test_after_fire_gate_blocked - verify NOW + 5 min</idea>
+      <idea ac="2">test_after_fire_failed - verify NOW + 15 min</idea>
+      <idea ac="4">test_cron_end_of_month - verify last day handling</idea>
+      <idea ac="4">test_cron_utc_consistency - verify all times are UTC</idea>
+      <idea ac="3">test coverage summary document</idea>
+    </ideas>
+  </tests>
+</story-context>

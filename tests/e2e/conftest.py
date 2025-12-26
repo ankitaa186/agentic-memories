@@ -6,6 +6,7 @@ import requests
 import pytest
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from uuid import uuid4
 
 
 @dataclass
@@ -110,3 +111,15 @@ def wait_for_service(url: str, timeout: int = 30) -> bool:
             pass
         time.sleep(1)
     return False
+
+
+@pytest.fixture
+def real_api_client(app_ready):
+    """Real API client for E2E testing (alias for api_client)."""
+    return requests.Session()
+
+
+@pytest.fixture
+def unique_user_id():
+    """Generate a unique user ID for test isolation."""
+    return f"e2e_test_{uuid4().hex[:8]}"

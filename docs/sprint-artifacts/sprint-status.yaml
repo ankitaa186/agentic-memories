@@ -1,4 +1,4 @@
-# generated: 2025-12-21
+# generated: 2025-12-25
 # project: agentic-memories
 # project_key: agentic-memories
 # tracking_system: file-system
@@ -33,8 +33,15 @@
 # 2025-11-16: Stories 1.3 and 1.4 moved to future enhancements (direct-write model)
 # 2025-12-20: Added Epic 4 (Memory Extraction Quality) with 5 stories
 # 2025-12-21: Added Epic 9 (Neo4j Removal) with 5 stories - architecture simplification
+# 2025-12-22: Added Epic 5 (Scheduled Intents API) with 8 stories - enables Annie proactive AI
+# 2025-12-22: Epic 2 (Companion Integration) deprecated - removed from active backlog
+# 2025-12-22: Backlog cleanup - removed all backlog items to keep status file focused on active/completed work
+#             Removed: Stories 1-7, 1-8 (Epic 1), Epic 5 (Scheduled Intents) with 8 stories
+#             These remain defined in epic files and can be re-added when ready to work
+# 2025-12-22: Re-added Epic 5 (Scheduled Intents API) to backlog
+# 2025-12-24: Added Epic 6 (Intents API Alignment) with 6 stories - extends Epic 5 for Annie integration
 
-generated: 2025-12-21
+generated: 2025-12-25
 project: agentic-memories
 project_key: agentic-memories
 tracking_system: file-system
@@ -43,6 +50,7 @@ story_location: docs/sprint-artifacts
 development_status:
   # ============================================================
   # EPIC 1: Profile Foundation
+  # Source: docs/epics.md
   # ============================================================
   epic-1: contexted
   1-1-user-profiles-database-schema-migration: done
@@ -51,19 +59,22 @@ development_status:
   # 1-4-profile-update-proposal-approval-api: DEFERRED (direct-write model)
   1-5-profile-crud-api-endpoints: done
   1-6-profile-completeness-tracking: done
-  1-7-profile-data-import-export: backlog
-  1-8-profile-admin-analytics-apis: backlog
+  # 1-7-profile-data-import-export: removed (backlog cleanup)
+  # 1-8-profile-admin-analytics-apis: removed (backlog cleanup)
   epic-1-retrospective: optional
 
   # ============================================================
-  # EPIC 2: Companion Integration
+  # EPIC 2: Companion Integration [DEPRECATED]
+  # Source: docs/epics.md
+  # Status: Deprecated 2025-12-22 - removed from active development
   # ============================================================
-  epic-2: backlog
-  2-1-profile-aware-orchestrator-integration: backlog
-  epic-2-retrospective: optional
+  # epic-2: deprecated
+  # 2-1-profile-aware-orchestrator-integration: deprecated
+  # epic-2-retrospective: n/a
 
   # ============================================================
   # EPIC 3: Portfolio Direct CRUD API
+  # Source: docs/epic-portfolio-crud-api.md
   # ============================================================
   epic-3: contexted
   3-1-portfolio-get-endpoint: done
@@ -79,13 +90,30 @@ development_status:
   # Source: docs/epic-extraction-quality.md
   # Priority: P0 (Quality & Cost Reduction)
   # ============================================================
-  epic-4: backlog
+  epic-4: contexted
   4-1-add-negative-examples-to-extraction-prompt: done
   4-2-improve-worthiness-prompt-with-negative-cases: done
   4-3-add-semantic-entailment-check-before-storage: done
   4-4-separate-state-from-insight-in-extraction: done
   4-5-add-golden-record-consolidation-to-compaction: done
   epic-4-retrospective: optional
+
+  # ============================================================
+  # EPIC 5: Scheduled Intents API
+  # Source: docs/epic-5-scheduled-intents.md
+  # Priority: P1 (Enables Annie Proactive AI)
+  # Downstream Dependents: Annie Epic 13 (Proactive AI Worker)
+  # ============================================================
+  epic-5: contexted
+  5-1-database-schema-migration: done
+  5-2-pydantic-models: done
+  5-3-input-validation: done
+  5-4-crud-endpoints: done
+  5-5-pending-endpoint: done
+  5-6-fire-endpoint-with-state-management: done
+  5-7-execution-history-endpoint: done
+  5-8-next-check-calculation-logic: done
+  epic-5-retrospective: optional
 
   # ============================================================
   # EPIC 9: Neo4j Removal - Architecture Simplification
@@ -99,6 +127,21 @@ development_status:
   9-4-remove-neo4j-infrastructure-configuration: done
   9-5-update-tests-and-documentation: done
   epic-9-retrospective: optional
+
+  # ============================================================
+  # EPIC 6: Intents API Alignment for Annie Proactive AI
+  # Source: docs/epic-6-intents-api-alignment.md
+  # Priority: P1 (Blocks Annie Epic 13)
+  # Dependencies: Epic 5 (Scheduled Intents API) - Must be complete
+  # ============================================================
+  epic-6: contexted
+  6-1-timezone-support: done
+  6-2-condition-expression-support: done
+  6-3-cooldown-logic: done
+  6-4-fire-mode-support: done
+  6-5-portfolio-condition-type: done
+  6-6-api-documentation-update: done
+  epic-6-retrospective: optional
 
   # ============================================================
   # EPIC (TBD): Ingestion Graph Optimization
