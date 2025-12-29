@@ -507,3 +507,208 @@ class IntentExecutionResponse(BaseModel):
     delivery_ms: Optional[int] = None
     error_message: Optional[str] = None
 
+
+# =============================================================================
+# Direct Memory API Models (Epic 10)
+# =============================================================================
+#
+# These schemas support direct memory storage operations, bypassing the normal
+# LLM extraction pipeline. Used by Annie for explicit memory management.
+#
+
+
+class DirectMemoryRequest(BaseModel):
+    """Request body for direct memory storage.
+
+    Allows clients to store memories directly without LLM extraction.
+    Supports general memory fields plus optional typed fields (episodic,
+    emotional, procedural) that trigger routing to specialized storage tables.
+    """
+
+    # Required fields
+    user_id: str = Field(
+        ...,
+        description="User identifier for memory ownership",
+        example="user_12345",
+    )
+    content: str = Field(
+        ...,
+        max_length=5000,
+        description="Memory content text (max 5000 characters)",
+        example="User mentioned they prefer morning meetings and work best between 9am-12pm.",
+    )
+
+    # General memory fields
+    layer: Literal["short-term", "semantic", "long-term"] = Field(
+        default="semantic",
+        description="Memory layer: 'short-term' (ephemeral), 'semantic' (facts), 'long-term' (persistent)",
+        example="semantic",
+    )
+    type: Literal["explicit", "implicit"] = Field(
+        default="explicit",
+        description="Memory type: 'explicit' (stated directly) or 'implicit' (inferred)",
+        example="explicit",
+    )
+    importance: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Importance score from 0.0 (trivial) to 1.0 (critical)",
+        example=0.8,
+    )
+    confidence: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score from 0.0 (uncertain) to 1.0 (certain)",
+        example=0.9,
+    )
+    persona_tags: List[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Persona tags for memory (max 10 tags)",
+        example=["work", "preferences"],
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Additional metadata key-value pairs",
+        example={"source": "chat", "session_id": "abc123"},
+    )
+
+    # Optional episodic fields (triggers episodic_memories table storage)
+    event_timestamp: Optional[datetime] = Field(
+        default=None,
+        description="When the event occurred (ISO8601 format). Setting this triggers storage to episodic_memories table.",
+        example="2025-01-15T10:30:00Z",
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Where the event occurred",
+        example="Office conference room",
+    )
+    participants: Optional[List[str]] = Field(
+        default=None,
+        description="People involved in the event",
+        example=["Alice", "Bob"],
+    )
+    event_type: Optional[str] = Field(
+        default=None,
+        description="Type of event (e.g., 'meeting', 'conversation', 'milestone')",
+        example="meeting",
+    )
+
+    # Optional emotional fields (triggers emotional_memories table storage)
+    emotional_state: Optional[str] = Field(
+        default=None,
+        description="Primary emotional state (e.g., 'happy', 'anxious', 'excited'). Setting this triggers storage to emotional_memories table.",
+        example="excited",
+    )
+    valence: Optional[float] = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+        description="Emotional valence from -1.0 (negative) to 1.0 (positive)",
+        example=0.7,
+    )
+    arousal: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Emotional arousal from 0.0 (calm) to 1.0 (intense)",
+        example=0.6,
+    )
+    trigger_event: Optional[str] = Field(
+        default=None,
+        description="Event that triggered the emotional state",
+        example="Received promotion at work",
+    )
+
+    # Optional procedural fields (triggers procedural_memories table storage)
+    skill_name: Optional[str] = Field(
+        default=None,
+        description="Name of the skill or procedure. Setting this triggers storage to procedural_memories table.",
+        example="Python programming",
+    )
+    proficiency_level: Optional[str] = Field(
+        default=None,
+        description="Proficiency level (e.g., 'beginner', 'intermediate', 'expert')",
+        example="intermediate",
+    )
+
+
+class DirectMemoryResponse(BaseModel):
+    """Response body for direct memory storage operations.
+
+    Returns the status of the storage operation, the assigned memory ID,
+    and per-backend storage results.
+
+    Error Codes:
+    - VALIDATION_ERROR: Request validation failed (invalid fields, missing required data)
+    - EMBEDDING_ERROR: Failed to generate embedding vector for the content
+    - STORAGE_ERROR: Database storage operation failed (ChromaDB or TimescaleDB)
+    - INTERNAL_ERROR: Unexpected server error during processing
+    """
+
+    status: Literal["success", "error"] = Field(
+        ...,
+        description="Operation status: 'success' or 'error'",
+        example="success",
+    )
+    memory_id: Optional[str] = Field(
+        default=None,
+        description="UUID of the stored memory (present on success)",
+        example="mem_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable status message",
+        example="Memory stored successfully",
+    )
+    storage: Optional[Dict[str, bool]] = Field(
+        default=None,
+        description="Storage status per backend. Keys: 'chromadb' (always), 'stored_in_episodic', 'stored_in_emotional', 'stored_in_procedural' (conditional based on request fields)",
+        example={"chromadb": True, "stored_in_episodic": True},
+    )
+    error_code: Optional[
+        Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]
+    ] = Field(
+        default=None,
+        description="Error code when status is 'error'. Values: VALIDATION_ERROR (invalid input), EMBEDDING_ERROR (vector generation failed), STORAGE_ERROR (database write failed), INTERNAL_ERROR (unexpected failure)",
+        example=None,
+    )
+
+
+class DeleteMemoryResponse(BaseModel):
+    """Response body for memory deletion operations.
+
+    Returns the status of the deletion operation and per-backend results.
+    Deletes from all storage backends where the memory exists: ChromaDB (always),
+    and optionally episodic_memories, emotional_memories, procedural_memories tables.
+    """
+
+    status: Literal["success", "error"] = Field(
+        ...,
+        description="Operation status: 'success' or 'error'",
+        example="success",
+    )
+    deleted: bool = Field(
+        ...,
+        description="True if memory was successfully deleted from at least one backend",
+        example=True,
+    )
+    memory_id: str = Field(
+        ...,
+        description="The requested memory ID",
+        example="mem_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    )
+    storage: Optional[Dict[str, bool]] = Field(
+        default=None,
+        description="Deletion status per backend. Keys: 'chromadb', 'episodic_memories', 'emotional_memories', 'procedural_memories'. Value is True if deleted, False if not found or failed.",
+        example={"chromadb": True, "episodic_memories": True, "emotional_memories": False, "procedural_memories": False},
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="Status or error message providing details about the deletion operation",
+        example="Memory deleted successfully from all backends",
+    )
+

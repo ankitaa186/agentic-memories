@@ -1,0 +1,244 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>3</storyId>
+    <title>Delete Memory Endpoint</title>
+    <status>Drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-3-delete-memory-endpoint.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>API consumer</asA>
+    <iWant>to delete memories from all storage backends via DELETE /v1/memories/{memory_id}</iWant>
+    <soThat>I can remove unwanted memories with proper authorization and cross-storage cleanup</soThat>
+    <tasks>
+      <task>Add delete_memory() endpoint function</task>
+      <task>Implement ChromaDB metadata retrieval</task>
+      <task>Implement authorization check (compare user_id)</task>
+      <task>Implement ChromaDB deletion</task>
+      <task>Implement _delete_from_episodic() helper</task>
+      <task>Implement _delete_from_emotional() helper</task>
+      <task>Implement _delete_from_procedural() helper</task>
+      <task>Add conditional typed table deletion based on flags</task>
+      <task>Implement response building with storage status</task>
+      <task>Add logging for observability</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Endpoint Creation">
+      <given>a client sends DELETE /v1/memories/{memory_id}?user_id={user_id}</given>
+      <when>the request is processed</when>
+      <then>
+        <item>memory_id is accepted as path parameter</item>
+        <item>user_id is required as query parameter</item>
+        <item>Returns DeleteMemoryResponse</item>
+      </then>
+    </criterion>
+    <criterion id="AC2" title="Authorization">
+      <given>a memory exists with a specific user_id in metadata</given>
+      <when>a client attempts to delete with a different user_id</when>
+      <then>
+        <item>Return HTTP 403 Forbidden</item>
+        <item>Return message "Unauthorized: memory belongs to different user"</item>
+        <item>Do NOT delete from any storage backend</item>
+      </then>
+    </criterion>
+    <criterion id="AC3" title="ChromaDB Deletion">
+      <given>a valid delete request with authorized user_id</given>
+      <when>the endpoint processes the request</when>
+      <then>
+        <item>Get memory metadata first (to find stored_in_* flags)</item>
+        <item>Delete from ChromaDB collection</item>
+        <item>Return "Memory not found" if ID doesn't exist</item>
+      </then>
+    </criterion>
+    <criterion id="AC4" title="Typed Table Deletion">
+      <given>memory has stored_in_* flags in metadata</given>
+      <when>the memory is deleted</when>
+      <then>
+        <item>If stored_in_episodic -> DELETE FROM episodic_memories</item>
+        <item>If stored_in_emotional -> DELETE FROM emotional_memories</item>
+        <item>If stored_in_procedural -> DELETE FROM procedural_memories</item>
+        <item>Typed table failures are best-effort (log, continue)</item>
+      </then>
+    </criterion>
+    <criterion id="AC5" title="Response">
+      <given>deletion completes</given>
+      <when>the response is generated</when>
+      <then>
+        <item>Return deletion status per backend in storage dict</item>
+        <item>Return deleted: true only if ChromaDB succeeded</item>
+        <item>Return appropriate error messages for failures</item>
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-10-direct-memory-api.md</path>
+        <title>Epic 10: Direct Memory API for Explicit Memory Management</title>
+        <section>DELETE /v1/memories/{memory_id}</section>
+        <snippet>Delete a specific memory by ID from all storage backends. Uses metadata flags to determine which typed tables contain the memory. Returns deletion status per backend.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-10.md</path>
+        <title>Tech Spec: Epic 10 - Direct Memory API</title>
+        <section>4.1 New Router and Deletion Architecture</section>
+        <snippet>delete_memory() DELETE endpoint for removal with _delete_from_episodic(), _delete_from_emotional(), _delete_from_procedural() helper functions. Metadata flags stored in ChromaDB for efficient delete lookup.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Agentic Memories Architecture</title>
+        <section>AD-014 Error Handling</section>
+        <snippet>Graceful degradation - return partial data if source unavailable. APIs return {data, warnings, errors} structure.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/stories/story-10-1-direct-memory-store-endpoint-chromadb.md</path>
+        <title>Story 10.1: Direct Memory Store Endpoint (ChromaDB)</title>
+        <section>Related Story - Storage Pattern</section>
+        <snippet>Dependency story that establishes the storage pattern with metadata flags (stored_in_episodic, stored_in_emotional, stored_in_procedural) used by delete endpoint.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/stories/story-10-2-typed-table-storage-episodic-emotional-procedural.md</path>
+        <title>Story 10.2: Typed Table Storage</title>
+        <section>Related Story - Typed Tables</section>
+        <snippet>Dependency story that implements typed table storage. Delete endpoint uses same tables and connection patterns.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>src/dependencies/chroma.py</path>
+        <kind>dependency</kind>
+        <symbol>V2ChromaClient, V2Collection</symbol>
+        <lines>38-219</lines>
+        <reason>ChromaDB v2 client with get(), delete() methods. V2Collection.delete(ids=[memory_id]) pattern for deletion. V2Collection.get(where, include) for metadata retrieval.</reason>
+      </file>
+      <file>
+        <path>src/dependencies/timescale.py</path>
+        <kind>dependency</kind>
+        <symbol>get_timescale_conn, release_timescale_conn</symbol>
+        <lines>42-84</lines>
+        <reason>PostgreSQL/TimescaleDB connection pool. Pattern: conn = get_timescale_conn(), try/commit/finally release_timescale_conn(conn).</reason>
+      </file>
+      <file>
+        <path>src/services/storage.py</path>
+        <kind>service</kind>
+        <symbol>upsert_memories, _build_metadata</symbol>
+        <lines>61-101</lines>
+        <reason>Reference for storage patterns and metadata structure. Shows how user_id is stored in metadata.</reason>
+      </file>
+      <file>
+        <path>src/services/retrieval.py</path>
+        <kind>service</kind>
+        <symbol>_standard_collection_name, _get_collection</symbol>
+        <lines>29-51</lines>
+        <reason>Collection naming convention (memories_{dim}) and collection retrieval pattern needed for delete operation.</reason>
+      </file>
+      <file>
+        <path>src/services/episodic_memory.py</path>
+        <kind>service</kind>
+        <symbol>EpisodicMemoryService.delete_memory</symbol>
+        <lines>362-386</lines>
+        <reason>Reference deletion pattern for episodic table: DELETE FROM episodic_memories WHERE id = %s with connection management.</reason>
+      </file>
+      <file>
+        <path>src/services/emotional_memory.py</path>
+        <kind>service</kind>
+        <symbol>EmotionalMemoryService._store_emotional_memory</symbol>
+        <lines>130-170</lines>
+        <reason>Reference pattern for emotional_memories table structure and connection handling.</reason>
+      </file>
+      <file>
+        <path>src/services/procedural_memory.py</path>
+        <kind>service</kind>
+        <symbol>ProceduralMemoryService._store_procedural_memory</symbol>
+        <lines>117-196</lines>
+        <reason>Reference pattern for procedural_memories table structure and connection handling.</reason>
+      </file>
+      <file>
+        <path>src/routers/portfolio.py</path>
+        <kind>router</kind>
+        <symbol>router, DELETE endpoint pattern</symbol>
+        <lines>entire file</lines>
+        <reason>Reference for FastAPI router patterns, Query parameters, HTTPException usage.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0">Web framework for API endpoints</package>
+        <package name="pydantic" version=">=2.9.0">Request/response validation</package>
+        <package name="psycopg" version="binary">PostgreSQL driver for typed table deletion</package>
+        <package name="psycopg-pool" version="3.2.1">Connection pooling</package>
+        <package name="chromadb" version="1.4.0">Vector database client (via V2ChromaClient wrapper)</package>
+        <package name="httpx" version="0.27.0">HTTP client for ChromaDB requests</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use existing connection patterns: get_timescale_conn() with try/commit/finally release_timescale_conn(conn)</constraint>
+    <constraint type="pattern">Use _standard_collection_name() for ChromaDB collection consistency</constraint>
+    <constraint type="pattern">Follow FastAPI router pattern from existing routers (portfolio, profile, intents)</constraint>
+    <constraint type="authorization">Verify user_id matches metadata.user_id before any deletion - return 403 if mismatch</constraint>
+    <constraint type="error-handling">ChromaDB deletion failure = request failure (deleted: false). Typed table failures = best-effort (log and continue)</constraint>
+    <constraint type="response">Use DeleteMemoryResponse schema from tech spec with status, deleted, memory_id, storage dict fields</constraint>
+    <constraint type="logging">Use logger = logging.getLogger("agentic_memories.memories") pattern</constraint>
+    <constraint type="dependency">This story depends on Story 10.1 (Direct Store ChromaDB) which establishes the metadata flag pattern</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>DELETE /v1/memories/{memory_id}</name>
+      <kind>REST endpoint</kind>
+      <signature>DELETE /v1/memories/{memory_id}?user_id={user_id} -> DeleteMemoryResponse</signature>
+      <path>src/routers/memories.py (to be created or extended)</path>
+    </interface>
+    <interface>
+      <name>DeleteMemoryResponse</name>
+      <kind>Pydantic model</kind>
+      <signature>class DeleteMemoryResponse(BaseModel): status: Literal["success", "error"], deleted: bool, memory_id: str, storage: Optional[Dict[str, bool]], message: Optional[str]</signature>
+      <path>src/schemas.py (to be added)</path>
+    </interface>
+    <interface>
+      <name>V2Collection.get</name>
+      <kind>ChromaDB method</kind>
+      <signature>get(where: Optional[Dict], limit: Optional[int], offset: Optional[int], include: Optional[list]) -> Dict with ids, documents, metadatas</signature>
+      <path>src/dependencies/chroma.py:159-170</path>
+    </interface>
+    <interface>
+      <name>V2Collection.delete</name>
+      <kind>ChromaDB method</kind>
+      <signature>delete(ids: Optional[list], where: Optional[Dict]) -> Dict</signature>
+      <path>src/dependencies/chroma.py:192-203</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Unit tests use pytest with mocks for external services (ChromaDB, TimescaleDB). Integration tests use TestClient from fastapi.testclient. Test files in tests/unit/ and tests/integration/. Follow existing patterns in tests/unit/test_portfolio_api.py and tests/unit/test_profile_api.py. Mock connections using unittest.mock.patch.
+    </standards>
+    <locations>
+      <location>tests/unit/test_memories_router.py (to be created)</location>
+      <location>tests/integration/test_direct_memory_api.py (to be created)</location>
+      <location>tests/conftest.py (shared fixtures)</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC1">test_delete_memory_endpoint_accepts_path_and_query_params - Verify memory_id path param and user_id query param are accepted</idea>
+      <idea acRef="AC1">test_delete_memory_returns_delete_memory_response - Verify response schema matches DeleteMemoryResponse</idea>
+      <idea acRef="AC2">test_delete_memory_unauthorized_returns_403 - Delete with wrong user_id returns 403</idea>
+      <idea acRef="AC2">test_delete_memory_unauthorized_no_deletion_occurs - Verify no storage backends are modified on 403</idea>
+      <idea acRef="AC3">test_delete_memory_not_found_returns_error - Non-existent memory_id returns error response</idea>
+      <idea acRef="AC3">test_delete_memory_chromadb_success - Verify ChromaDB deletion is called with correct ID</idea>
+      <idea acRef="AC4">test_delete_memory_episodic_flag_triggers_table_deletion - stored_in_episodic=true triggers episodic_memories DELETE</idea>
+      <idea acRef="AC4">test_delete_memory_emotional_flag_triggers_table_deletion - stored_in_emotional=true triggers emotional_memories DELETE</idea>
+      <idea acRef="AC4">test_delete_memory_procedural_flag_triggers_table_deletion - stored_in_procedural=true triggers procedural_memories DELETE</idea>
+      <idea acRef="AC4">test_delete_memory_typed_table_failure_continues - Typed table error logs but doesn't fail request</idea>
+      <idea acRef="AC5">test_delete_memory_response_includes_storage_status - Response contains per-backend deletion status</idea>
+      <idea acRef="AC5">test_delete_memory_deleted_true_only_if_chromadb_success - deleted=true only when ChromaDB deletion succeeds</idea>
+    </ideas>
+  </tests>
+</story-context>

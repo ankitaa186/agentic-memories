@@ -1,0 +1,102 @@
+<story-context id="story-10-6-integration-tests" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>6</storyId>
+    <title>Integration Tests</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-6-integration-tests.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Developer</asA>
+    <iWant>End-to-end testing of store/retrieve/delete lifecycle with real storage backends</iWant>
+    <soThat>The Direct Memory API endpoints work correctly in production with real ChromaDB and TimescaleDB connections</soThat>
+    <tasks>
+      <task id="1" title="Set up integration test infrastructure">
+        <subtask id="1.1">Create tests/integration/test_direct_memory_api.py</subtask>
+        <subtask id="1.2">Configure TestClient with FastAPI app</subtask>
+        <subtask id="1.3">Set up test database connections (ChromaDB, TimescaleDB)</subtask>
+        <subtask id="1.4">Create test cleanup fixtures (delete test data after tests)</subtask>
+      </task>
+      <task id="2" title="Implement lifecycle tests (AC 10.6.1)">
+        <subtask id="2.1">Write test_store_and_retrieve_lifecycle - store memory, retrieve via /v1/retrieve, verify found</subtask>
+        <subtask id="2.2">Write test_store_and_delete_lifecycle - store memory, delete, verify deleted</subtask>
+        <subtask id="2.3">Write test_full_lifecycle_store_retrieve_delete - complete cycle with verification</subtask>
+      </task>
+      <task id="3" title="Implement typed memory tests (AC 10.6.2)">
+        <subtask id="3.1">Write test_episodic_memory_in_hybrid_retrieval - store with event_timestamp, verify time-based retrieval</subtask>
+        <subtask id="3.2">Write test_emotional_memory_in_hybrid_retrieval - store with emotional_state, verify emotional retrieval</subtask>
+        <subtask id="3.3">Write test_procedural_memory_in_hybrid_retrieval - store with skill_name, verify procedural queries</subtask>
+      </task>
+      <task id="4" title="Implement performance tests (AC 10.6.3)">
+        <subtask id="4.1">Write test_direct_store_performance_under_3_seconds - verify store completes in under 3s</subtask>
+        <subtask id="4.2">Write test_delete_performance_under_1_second - verify delete completes in under 1s</subtask>
+        <subtask id="4.3">Add timing assertions with clear error messages</subtask>
+      </task>
+      <task id="5" title="Test cleanup and verification">
+        <subtask id="5.1">Ensure all test data is cleaned up after tests</subtask>
+        <subtask id="5.2">Run integration tests against local environment</subtask>
+        <subtask id="5.3">Verify all tests pass consistently</subtask>
+        <subtask id="5.4">Document any environment setup requirements</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-10.6.1" title="Lifecycle Test">
+      <given>The Direct Memory API endpoints are implemented</given>
+      <when>A memory is stored via POST /v1/memories/direct</when>
+      <then>The memory is retrievable via /v1/retrieve</then>
+      <given>A stored memory exists</given>
+      <when>The memory is deleted via DELETE /v1/memories/{memory_id}</when>
+      <then>The memory is no longer retrievable via /v1/retrieve</then>
+      <checklist>
+        <item>Store memory via direct API</item>
+        <item>Retrieve via /v1/retrieve (verify found)</item>
+        <item>Delete via delete endpoint</item>
+        <item>Retrieve again (verify not found)</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC-10.6.2" title="Typed Memory Tests">
+      <given>The Direct Memory API supports typed memory storage</given>
+      <when>An episodic memory is stored with event_timestamp</when>
+      <then>The memory appears in time-based hybrid retrieval</then>
+      <when>An emotional memory is stored with emotional_state</when>
+      <then>The memory appears in emotional retrieval</then>
+      <when>A procedural memory is stored with skill_name</when>
+      <then>The memory appears in procedural queries</then>
+      <checklist>
+        <item>Store episodic memory -> verify in time-based retrieval</item>
+        <item>Store emotional memory -> verify in emotional retrieval</item>
+        <item>Store procedural memory -> verify in procedural queries</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC-10.6.3" title="Performance Test">
+      <given>The performance requirements for Direct Memory API</given>
+      <when>A memory is stored via direct store endpoint</when>
+      <then>The operation completes in under 3 seconds</then>
+      <when>A memory is deleted via delete endpoint</when>
+      <then>The operation completes in under 1 second</then>
+      <checklist>
+        <item>Verify direct store completes in under 3s</item>
+        <item>Verify delete completes in under 1s</item>
+      </checklist>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>{{docs_artifacts}}</docs>
+    <code>{{code_artifacts}}</code>
+    <dependencies>{{dependencies_artifacts}}</dependencies>
+  </artifacts>
+
+  <constraints>{{constraints}}</constraints>
+  <interfaces>{{interfaces}}</interfaces>
+  <tests>
+    <standards>{{test_standards}}</standards>
+    <locations>{{test_locations}}</locations>
+    <ideas>{{test_ideas}}</ideas>
+  </tests>
+</story-context>

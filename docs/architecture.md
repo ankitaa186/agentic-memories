@@ -374,6 +374,178 @@ def _calculate_confidence(field_name: str, updates: List[Dict]) -> Dict[str, flo
 
 ---
 
+### Pattern 1.5: Direct Memory API Storage Routing (Epic 10)
+
+**Context:** The existing LangGraph pipeline (`unified_ingestion_graph.py`) extracts memories from conversations using LLM analysis. However, AI assistants like Annie need to store pre-formatted memories directly without LLM processing.
+
+**Challenge:** Enable direct memory storage that:
+1. Bypasses LLM extraction (already formatted by caller)
+2. Maintains consistency with existing storage backends
+3. Routes to appropriate typed tables based on memory attributes
+4. Preserves the "write everywhere" pattern for multi-backend storage
+
+**Solution:** Direct Memory API with field-based storage routing.
+
+#### Storage Routing Logic
+
+The Direct Memory API routes memories to multiple backends based on request fields:
+
+```
+DirectMemoryRequest
+       │
+       ▼
+Always → ChromaDB (via upsert_memories)
+       │ - Generates embedding via generate_embedding()
+       │ - Stores with metadata: user_id, layer, type, importance, etc.
+       │
+       ├── If event_timestamp present
+       │   └── episodic_memories table (TimescaleDB)
+       │       Fields: memory_id, user_id, event_timestamp, location, participants, event_type
+       │
+       ├── If emotional_state present
+       │   └── emotional_memories table (TimescaleDB)
+       │       Fields: memory_id, user_id, emotional_state, valence, arousal, trigger_event
+       │
+       └── If skill_name present
+           └── procedural_memories table (PostgreSQL)
+               Fields: memory_id, user_id, skill_name, proficiency_level
+```
+
+#### Implementation Details
+
+**File:** `src/routers/memories.py`
+
+**Store Endpoint:**
+```python
+@router.post("/direct", response_model=DirectMemoryResponse)
+async def store_memory_direct(request: DirectMemoryRequest):
+    """Store pre-formatted memory directly, bypassing LLM extraction."""
+    memory_id = f"mem_{uuid.uuid4()}"
+    storage_results = {"chromadb": False}
+
+    # 1. Generate embedding
+    embedding = await generate_embedding(request.content)
+
+    # 2. Store in ChromaDB (always)
+    upsert_memories(
+        user_id=request.user_id,
+        memories=[{
+            "id": memory_id,
+            "content": request.content,
+            "embedding": embedding,
+            "metadata": build_metadata(request)
+        }]
+    )
+    storage_results["chromadb"] = True
+
+    # 3. Route to typed tables based on fields
+    if request.event_timestamp:
+        store_episodic(memory_id, request)
+        storage_results["stored_in_episodic"] = True
+
+    if request.emotional_state:
+        store_emotional(memory_id, request)
+        storage_results["stored_in_emotional"] = True
+
+    if request.skill_name:
+        store_procedural(memory_id, request)
+        storage_results["stored_in_procedural"] = True
+
+    return DirectMemoryResponse(
+        status="success",
+        memory_id=memory_id,
+        message="Memory stored successfully",
+        storage=storage_results
+    )
+```
+
+**Delete Endpoint:**
+```python
+@router.delete("/{memory_id}", response_model=DeleteMemoryResponse)
+async def delete_memory(memory_id: str, user_id: str = Query(...)):
+    """Delete memory from all storage backends."""
+    storage_results = {}
+
+    # 1. Delete from ChromaDB
+    storage_results["chromadb"] = delete_from_chromadb(memory_id, user_id)
+
+    # 2. Delete from typed tables (if present)
+    storage_results["episodic_memories"] = delete_from_episodic(memory_id)
+    storage_results["emotional_memories"] = delete_from_emotional(memory_id)
+    storage_results["procedural_memories"] = delete_from_procedural(memory_id)
+
+    deleted = any(storage_results.values())
+    return DeleteMemoryResponse(
+        status="success" if deleted else "error",
+        deleted=deleted,
+        memory_id=memory_id,
+        storage=storage_results,
+        message="Memory deleted" if deleted else "Memory not found"
+    )
+```
+
+#### Metadata Flags
+
+The response includes boolean flags indicating storage locations:
+
+| Flag | Meaning |
+|------|---------|
+| `chromadb` | Always true on successful store |
+| `stored_in_episodic` | True if `event_timestamp` was provided and episodic storage succeeded |
+| `stored_in_emotional` | True if `emotional_state` was provided and emotional storage succeeded |
+| `stored_in_procedural` | True if `skill_name` was provided and procedural storage succeeded |
+
+#### Relationship to Existing LangGraph Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Memory Storage Entry Points                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  POST /v1/store                    POST /v1/memories/direct     │
+│       │                                  │                       │
+│       ▼                                  ▼                       │
+│  ┌──────────────────┐            ┌──────────────────┐           │
+│  │ LangGraph        │            │ Direct Storage   │           │
+│  │ Pipeline         │            │ (No LLM)         │           │
+│  │                  │            │                  │           │
+│  │ • Worthiness     │            │ • Embedding only │           │
+│  │ • LLM Extract    │            │ • Field-based    │           │
+│  │ • Classify       │            │   routing        │           │
+│  │ • Enrich         │            │                  │           │
+│  └────────┬─────────┘            └────────┬─────────┘           │
+│           │                               │                      │
+│           ▼                               ▼                      │
+│  ┌─────────────────────────────────────────────────────┐        │
+│  │              Shared Storage Layer                    │        │
+│  │  • ChromaDB (vectors)                                │        │
+│  │  • episodic_memories (TimescaleDB)                   │        │
+│  │  • emotional_memories (TimescaleDB)                  │        │
+│  │  • procedural_memories (PostgreSQL)                  │        │
+│  └─────────────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Differences:**
+- `POST /v1/store`: Full LangGraph pipeline with LLM extraction, classification, enrichment
+- `POST /v1/memories/direct`: Direct storage with embedding generation only, caller provides structured data
+
+**Shared Components:**
+- `upsert_memories()`: Same function used by both paths for ChromaDB storage
+- `generate_embedding()`: Same embedding generation for semantic search
+- Typed table schemas: Same tables store data from both paths
+
+#### Performance Characteristics
+
+| Operation | Target | Notes |
+|-----------|--------|-------|
+| Direct memory store | < 3s p95 | Embedding (~500ms) + ChromaDB (~200ms) + typed tables (~300ms each) |
+| Memory delete | < 1s p95 | Parallel deletion across backends |
+
+The Direct Memory API is significantly faster than the LangGraph pipeline (~3s vs ~5-10s) because it skips LLM extraction and classification.
+
+---
+
 ### Pattern 2: MCP Server Architecture
 
 **Context:** MCP (Model Context Protocol) requires server implementing stdio or SSE transport. Existing app runs on port 8080.

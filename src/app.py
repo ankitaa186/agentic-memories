@@ -61,7 +61,7 @@ except Exception:
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
 from src.services.persona_retrieval import PersonaCoPilot
-from src.routers import profile, portfolio, intents
+from src.routers import profile, portfolio, intents, memories
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -122,6 +122,7 @@ app = FastAPI(title="Agentic Memories API", version="0.1.0", lifespan=lifespan)
 app.include_router(profile.router)
 app.include_router(portfolio.router)
 app.include_router(intents.router)
+app.include_router(memories.router)
 # Scheduler: daily midnight UTC compaction trigger (conditional on recent activity)
 _scheduler: Optional[BackgroundScheduler] = None
 

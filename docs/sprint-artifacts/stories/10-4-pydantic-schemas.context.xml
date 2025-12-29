@@ -1,0 +1,192 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>4</storyId>
+    <title>Pydantic Schemas</title>
+    <status>Drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-4-pydantic-schemas.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Developer</asA>
+    <iWant>To add request/response schemas to src/schemas.py for direct memory operations</iWant>
+    <soThat>Incoming direct memory storage requests can be validated and responses structured properly</soThat>
+    <tasks>
+      <task id="1">Review existing src/schemas.py patterns</task>
+      <task id="2">Add DirectMemoryRequest with all required and optional fields</task>
+      <task id="3">Add DirectMemoryResponse with status, memory_id, storage, error_code</task>
+      <task id="4">Add DeleteMemoryResponse with status, deleted, memory_id, storage, message</task>
+      <task id="5">Add comprehensive Field() descriptions for OpenAPI</task>
+      <task id="6">Verify no linting errors with ruff check src/schemas.py</task>
+      <task id="7">Verify OpenAPI generation at /docs</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" name="DirectMemoryRequest Schema">
+      <description>Schema for direct memory storage requests with required and optional fields</description>
+      <requirements>
+        <requirement>Required fields: user_id (str), content (str, max_length=5000)</requirement>
+        <requirement>General fields: layer, type, importance (0.0-1.0), confidence (0.0-1.0), persona_tags (max 10), metadata</requirement>
+        <requirement>Optional episodic fields: event_timestamp, location, participants, event_type</requirement>
+        <requirement>Optional emotional fields: emotional_state, valence (-1.0 to 1.0), arousal (0.0 to 1.0), trigger_event</requirement>
+        <requirement>Optional procedural fields: skill_name, proficiency_level</requirement>
+        <requirement>All fields have clear Field(description=...) for OpenAPI generation</requirement>
+      </requirements>
+    </criterion>
+    <criterion id="AC2" name="DirectMemoryResponse Schema">
+      <description>Response schema for direct memory storage operations</description>
+      <requirements>
+        <requirement>status: Literal["success", "error"]</requirement>
+        <requirement>memory_id: Optional[str] - UUID of stored memory</requirement>
+        <requirement>message: str - Status message</requirement>
+        <requirement>storage: Optional[Dict[str, bool]] - Status per backend</requirement>
+        <requirement>error_code: Optional[Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]]</requirement>
+      </requirements>
+    </criterion>
+    <criterion id="AC3" name="DeleteMemoryResponse Schema">
+      <description>Response schema for memory deletion operations</description>
+      <requirements>
+        <requirement>status: Literal["success", "error"]</requirement>
+        <requirement>deleted: bool - True if memory was deleted</requirement>
+        <requirement>memory_id: str - Requested memory ID</requirement>
+        <requirement>storage: Optional[Dict[str, bool]] - Deletion status per backend</requirement>
+        <requirement>message: Optional[str] - Status or error message</requirement>
+      </requirements>
+    </criterion>
+    <criterion id="AC4" name="Documentation">
+      <description>OpenAPI documentation visibility</description>
+      <requirements>
+        <requirement>All schemas appear in /docs endpoint</requirement>
+        <requirement>Field descriptions are visible</requirement>
+        <requirement>Validators (ge, le, max_length) are reflected</requirement>
+      </requirements>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-10-direct-memory-api.md</path>
+        <title>Epic 10: Direct Memory API</title>
+        <section>API Specifications - Request/Response Schemas</section>
+        <snippet>Defines DirectMemoryRequest with required fields (user_id, content) and optional typed fields (episodic, emotional, procedural) that trigger routing to specialized tables. Response schemas include status, memory_id, storage results per backend.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-10.md</path>
+        <title>Tech Spec: Epic 10 - Direct Memory API</title>
+        <section>4.2 Pydantic Schemas</section>
+        <snippet>Complete Pydantic schema definitions for DirectMemoryRequest, DirectMemoryResponse, and DeleteMemoryResponse with all Field() validators, Literal types, and description strings for OpenAPI generation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/design-direct-memory-api.md</path>
+        <title>Direct Memory Storage API Design</title>
+        <section>2.1 Request Schema, 2.2 Response Schema</section>
+        <snippet>Detailed schema specifications with examples showing minimal, episodic, emotional, and procedural memory request variants. Includes error codes and storage routing logic.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Agentic Memories v3.0</title>
+        <section>Technology Stack and Versions</section>
+        <snippet>Project uses FastAPI 0.111.0, Pydantic 2.8.2+, Python 3.13. Existing patterns include Field() validators, Literal types, and ConfigDict for ORM mode. Router structure uses src/routers/ directory.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/schemas.py</path>
+        <kind>schema_definitions</kind>
+        <symbol>BaseModel classes</symbol>
+        <lines>1-510</lines>
+        <reason>Target file for new schemas. Contains existing patterns: Field() with defaults, ge/le validators, Literal types, Optional fields, List/Dict types. Follow pattern of ScheduledIntentCreate, StoreMemoryItem for field definitions.</reason>
+      </artifact>
+      <artifact>
+        <path>src/models.py</path>
+        <kind>data_model</kind>
+        <symbol>Memory</symbol>
+        <lines>9-25</lines>
+        <reason>Memory dataclass showing field patterns for layer, type, confidence, importance, persona_tags, metadata. DirectMemoryRequest should align with this model structure.</reason>
+      </artifact>
+      <artifact>
+        <path>src/routers/intents.py</path>
+        <kind>router</kind>
+        <symbol>ScheduledIntentCreate usage</symbol>
+        <lines>N/A</lines>
+        <reason>Reference for how existing schemas are imported and used in routers. Shows pattern for request/response model usage.</reason>
+      </artifact>
+      <artifact>
+        <path>src/routers/profile.py</path>
+        <kind>router</kind>
+        <symbol>ProfileResponse, ProfileUpdateRequest</symbol>
+        <lines>N/A</lines>
+        <reason>Reference for router patterns with Pydantic response models and Query parameters.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0">Web framework with automatic OpenAPI generation</package>
+        <package name="pydantic" version=">=2.9.0">Data validation with Field(), BaseModel, Literal, Optional</package>
+        <package name="uvicorn" version="0.30.1">ASGI server</package>
+      </python>
+      <notes>No new dependencies required - all types used (datetime, Literal, Optional, List, Dict, Any) are available in existing imports.</notes>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing Field() pattern with description parameter for OpenAPI docs</constraint>
+    <constraint type="pattern">Use Literal types for enumerated values (layer, type, status, error_code)</constraint>
+    <constraint type="pattern">Use Optional[] for fields that may be None</constraint>
+    <constraint type="pattern">Use Field(default=..., ge=..., le=...) for numeric range validation</constraint>
+    <constraint type="pattern">Use max_length in Field() for string length validation</constraint>
+    <constraint type="pattern">Add schemas after existing IntentExecutionResponse class in schemas.py</constraint>
+    <constraint type="testing">Verify with ruff check src/schemas.py - no linting errors</constraint>
+    <constraint type="documentation">All schemas must appear in FastAPI /docs endpoint with descriptions</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>DirectMemoryRequest</name>
+      <kind>Pydantic BaseModel</kind>
+      <signature>class DirectMemoryRequest(BaseModel): user_id: str, content: str = Field(..., max_length=5000), layer: Literal["short-term", "semantic", "long-term"] = "semantic", type: Literal["explicit", "implicit"] = "explicit", importance: float = Field(default=0.8, ge=0.0, le=1.0), confidence: float = Field(default=0.9, ge=0.0, le=1.0), persona_tags: List[str] = Field(default_factory=list), metadata: Optional[Dict[str, Any]] = None, event_timestamp: Optional[datetime] = None, location: Optional[str] = None, participants: Optional[List[str]] = None, event_type: Optional[str] = None, emotional_state: Optional[str] = None, valence: Optional[float] = Field(default=None, ge=-1.0, le=1.0), arousal: Optional[float] = Field(default=None, ge=0.0, le=1.0), trigger_event: Optional[str] = None, skill_name: Optional[str] = None, proficiency_level: Optional[str] = None</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryResponse</name>
+      <kind>Pydantic BaseModel</kind>
+      <signature>class DirectMemoryResponse(BaseModel): status: Literal["success", "error"], memory_id: Optional[str] = None, message: str, storage: Optional[Dict[str, bool]] = None, error_code: Optional[Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]] = None</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DeleteMemoryResponse</name>
+      <kind>Pydantic BaseModel</kind>
+      <signature>class DeleteMemoryResponse(BaseModel): status: Literal["success", "error"], deleted: bool, memory_id: str, storage: Optional[Dict[str, bool]] = None, message: Optional[str] = None</signature>
+      <path>src/schemas.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      <paragraph>Project uses pytest 8.3.2 for testing. Unit tests in tests/unit/ directory. Schema validation tests verify Field() constraints, Literal types, required vs optional fields. Use FastAPI TestClient for endpoint testing. See tests/unit/test_intents_schemas.py for schema validation pattern.</paragraph>
+    </standards>
+    <locations>
+      <location>tests/unit/test_*.py - Unit tests</location>
+      <location>tests/integration/test_*.py - Integration tests</location>
+      <location>tests/e2e/test_*.py - End-to-end tests</location>
+    </locations>
+    <ideas>
+      <idea acId="AC1">Test DirectMemoryRequest with minimal required fields (user_id, content only)</idea>
+      <idea acId="AC1">Test DirectMemoryRequest with all optional fields populated</idea>
+      <idea acId="AC1">Test DirectMemoryRequest field validation: importance/confidence 0.0-1.0 range</idea>
+      <idea acId="AC1">Test DirectMemoryRequest field validation: valence -1.0 to 1.0 range</idea>
+      <idea acId="AC1">Test DirectMemoryRequest field validation: content max_length=5000</idea>
+      <idea acId="AC1">Test DirectMemoryRequest field validation: persona_tags max 10 items</idea>
+      <idea acId="AC2">Test DirectMemoryResponse with success status and memory_id</idea>
+      <idea acId="AC2">Test DirectMemoryResponse with error status and error_code</idea>
+      <idea acId="AC2">Test DirectMemoryResponse storage dict with backend status</idea>
+      <idea acId="AC3">Test DeleteMemoryResponse with deleted=true</idea>
+      <idea acId="AC3">Test DeleteMemoryResponse with deleted=false and message</idea>
+      <idea acId="AC4">Verify schemas appear in OpenAPI /docs endpoint</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -40,8 +40,9 @@
 #             These remain defined in epic files and can be re-added when ready to work
 # 2025-12-22: Re-added Epic 5 (Scheduled Intents API) to backlog
 # 2025-12-24: Added Epic 6 (Intents API Alignment) with 6 stories - extends Epic 5 for Annie integration
+# 2025-12-29: Added Epic 10 (Direct Memory API) with 7 stories - enables Annie explicit memory control
 
-generated: 2025-12-25
+generated: 2025-12-29
 project: agentic-memories
 project_key: agentic-memories
 tracking_system: file-system
@@ -142,6 +143,22 @@ development_status:
   6-5-portfolio-condition-type: done
   6-6-api-documentation-update: done
   epic-6-retrospective: optional
+
+  # ============================================================
+  # EPIC 10: Direct Memory API for Explicit Memory Management
+  # Source: docs/epic-10-direct-memory-api.md
+  # Priority: P1 (Enables Annie explicit memory control)
+  # Dependencies: None (uses existing infrastructure)
+  # ============================================================
+  epic-10: contexted
+  10-1-direct-memory-store-endpoint-chromadb: done
+  10-2-typed-table-storage-episodic-emotional-procedural: review
+  10-3-delete-memory-endpoint: review
+  10-4-pydantic-schemas: done
+  10-5-unit-tests: done
+  10-6-integration-tests: ready-for-dev
+  10-7-documentation-update: review
+  epic-10-retrospective: optional
 
   # ============================================================
   # EPIC (TBD): Ingestion Graph Optimization

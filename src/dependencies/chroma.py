@@ -156,13 +156,30 @@ class V2Collection:
 		self.id = collection_id
 		self._endpoint_base = f"/tenants/{client.tenant}/databases/{client.database}/collections/{collection_id}"
 	
-	def get(self, where: Optional[Dict] = None, limit: Optional[int] = None, offset: Optional[int] = None, include: Optional[list] = None):
-		"""Fetch items by metadata only using v2 API."""
+	def get(self, ids: Optional[list] = None, where: Optional[Dict] = None, limit: Optional[int] = None, offset: Optional[int] = None, include: Optional[list] = None):
+		"""Fetch items by ID or metadata filter using v2 API.
+
+		Args:
+			ids: Optional list of IDs to fetch (takes precedence over where)
+			where: Optional metadata filter (used if ids not provided)
+			limit: Maximum number of items to return
+			offset: Number of items to skip
+			include: List of fields to include in response (e.g., ["documents", "metadatas"])
+
+		Returns:
+			Dict with ids, documents, metadatas based on include parameter
+		"""
 		# Chroma v2 does not support 'ids' in include; ids are returned by default.
 		data: Dict[str, Any] = {
-			"where": where or {},
 			"include": include or ["documents", "metadatas"],
 		}
+		# IDs take precedence over where filter
+		if ids is not None:
+			data["ids"] = ids
+		elif where is not None:
+			data["where"] = where
+		else:
+			data["where"] = {}
 		if limit is not None:
 			data["limit"] = limit
 		if offset is not None:
