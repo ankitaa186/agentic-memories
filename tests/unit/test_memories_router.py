@@ -878,6 +878,7 @@ def test_delete_memory_cross_storage_episodic(api_client, monkeypatch):
         ids=["mem_test123456"],
         metadatas=[{
             "user_id": "test-user-123",
+            "typed_table_id": "test-uuid-1234",
             "stored_in_episodic": True,
             "stored_in_emotional": False,
             "stored_in_procedural": False
@@ -910,6 +911,7 @@ def test_delete_memory_cross_storage_emotional(api_client, monkeypatch):
         ids=["mem_test123456"],
         metadatas=[{
             "user_id": "test-user-123",
+            "typed_table_id": "test-uuid-1234",
             "stored_in_episodic": False,
             "stored_in_emotional": True,
             "stored_in_procedural": False
@@ -938,6 +940,7 @@ def test_delete_memory_cross_storage_procedural(api_client, monkeypatch):
         ids=["mem_test123456"],
         metadatas=[{
             "user_id": "test-user-123",
+            "typed_table_id": "test-uuid-1234",
             "stored_in_episodic": False,
             "stored_in_emotional": False,
             "stored_in_procedural": True
@@ -966,6 +969,7 @@ def test_delete_memory_cross_storage_all_tables(api_client, monkeypatch):
         ids=["mem_test123456"],
         metadatas=[{
             "user_id": "test-user-123",
+            "typed_table_id": "test-uuid-1234",
             "stored_in_episodic": True,
             "stored_in_emotional": True,
             "stored_in_procedural": True
@@ -1064,6 +1068,7 @@ def test_delete_memory_typed_table_failure_continues(api_client, monkeypatch):
         ids=["mem_test123456"],
         metadatas=[{
             "user_id": "test-user-123",
+            "typed_table_id": "test-uuid-1234",
             "stored_in_episodic": True,
             "stored_in_emotional": False,
             "stored_in_procedural": False
