@@ -70,7 +70,7 @@ _llm_cache: Dict[str, Any] = {
     "endpoint": None,
     "checked_at": None,
 }
-_LLM_CACHE_TTL_SECONDS = 60
+_LLM_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 def _get_cached_llm_check() -> Optional[Dict[str, Any]]:
     """Return cached LLM check if still valid, None otherwise."""
