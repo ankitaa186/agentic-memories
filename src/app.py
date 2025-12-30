@@ -43,7 +43,7 @@ from src.dependencies.timescale import ping_timescale
 from src.dependencies.redis_client import get_redis_client
 from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_llm_configured, get_llm_provider, is_scheduled_maintenance_enabled
 from src.config import get_extraction_model_name, get_embedding_model_name
-from src.config import get_xai_base_url
+from src.config import get_xai_base_url, get_chroma_tenant, get_chroma_database
 import httpx
 from src.services.extraction import extract_from_transcript
 from src.services.reconstruction import ReconstructionService
@@ -62,6 +62,37 @@ from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from src.services.forget import run_compaction_for_user
 from src.services.persona_retrieval import PersonaCoPilot
 from src.routers import profile, portfolio, intents, memories
+
+# LLM connectivity cache (avoid hitting external API on every health check)
+_llm_cache: Dict[str, Any] = {
+    "ok": None,
+    "error": None,
+    "endpoint": None,
+    "checked_at": None,
+}
+_LLM_CACHE_TTL_SECONDS = 60
+
+def _get_cached_llm_check() -> Optional[Dict[str, Any]]:
+    """Return cached LLM check if still valid, None otherwise."""
+    if _llm_cache["checked_at"] is None:
+        return None
+    age = (datetime.now(timezone.utc) - _llm_cache["checked_at"]).total_seconds()
+    if age < _LLM_CACHE_TTL_SECONDS:
+        return {
+            "ok": _llm_cache["ok"],
+            "error": _llm_cache["error"],
+            "endpoint": _llm_cache["endpoint"],
+            "cached": True,
+            "cache_age_seconds": int(age),
+        }
+    return None
+
+def _update_llm_cache(ok: Optional[bool], error: Optional[str], endpoint: Optional[str]) -> None:
+    """Update LLM connectivity cache."""
+    _llm_cache["ok"] = ok
+    _llm_cache["error"] = error
+    _llm_cache["endpoint"] = endpoint
+    _llm_cache["checked_at"] = datetime.now(timezone.utc)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -499,16 +530,42 @@ def health_full() -> dict:
 	# ChromaDB check (active heartbeat)
 	chroma_ok = False
 	chroma_error: Optional[str] = None
+	chroma_host = get_chroma_host()
+	chroma_port = get_chroma_port()
 	try:
-		host = get_chroma_host()
-		port = get_chroma_port()
-		url = f"http://{host}:{port}/api/v2/heartbeat"
-		with httpx.Client(timeout=180.0) as client:
+		url = f"http://{chroma_host}:{chroma_port}/api/v2/heartbeat"
+		with httpx.Client(timeout=10.0) as client:
 			resp = client.get(url)
 			chroma_ok = resp.status_code == 200
 	except Exception as exc:  # pragma: no cover
 		chroma_error = str(exc)
 	checks["chroma"] = {"ok": chroma_ok, "error": chroma_error}
+
+	# ChromaDB collections check (use configured tenant/database)
+	collections_ok = False
+	collections_error: Optional[str] = None
+	collections_list: List[str] = []
+	chroma_tenant = get_chroma_tenant()
+	chroma_db = get_chroma_database()
+	try:
+		if chroma_ok:
+			url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/{chroma_tenant}/databases/{chroma_db}/collections"
+			with httpx.Client(timeout=10.0) as client:
+				resp = client.get(url)
+				if resp.status_code == 200:
+					cols = resp.json()
+					collections_list = [c.get("name", "") for c in cols] if isinstance(cols, list) else []
+					# Check for any memories collection (dimension-specific naming)
+					collections_ok = any(c.startswith("memories_") for c in collections_list)
+					if not collections_ok and collections_list:
+						collections_error = "No memories_* collection found"
+					elif not collections_list:
+						collections_error = "No collections exist"
+				else:
+					collections_error = f"HTTP {resp.status_code}"
+	except Exception as exc:
+		collections_error = str(exc)
+	checks["chroma_collections"] = {"ok": collections_ok, "error": collections_error, "collections": collections_list, "tenant": chroma_tenant, "database": chroma_db}
 
 	# Timescale/Postgres check
 	ts_ok = False
@@ -534,32 +591,199 @@ def health_full() -> dict:
 		redis_error = str(exc)
 	checks["redis"] = {"ok": redis_ok, "error": redis_error}
 
-	# Portfolio tables check (Postgres)
-	portfolio_ok = False
-	portfolio_error: Optional[str] = None
-	portfolio_tables = []
+	# Database tables check (all critical tables in one query)
+	from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 	conn = None
+	all_tables: List[str] = []
 	try:
-		from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 		conn = get_timescale_conn()
 		if conn:
 			with conn.cursor() as cur:
 				cur.execute("""
 					SELECT table_name FROM information_schema.tables
 					WHERE table_schema = 'public'
-					AND table_name IN ('portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences')
 					ORDER BY table_name
 				""")
-				portfolio_tables = [row['table_name'] for row in cur.fetchall()]
-				portfolio_ok = len(portfolio_tables) == 3
-				if not portfolio_ok:
-					portfolio_error = f"Missing tables: {set(['portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences']) - set(portfolio_tables)}"
+				all_tables = [row['table_name'] for row in cur.fetchall()]
 	except Exception as exc:
-		portfolio_error = str(exc)
-	finally:
+		pass  # Individual checks will report errors
+	
+	# Memory tables check (core)
+	memory_tables_required = ['episodic_memories', 'emotional_memories', 'procedural_memories']
+	memory_tables_found = [t for t in memory_tables_required if t in all_tables]
+	memory_tables_ok = len(memory_tables_found) == len(memory_tables_required)
+	memory_tables_missing = list(set(memory_tables_required) - set(memory_tables_found))
+	checks["memory_tables"] = {
+		"ok": memory_tables_ok,
+		"error": f"Missing: {memory_tables_missing}" if memory_tables_missing else None,
+		"tables": memory_tables_found
+	}
+
+	# Intents tables check (Epic 6)
+	intents_tables_required = ['scheduled_intents', 'intent_executions']
+	intents_tables_found = [t for t in intents_tables_required if t in all_tables]
+	intents_tables_ok = len(intents_tables_found) == len(intents_tables_required)
+	intents_tables_missing = list(set(intents_tables_required) - set(intents_tables_found))
+	checks["intents_tables"] = {
+		"ok": intents_tables_ok,
+		"error": f"Missing: {intents_tables_missing}" if intents_tables_missing else None,
+		"tables": intents_tables_found
+	}
+
+	# Profile tables check
+	profile_tables_required = ['user_profiles', 'profile_fields', 'profile_confidence_scores', 'profile_sources']
+	profile_tables_found = [t for t in profile_tables_required if t in all_tables]
+	profile_tables_ok = len(profile_tables_found) == len(profile_tables_required)
+	profile_tables_missing = list(set(profile_tables_required) - set(profile_tables_found))
+	checks["profile_tables"] = {
+		"ok": profile_tables_ok,
+		"error": f"Missing: {profile_tables_missing}" if profile_tables_missing else None,
+		"tables": profile_tables_found
+	}
+
+	# Portfolio tables check (Postgres)
+	portfolio_tables_required = ['portfolio_holdings', 'portfolio_transactions', 'portfolio_preferences']
+	portfolio_tables_found = [t for t in portfolio_tables_required if t in all_tables]
+	portfolio_ok = len(portfolio_tables_found) == len(portfolio_tables_required)
+	portfolio_tables_missing = list(set(portfolio_tables_required) - set(portfolio_tables_found))
+	checks["portfolio_tables"] = {
+		"ok": portfolio_ok,
+		"error": f"Missing: {portfolio_tables_missing}" if portfolio_tables_missing else None,
+		"tables": portfolio_tables_found
+	}
+
+	# Hypertable check (TimescaleDB specific)
+	hypertables_ok = False
+	hypertables_error: Optional[str] = None
+	hypertables_found: List[str] = []
+	hypertables_required = ['episodic_memories', 'emotional_memories', 'portfolio_snapshots']
+	try:
 		if conn:
-			release_timescale_conn(conn)
-	checks["portfolio"] = {"ok": portfolio_ok, "error": portfolio_error, "tables": portfolio_tables}
+			with conn.cursor() as cur:
+				cur.execute("""
+					SELECT hypertable_name FROM timescaledb_information.hypertables
+					WHERE hypertable_schema = 'public'
+					ORDER BY hypertable_name
+				""")
+				hypertables_found = [row['hypertable_name'] for row in cur.fetchall()]
+				hypertables_ok = all(h in hypertables_found for h in hypertables_required if h in all_tables)
+				if not hypertables_ok:
+					missing_hypertables = [h for h in hypertables_required if h in all_tables and h not in hypertables_found]
+					if missing_hypertables:
+						hypertables_error = f"Tables exist but not hypertables: {missing_hypertables}"
+	except Exception as exc:
+		hypertables_error = str(exc)
+	checks["hypertables"] = {
+		"ok": hypertables_ok,
+		"error": hypertables_error,
+		"hypertables": hypertables_found,
+		"required": [h for h in hypertables_required if h in all_tables]
+	}
+
+	# Migration version check
+	migrations_ok = False
+	migrations_error: Optional[str] = None
+	latest_migration: Optional[str] = None
+	migration_count: int = 0
+	try:
+		if conn:
+			with conn.cursor() as cur:
+				# Check if migration_history table exists
+				if 'migration_history' in all_tables:
+					cur.execute("""
+						SELECT migration_file, database_type, applied_at 
+						FROM migration_history 
+						WHERE success = true
+						ORDER BY applied_at DESC 
+						LIMIT 1
+					""")
+					row = cur.fetchone()
+					if row:
+						latest_migration = f"{row['database_type']}/{row['migration_file']}"
+					cur.execute("SELECT COUNT(*) as cnt FROM migration_history WHERE success = true")
+					migration_count = cur.fetchone()['cnt']
+					migrations_ok = migration_count > 0
+				else:
+					migrations_error = "migration_history table not found"
+	except Exception as exc:
+		migrations_error = str(exc)
+	checks["migrations"] = {
+		"ok": migrations_ok,
+		"error": migrations_error,
+		"latest": latest_migration,
+		"total_applied": migration_count
+	}
+
+	# Record counts (observability stats)
+	record_counts: Dict[str, Any] = {}
+	try:
+		if conn:
+			with conn.cursor() as cur:
+				count_tables = [
+					'episodic_memories', 'emotional_memories', 'procedural_memories',
+					'scheduled_intents', 'user_profiles'
+				]
+				for table in count_tables:
+					if table in all_tables:
+						try:
+							cur.execute(f"SELECT COUNT(*) as cnt FROM {table}")
+							result = cur.fetchone()
+							record_counts[table] = result['cnt'] if result else 0
+						except Exception as e:
+							record_counts[table] = f"error: {str(e)[:50]}"
+	except Exception:
+		pass  # Non-critical, just stats
+	checks["record_counts"] = record_counts
+
+	# Release connection after all table checks
+	if conn:
+		release_timescale_conn(conn)
+
+	# LLM endpoint connectivity check (cached for 60s to avoid hitting external API)
+	cached_llm = _get_cached_llm_check()
+	if cached_llm:
+		llm_ok = cached_llm["ok"]
+		checks["llm_connectivity"] = cached_llm
+	else:
+		llm_ok = None
+		llm_error: Optional[str] = None
+		llm_endpoint: Optional[str] = None
+		try:
+			if provider == "openai":
+				llm_endpoint = "https://api.openai.com/v1/models"
+				api_key = get_openai_api_key()
+				if api_key:
+					with httpx.Client(timeout=5.0) as client:
+						resp = client.get(llm_endpoint, headers={"Authorization": f"Bearer {api_key}"})
+						llm_ok = resp.status_code == 200
+						if not llm_ok:
+							llm_error = f"HTTP {resp.status_code}"
+				else:
+					llm_error = "API key not configured"
+			elif provider == "xai":
+				from src.config import get_xai_api_key
+				base_url = get_xai_base_url()
+				llm_endpoint = f"{base_url}/models"
+				api_key = get_xai_api_key()
+				if api_key:
+					with httpx.Client(timeout=5.0) as client:
+						resp = client.get(llm_endpoint, headers={"Authorization": f"Bearer {api_key}"})
+						llm_ok = resp.status_code == 200
+						if not llm_ok:
+							llm_error = f"HTTP {resp.status_code}"
+				else:
+					llm_error = "API key not configured"
+			else:
+				llm_error = f"Unknown provider: {provider}"
+		except httpx.TimeoutException:
+			llm_ok = False
+			llm_error = "Connection timeout"
+		except Exception as exc:
+			llm_ok = False
+			llm_error = str(exc)
+		# Update cache
+		_update_llm_cache(llm_ok, llm_error, llm_endpoint)
+		checks["llm_connectivity"] = {"ok": llm_ok, "error": llm_error, "endpoint": llm_endpoint, "cached": False}
 
 	# Langfuse check (optional - tracing)
 	langfuse_ok = None
@@ -578,9 +802,36 @@ def health_full() -> dict:
 		langfuse_error = str(exc)
 	checks["langfuse"] = {"ok": langfuse_ok, "error": langfuse_error, "enabled": is_langfuse_enabled()}
 
-	overall_ok = chroma_ok and ts_ok and portfolio_ok and (redis_ok is None or redis_ok) and len(missing_envs) == 0
+	# Overall status calculation
+	# Critical: chroma, timescale, memory_tables, llm_connectivity
+	# Important: intents_tables, profile_tables, portfolio_tables, chroma_collections, hypertables, migrations
+	# Optional (None=not configured is OK): redis, langfuse
+	# Informational (no impact on status): record_counts
+	critical_ok = (
+		chroma_ok and 
+		ts_ok and 
+		memory_tables_ok and 
+		(llm_ok is True)
+	)
+	important_ok = (
+		intents_tables_ok and 
+		profile_tables_ok and 
+		portfolio_ok and 
+		collections_ok and
+		hypertables_ok and
+		migrations_ok
+	)
+	optional_ok = (redis_ok is None or redis_ok) and (langfuse_ok is None or langfuse_ok)
+	
+	if critical_ok and important_ok and optional_ok and len(missing_envs) == 0:
+		status = "ok"
+	elif critical_ok:
+		status = "degraded"
+	else:
+		status = "unhealthy"
+
 	return {
-		"status": "ok" if overall_ok else "degraded",
+		"status": status,
 		"time": datetime.now(timezone.utc).isoformat(),
 		"checks": checks,
 	}
