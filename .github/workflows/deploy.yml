@@ -1,0 +1,38 @@
+name: Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - develop
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy to Specific Directory
+        run: |
+          # 1. Go to your specific folder
+          # REPLACE THIS with your actual folder path (e.g., /home/ubuntu/agentic-memories)
+          cd /home/ankit/dev/agentic-memories
+
+          # 2. Update the code safely
+          echo "Fetching latest code for branch: ${{ inputs.branch }}..."
+          git fetch --all
+          git checkout ${{ inputs.branch }}
+          git pull origin ${{ inputs.branch }}
+
+          # 3. Run your start script (Uses existing .env automatically)
+          echo "Starting services..."
+          make start
+
+      - name: Share Logs
+        run: |
+          cd /home/ankit/dev/agentic-memories
+          docker compose logs --tail=100
