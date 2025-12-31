@@ -1,0 +1,258 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>10-1</storyId>
+    <title>Direct Memory Store Endpoint (ChromaDB)</title>
+    <status>Drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-1-direct-memory-store-endpoint-chromadb.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>LLM client (Annie or any direct API consumer)</asA>
+    <iWant>Store pre-formatted memories directly to ChromaDB with a fast POST endpoint</iWant>
+    <soThat>I can store critical memories with sub-3-second latency, bypassing the slow LangGraph ingestion pipeline (60-100s)</soThat>
+    <tasks>
+      <task>Create src/routers/memories.py with router prefix /v1/memories</task>
+      <task>Implement store_memory_direct() endpoint function</task>
+      <task>Import and use generate_embedding() for content embedding</task>
+      <task>Import and use upsert_memories() for ChromaDB storage</task>
+      <task>Build Memory object with all required fields</task>
+      <task>Add metadata with source: "direct_api" and storage tracking flags</task>
+      <task>Implement error handling for embedding failures (EMBEDDING_ERROR)</task>
+      <task>Implement error handling for storage failures (STORAGE_ERROR)</task>
+      <task>Add logging for request received, embedding generated, and storage completed</task>
+      <task>Register router in src/app.py</task>
+      <task>Verify endpoint appears in OpenAPI docs (/docs)</task>
+      <task>Manual test with curl/httpie to verify functionality</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Endpoint Creation">
+      <given>The memories router is registered with the FastAPI application</given>
+      <when>A client sends a POST request to /v1/memories/direct</when>
+      <then>The endpoint accepts a DirectMemoryRequest body and returns a DirectMemoryResponse</then>
+      <checklist>
+        <item>Create POST /v1/memories/direct endpoint in src/routers/memories.py</item>
+        <item>Accept DirectMemoryRequest body (defined in Story 10.4)</item>
+        <item>Return DirectMemoryResponse with status, memory_id, message, and storage fields</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC2" title="Memory ID Generation">
+      <given>A valid direct memory request is received</given>
+      <when>The endpoint processes the request</when>
+      <then>A unique memory ID is generated in the format mem_{uuid.hex[:12]}</then>
+      <checklist>
+        <item>Generate ID format: mem_{uuid.uuid4().hex[:12]}</item>
+        <item>ID must be consistent with existing patterns in storage.py</item>
+        <item>ID is returned in the response memory_id field</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC3" title="Embedding Generation">
+      <given>A valid memory content is provided in the request</given>
+      <when>The endpoint processes the request</when>
+      <then>An embedding vector is generated using generate_embedding()</then>
+      <checklist>
+        <item>Call generate_embedding() from src/services/embedding_utils.py for content</item>
+        <item>Return EMBEDDING_ERROR error code if generation fails</item>
+        <item>Log embedding generation failure with user_id context</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC4" title="ChromaDB Storage">
+      <given>A valid request with successfully generated embedding</given>
+      <when>The endpoint stores the memory</when>
+      <then>The memory is persisted to ChromaDB using upsert_memories()</then>
+      <checklist>
+        <item>Use existing upsert_memories() function from src/services/storage.py</item>
+        <item>Store with metadata including source: "direct_api"</item>
+        <item>Include user_id in metadata for authorization on delete</item>
+        <item>Return STORAGE_ERROR if ChromaDB write fails</item>
+        <item>Response includes storage: {"chromadb": true} on success</item>
+      </checklist>
+    </criterion>
+    <criterion id="AC5" title="Performance">
+      <given>A normal load direct memory request</given>
+      <when>The endpoint processes the request end-to-end</when>
+      <then>The p95 latency is under 3 seconds</then>
+      <checklist>
+        <item>p95 latency &lt; 3 seconds for complete store operation</item>
+        <item>Log timing metrics for embedding generation and ChromaDB write</item>
+        <item>Embedding generation should complete in &lt; 2 seconds</item>
+        <item>ChromaDB write should complete in &lt; 500ms</item>
+      </checklist>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Agentic Memories v3.0</title>
+        <section>FastAPI Router Structure (AD-008)</section>
+        <snippet>Create new src/routers/ directory with profile.py router - Scalability for future APIs; separates concerns from monolithic app.py. Minor refactor to import routers in app.py.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-10-direct-memory-api.md</path>
+        <title>Epic 10: Direct Memory API for Explicit Memory Management</title>
+        <section>Technical Design - Storage Routing Logic</section>
+        <snippet>Direct Memory API enables Annie to explicitly store memories with sub-3-second latency. Always stores to ChromaDB via upsert_memories, with optional routing to typed tables based on fields.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-10.md</path>
+        <title>Tech Spec: Epic 10 - Direct Memory API</title>
+        <section>4.1 New Router: src/routers/memories.py</section>
+        <snippet>Key Functions: store_memory_direct() - POST endpoint for direct storage returns DirectMemoryResponse. Uses upsert_memories() for ChromaDB storage, generate_embedding() for embeddings.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/services/storage.py</path>
+        <kind>service</kind>
+        <symbol>upsert_memories</symbol>
+        <lines>61-101</lines>
+        <reason>Primary function to store memories in ChromaDB. Must be reused for direct storage. Handles embedding generation fallback, builds metadata, and upserts to collection.</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/embedding_utils.py</path>
+        <kind>service</kind>
+        <symbol>generate_embedding</symbol>
+        <lines>16-88</lines>
+        <reason>Generates embeddings using OpenAI API with fallback to deterministic embedding. Must be called to generate embedding for memory content before storage.</reason>
+      </artifact>
+      <artifact>
+        <path>src/models.py</path>
+        <kind>model</kind>
+        <symbol>Memory</symbol>
+        <lines>9-25</lines>
+        <reason>Pydantic BaseModel defining Memory structure with fields: id, user_id, content, layer, type, embedding, timestamp, confidence, ttl, usage_count, relevance_score, importance, persona_tags, emotional_signature, metadata.</reason>
+      </artifact>
+      <artifact>
+        <path>src/schemas.py</path>
+        <kind>schema</kind>
+        <symbol>N/A - needs addition</symbol>
+        <lines>N/A</lines>
+        <reason>Location for DirectMemoryRequest and DirectMemoryResponse schemas. Currently contains other API schemas. Story 10.4 (dependency) adds these schemas.</reason>
+      </artifact>
+      <artifact>
+        <path>src/routers/profile.py</path>
+        <kind>router</kind>
+        <symbol>router</symbol>
+        <lines>1-537</lines>
+        <reason>Example router pattern to follow. Shows FastAPI router creation with prefix, tags, response_model decorators, Query parameters, HTTPException usage, and logging patterns.</reason>
+      </artifact>
+      <artifact>
+        <path>src/app.py</path>
+        <kind>application</kind>
+        <symbol>app</symbol>
+        <lines>64, 119-124</lines>
+        <reason>Main FastAPI application. Router registration pattern at line 122-124: app.include_router(profile.router), app.include_router(portfolio.router), app.include_router(intents.router). Memories router must be registered here.</reason>
+      </artifact>
+      <artifact>
+        <path>src/dependencies/chroma.py</path>
+        <kind>dependency</kind>
+        <symbol>get_chroma_client, V2Collection</symbol>
+        <lines>221-250, 150-218</lines>
+        <reason>ChromaDB client factory and collection wrapper. V2Collection.upsert() handles storage. get_chroma_client() returns V2ChromaClient instance.</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/retrieval.py</path>
+        <kind>service</kind>
+        <symbol>_standard_collection_name</symbol>
+        <lines>29-39</lines>
+        <reason>Determines the ChromaDB collection name based on embedding dimension (memories_{dim}). Must be used for consistent collection naming.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="fastapi" version="0.111.0">Web framework for building APIs</package>
+        <package name="pydantic" version=">=2.9.0">Data validation and serialization</package>
+        <package name="chromadb" version="1.4.0">Vector database for memory storage</package>
+        <package name="openai" version="1.40.0">OpenAI API client for embeddings</package>
+        <package name="redis" version="5.0.6">Optional caching (not required for this story)</package>
+        <package name="httpx" version="0.27.0">HTTP client used by ChromaDB</package>
+        <package name="pytest" version="8.3.2">Testing framework</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing router pattern in src/routers/profile.py - use APIRouter with prefix and tags</constraint>
+    <constraint type="pattern">Use dependency injection pattern for services where applicable</constraint>
+    <constraint type="pattern">Logging format: [context.operation] key=value style (e.g., [memories.direct] user_id=%s)</constraint>
+    <constraint type="pattern">Error responses should use DirectMemoryResponse with status="error" and appropriate error_code</constraint>
+    <constraint type="pattern">Memory ID format must be mem_{uuid.hex[:12]} to match existing storage.py pattern (line 75)</constraint>
+    <constraint type="layer">Router must be registered in src/app.py after other routers</constraint>
+    <constraint type="api">Endpoint path: POST /v1/memories/direct</constraint>
+    <constraint type="api">Response model: DirectMemoryResponse (depends on Story 10.4)</constraint>
+    <constraint type="dependency">Story 10.4 (Pydantic Schemas) must be completed first to define DirectMemoryRequest and DirectMemoryResponse</constraint>
+    <constraint type="performance">p95 latency must be under 3 seconds for complete operation</constraint>
+    <constraint type="mvp">No authentication - relies on user_id parameter (consistent with existing APIs per AD-009)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /v1/memories/direct</name>
+      <kind>REST endpoint</kind>
+      <signature>@router.post("/direct", response_model=DirectMemoryResponse) def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse</signature>
+      <path>src/routers/memories.py (to be created)</path>
+    </interface>
+    <interface>
+      <name>upsert_memories</name>
+      <kind>function signature</kind>
+      <signature>def upsert_memories(user_id: str, memories: List[Memory]) -> List[str]</signature>
+      <path>src/services/storage.py</path>
+    </interface>
+    <interface>
+      <name>generate_embedding</name>
+      <kind>function signature</kind>
+      <signature>def generate_embedding(text: str) -> Optional[List[float]]</signature>
+      <path>src/services/embedding_utils.py</path>
+    </interface>
+    <interface>
+      <name>Memory</name>
+      <kind>Pydantic model</kind>
+      <signature>class Memory(BaseModel): id, user_id, content, layer, type, embedding, timestamp, confidence, ttl, usage_count, relevance_score, importance, persona_tags, emotional_signature, metadata</signature>
+      <path>src/models.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryRequest (Story 10.4)</name>
+      <kind>Pydantic model</kind>
+      <signature>class DirectMemoryRequest(BaseModel): user_id: str, content: str, layer: Literal["short-term", "semantic", "long-term"] = "semantic", type: Literal["explicit", "implicit"] = "explicit", importance: float = 0.8, confidence: float = 0.9, persona_tags: List[str] = [], metadata: Optional[Dict[str, Any]] = None</signature>
+      <path>src/schemas.py (to be added by Story 10.4)</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryResponse (Story 10.4)</name>
+      <kind>Pydantic model</kind>
+      <signature>class DirectMemoryResponse(BaseModel): status: Literal["success", "error"], memory_id: Optional[str] = None, message: str, storage: Optional[Dict[str, bool]] = None, error_code: Optional[Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]] = None</signature>
+      <path>src/schemas.py (to be added by Story 10.4)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses pytest (8.3.2) with FastAPI TestClient for API tests. Unit tests mock external dependencies (ChromaDB, Redis, OpenAI) using pytest monkeypatch and MagicMock. Test files follow naming convention test_*.py. Fixtures defined in tests/conftest.py provide api_client and redis_stub. Assertions verify response status codes, response body structure, and side effects.
+    </standards>
+    <locations>
+      <location>tests/unit/test_memories_router.py (to be created)</location>
+      <location>tests/integration/test_direct_memory_api.py (to be created)</location>
+      <location>tests/conftest.py (existing fixtures)</location>
+      <location>tests/fixtures/chroma_mock.py (existing mock)</location>
+    </locations>
+    <ideas>
+      <idea acId="AC1">Test endpoint responds to POST /v1/memories/direct with valid request body</idea>
+      <idea acId="AC1">Test endpoint returns DirectMemoryResponse with correct fields</idea>
+      <idea acId="AC1">Test endpoint returns 422 for invalid request body</idea>
+      <idea acId="AC2">Test memory_id format matches mem_{12_char_hex} pattern</idea>
+      <idea acId="AC2">Test memory_id is unique across multiple requests</idea>
+      <idea acId="AC3">Test embedding is generated for content</idea>
+      <idea acId="AC3">Test EMBEDDING_ERROR returned when embedding generation fails</idea>
+      <idea acId="AC4">Test upsert_memories called with correct Memory object</idea>
+      <idea acId="AC4">Test metadata includes source: "direct_api"</idea>
+      <idea acId="AC4">Test STORAGE_ERROR returned when ChromaDB write fails</idea>
+      <idea acId="AC4">Test response includes storage: {"chromadb": true} on success</idea>
+      <idea acId="AC5">Test endpoint completes within 3 seconds (integration test)</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -412,6 +412,193 @@ API for managing proactive AI triggers. Used by Annie's proactive worker to sche
 
 ---
 
+## Direct Memory API (Epic 10)
+
+API for direct memory storage and deletion, bypassing the LLM extraction pipeline. Enables explicit memory management for AI assistants like Annie.
+
+### POST /v1/memories/direct
+
+**Description:** Store a pre-formatted memory directly into the memory system, bypassing LLM extraction.
+
+**Performance Target:** < 3 seconds p95
+
+**Request Body:** `DirectMemoryRequest`
+
+**Required Fields:**
+- `user_id`: string - User identifier for memory ownership
+- `content`: string - Memory content text (max 5000 characters)
+
+**Optional General Fields:**
+- `layer`: string - Memory layer: `short-term`, `semantic` (default), `long-term`
+- `type`: string - Memory type: `explicit` (default), `implicit`
+- `importance`: float - Importance score 0.0-1.0 (default: 0.8)
+- `confidence`: float - Confidence score 0.0-1.0 (default: 0.9)
+- `persona_tags`: array[string] - Tags for memory categorization (max 10)
+- `metadata`: object - Additional key-value metadata
+
+**Optional Episodic Fields** (triggers episodic_memories table storage):
+- `event_timestamp`: datetime - When the event occurred (ISO8601)
+- `location`: string - Where the event occurred
+- `participants`: array[string] - People involved
+- `event_type`: string - Type of event (meeting, conversation, milestone)
+
+**Optional Emotional Fields** (triggers emotional_memories table storage):
+- `emotional_state`: string - Primary emotion (happy, anxious, excited)
+- `valence`: float - Emotional valence -1.0 (negative) to 1.0 (positive)
+- `arousal`: float - Emotional intensity 0.0 (calm) to 1.0 (intense)
+- `trigger_event`: string - What triggered the emotional state
+
+**Optional Procedural Fields** (triggers procedural_memories table storage):
+- `skill_name`: string - Name of the skill or procedure
+- `proficiency_level`: string - Level (beginner, intermediate, expert)
+
+**Response:** `DirectMemoryResponse`
+- `status`: string - `success` or `error`
+- `memory_id`: string - UUID of stored memory (on success)
+- `message`: string - Human-readable status message
+- `storage`: object - Per-backend storage status
+- `error_code`: string - Error code on failure (see Error Codes below)
+
+**Example Request:**
+```json
+{
+  "user_id": "user_12345",
+  "content": "User mentioned they prefer morning meetings and work best between 9am-12pm.",
+  "layer": "semantic",
+  "type": "explicit",
+  "importance": 0.8,
+  "confidence": 0.9,
+  "persona_tags": ["work", "preferences"],
+  "metadata": {"source": "chat", "session_id": "abc123"}
+}
+```
+
+**Example Response (Success):**
+```json
+{
+  "status": "success",
+  "memory_id": "mem_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "message": "Memory stored successfully",
+  "storage": {
+    "chromadb": true,
+    "stored_in_episodic": false,
+    "stored_in_emotional": false,
+    "stored_in_procedural": false
+  }
+}
+```
+
+**Example Request with Episodic Data:**
+```json
+{
+  "user_id": "user_12345",
+  "content": "Had a productive meeting with the engineering team about the Q1 roadmap.",
+  "event_timestamp": "2025-01-15T10:30:00Z",
+  "location": "Office conference room",
+  "participants": ["Alice", "Bob"],
+  "event_type": "meeting"
+}
+```
+
+---
+
+### DELETE /v1/memories/{memory_id}
+
+**Description:** Delete a memory from all storage backends where it exists.
+
+**Performance Target:** < 1 second p95
+
+**Path Parameters:**
+- `memory_id`: string - UUID of the memory to delete
+
+**Query Parameters:**
+- `user_id`: string (required) - User ID for authorization
+
+**Response:** `DeleteMemoryResponse`
+- `status`: string - `success` or `error`
+- `deleted`: boolean - True if memory was deleted from at least one backend
+- `memory_id`: string - The requested memory ID
+- `storage`: object - Per-backend deletion status
+- `message`: string - Status or error message
+
+**Example Request:**
+```http
+DELETE /v1/memories/mem_a1b2c3d4-e5f6-7890-abcd-ef1234567890?user_id=user_12345
+```
+
+**Example Response:**
+```json
+{
+  "status": "success",
+  "deleted": true,
+  "memory_id": "mem_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "storage": {
+    "chromadb": true,
+    "episodic_memories": true,
+    "emotional_memories": false,
+    "procedural_memories": false
+  },
+  "message": "Memory deleted successfully from all backends"
+}
+```
+
+---
+
+### Direct Memory API Error Codes
+
+| Error Code | HTTP Status | Description |
+|------------|-------------|-------------|
+| `VALIDATION_ERROR` | 400 | Request validation failed (invalid fields, missing required data, constraint violations) |
+| `EMBEDDING_ERROR` | 500 | Failed to generate embedding vector for the content (OpenAI API issue) |
+| `STORAGE_ERROR` | 500 | Database storage operation failed (ChromaDB or TimescaleDB write error) |
+| `INTERNAL_ERROR` | 500 | Unexpected server error during processing |
+
+**Error Response Format:**
+```json
+{
+  "status": "error",
+  "memory_id": null,
+  "message": "Failed to generate embedding: OpenAI API rate limit exceeded",
+  "storage": null,
+  "error_code": "EMBEDDING_ERROR"
+}
+```
+
+---
+
+### Storage Routing Logic
+
+The Direct Memory API routes memories to multiple backends based on the request fields:
+
+1. **ChromaDB** (always): Every memory is stored in ChromaDB with its embedding vector for semantic search.
+
+2. **episodic_memories** (conditional): Stored when `event_timestamp` is provided. Enables temporal queries and life event reconstruction.
+
+3. **emotional_memories** (conditional): Stored when `emotional_state` is provided. Enables emotional pattern analysis and mood tracking.
+
+4. **procedural_memories** (conditional): Stored when `skill_name` is provided. Enables skill progression tracking.
+
+**Routing Diagram:**
+```
+DirectMemoryRequest
+       │
+       ▼
+Always → ChromaDB (via upsert_memories)
+       │
+       ├── If event_timestamp → episodic_memories table
+       ├── If emotional_state → emotional_memories table
+       └── If skill_name → procedural_memories table
+```
+
+**Metadata Flags:**
+The response `storage` object contains boolean flags indicating where the memory was stored:
+- `chromadb`: Always true on success
+- `stored_in_episodic`: True if stored in episodic_memories
+- `stored_in_emotional`: True if stored in emotional_memories
+- `stored_in_procedural`: True if stored in procedural_memories
+
+---
+
 ## Scheduled Jobs
 
 **Daily Compaction (Optional):**

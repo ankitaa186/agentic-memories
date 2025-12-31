@@ -1,0 +1,238 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>5</storyId>
+    <title>Unit Tests</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-5-unit-tests.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Developer</asA>
+    <iWant>Comprehensive test coverage for direct memory operations</iWant>
+    <soThat>Code quality is assured with >80% coverage for the memories router</soThat>
+    <tasks>
+      <task id="1">Set up test file with imports and fixtures</task>
+      <task id="2">Implement store tests (minimal, optional fields, failures)</task>
+      <task id="3">Implement delete tests (success, not found, unauthorized, cross-storage)</task>
+      <task id="4">Implement validation tests (constraints, missing fields)</task>
+      <task id="5">Run pytest-cov and verify >80% coverage</task>
+      <task id="6">Fix any coverage gaps</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Store Tests">
+      <given>The direct memory store endpoint exists</given>
+      <when>Unit tests are executed</when>
+      <then>
+        <check>Test minimal required fields (user_id, content only)</check>
+        <check>Test all optional fields (episodic, emotional, procedural)</check>
+        <check>Test embedding failure handling returns EMBEDDING_ERROR</check>
+        <check>Test ChromaDB failure handling returns STORAGE_ERROR</check>
+        <check>Test typed table storage</check>
+      </then>
+    </criterion>
+    <criterion id="AC2" title="Delete Tests">
+      <given>The delete memory endpoint exists</given>
+      <when>Unit tests are executed</when>
+      <then>
+        <check>Test successful deletion from ChromaDB</check>
+        <check>Test not found case returns appropriate error</check>
+        <check>Test unauthorized case returns 403 for wrong user</check>
+        <check>Test cross-storage deletion (ChromaDB + typed tables)</check>
+      </then>
+    </criterion>
+    <criterion id="AC3" title="Validation Tests">
+      <given>The Pydantic schemas exist</given>
+      <when>Unit tests are executed</when>
+      <then>
+        <check>Test field constraints (importance 0.0-1.0, valence -1.0 to 1.0, etc.)</check>
+        <check>Test max_length constraint on content (5000 chars)</check>
+        <check>Test missing required fields (user_id, content)</check>
+      </then>
+    </criterion>
+    <criterion id="AC4" title="Coverage">
+      <given>All unit tests are implemented</given>
+      <when>Coverage is measured with pytest-cov</when>
+      <then>Memories router achieves >80% code coverage</then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-10-direct-memory-api.md</path>
+        <title>Epic 10: Direct Memory API for Explicit Memory Management</title>
+        <section>Story 10.5: Unit Tests</section>
+        <snippet>Comprehensive test coverage for direct memory operations with >80% coverage. Tests store minimal/optional fields, embedding failure handling, ChromaDB failure handling, delete success/not found/unauthorized/cross-storage.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-10.md</path>
+        <title>Tech Spec: Epic 10 - Direct Memory API</title>
+        <section>8. Test Strategy</section>
+        <snippet>Unit tests in tests/unit/test_memories_router.py covering: test_store_memory_minimal_fields, test_store_memory_with_episodic_fields, test_store_memory_embedding_failure, test_delete_memory_success, test_delete_memory_not_found, test_delete_memory_unauthorized.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Agentic Memories v3.0</title>
+        <section>Testing Strategy</section>
+        <snippet>Unit tests use MagicMock for database connections. Integration tests use FastAPI TestClient. Follow existing patterns in test_profile_storage.py and test_portfolio_api.py.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>src/routers/memories.py</path>
+        <kind>router</kind>
+        <symbol>store_memory_direct, delete_memory</symbol>
+        <lines>TBD - not yet created</lines>
+        <reason>Target router for unit tests - implements POST /v1/memories/direct and DELETE /v1/memories/{memory_id} endpoints</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/storage.py</path>
+        <kind>service</kind>
+        <symbol>upsert_memories, _build_metadata</symbol>
+        <lines>61-101</lines>
+        <reason>Core ChromaDB storage function used by direct memory store endpoint - must mock for unit tests</reason>
+      </artifact>
+      <artifact>
+        <path>src/services/embedding_utils.py</path>
+        <kind>service</kind>
+        <symbol>generate_embedding</symbol>
+        <lines>16-88</lines>
+        <reason>Embedding generation function to mock for testing EMBEDDING_ERROR scenarios</reason>
+      </artifact>
+      <artifact>
+        <path>src/dependencies/chroma.py</path>
+        <kind>dependency</kind>
+        <symbol>get_chroma_client, V2ChromaClient, V2Collection</symbol>
+        <lines>221-250</lines>
+        <reason>ChromaDB client factory - must mock for STORAGE_ERROR scenarios and delete operations</reason>
+      </artifact>
+      <artifact>
+        <path>src/dependencies/timescale.py</path>
+        <kind>dependency</kind>
+        <symbol>get_timescale_conn, release_timescale_conn</symbol>
+        <lines>42-84</lines>
+        <reason>PostgreSQL/TimescaleDB connection functions - must mock for typed table storage tests</reason>
+      </artifact>
+      <artifact>
+        <path>src/schemas.py</path>
+        <kind>schema</kind>
+        <symbol>DirectMemoryRequest, DirectMemoryResponse, DeleteMemoryResponse</symbol>
+        <lines>TBD - Story 10.4 adds these</lines>
+        <reason>Pydantic schemas with Field validators - validation tests check constraints defined here</reason>
+      </artifact>
+      <artifact>
+        <path>src/models.py</path>
+        <kind>model</kind>
+        <symbol>Memory</symbol>
+        <lines>9-25</lines>
+        <reason>Memory dataclass used by storage functions - fixtures should create valid Memory instances</reason>
+      </artifact>
+      <artifact>
+        <path>tests/unit/test_portfolio_api.py</path>
+        <kind>test</kind>
+        <symbol>_MockCursor, _MockConnection, _MockCursorWithFetchone</symbol>
+        <lines>12-85</lines>
+        <reason>Reference test patterns for mocking database connections and cursors</reason>
+      </artifact>
+      <artifact>
+        <path>tests/conftest.py</path>
+        <kind>test-fixture</kind>
+        <symbol>api_client, redis_stub, _prepare_app</symbol>
+        <lines>114-129</lines>
+        <reason>Shared test fixtures including api_client fixture for TestClient</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="pytest" version="8.3.2" purpose="Test framework" />
+        <package name="pytest-cov" version="latest" purpose="Coverage measurement (install if needed)" />
+        <package name="fastapi" version="0.111.0" purpose="TestClient for HTTP testing" />
+        <package name="pydantic" version=">=2.9.0" purpose="Schema validation testing" />
+        <package name="httpx" version="0.27.0" purpose="Required by FastAPI TestClient" />
+        <package name="chromadb" version="1.4.0" purpose="Vector database - mock in tests" />
+        <package name="psycopg" version="binary" purpose="PostgreSQL - mock in tests" />
+        <package name="psycopg-pool" version="3.2.1" purpose="Connection pooling - mock in tests" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing test patterns in tests/unit/test_portfolio_api.py for mocking database connections</constraint>
+    <constraint type="pattern">Use _MockCursor, _MockConnection helper classes for database mocking</constraint>
+    <constraint type="pattern">Test file location: tests/unit/test_memories_router.py</constraint>
+    <constraint type="coverage">Achieve >80% code coverage for src/routers/memories.py</constraint>
+    <constraint type="mocking">Mock get_chroma_client() for ChromaDB operations</constraint>
+    <constraint type="mocking">Mock get_timescale_conn(), release_timescale_conn() for typed table operations</constraint>
+    <constraint type="mocking">Mock generate_embedding() for embedding failure tests</constraint>
+    <constraint type="mocking">Mock upsert_memories() for ChromaDB storage failure tests</constraint>
+    <constraint type="fixture">Use api_client fixture from tests/conftest.py for HTTP testing</constraint>
+    <constraint type="assertion">Verify exact HTTP status codes: 200/201 success, 400 validation, 403 unauthorized, 404 not found, 500 error</constraint>
+    <constraint type="assertion">Verify response JSON structure matches schema definitions</constraint>
+    <constraint type="testing">Tests must be independent and not depend on external services</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /v1/memories/direct</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /v1/memories/direct - Body: DirectMemoryRequest - Returns: DirectMemoryResponse</signature>
+      <path>src/routers/memories.py</path>
+    </interface>
+    <interface>
+      <name>DELETE /v1/memories/{memory_id}</name>
+      <kind>REST endpoint</kind>
+      <signature>DELETE /v1/memories/{memory_id}?user_id={user_id} - Returns: DeleteMemoryResponse</signature>
+      <path>src/routers/memories.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryRequest</name>
+      <kind>Pydantic schema</kind>
+      <signature>user_id: str, content: str (max 5000), layer, type, importance (0-1), confidence (0-1), persona_tags, metadata, event_timestamp?, location?, participants?, event_type?, emotional_state?, valence (-1 to 1)?, arousal (0-1)?, trigger_event?, skill_name?, proficiency_level?</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>status: "success"|"error", memory_id?: str, message: str, storage?: Dict[str,bool], error_code?: "VALIDATION_ERROR"|"EMBEDDING_ERROR"|"STORAGE_ERROR"|"INTERNAL_ERROR"</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DeleteMemoryResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>status: "success"|"error", deleted: bool, memory_id: str, storage?: Dict[str,bool], message?: str</signature>
+      <path>src/schemas.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Unit tests use pytest framework with pytest-cov for coverage measurement. Tests follow AAA pattern (Arrange-Act-Assert). Database connections are mocked using _MockCursor and _MockConnection helper classes. HTTP endpoints tested via FastAPI TestClient using the api_client fixture. All tests must be independent and not rely on external services. Coverage target: >80% for memories router.
+    </standards>
+    <locations>
+      <location>tests/unit/test_memories_router.py</location>
+      <location>tests/conftest.py (shared fixtures)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">test_store_memory_minimal_fields - POST with only user_id and content, verify 201 and ChromaDB storage</idea>
+      <idea ac="AC1">test_store_memory_with_episodic_fields - POST with event_timestamp, verify episodic table storage flag</idea>
+      <idea ac="AC1">test_store_memory_with_emotional_fields - POST with emotional_state, verify emotional table storage flag</idea>
+      <idea ac="AC1">test_store_memory_with_procedural_fields - POST with skill_name, verify procedural table storage flag</idea>
+      <idea ac="AC1">test_store_memory_embedding_failure - Mock generate_embedding to return None, verify EMBEDDING_ERROR</idea>
+      <idea ac="AC1">test_store_memory_chromadb_failure - Mock upsert_memories to raise exception, verify STORAGE_ERROR</idea>
+      <idea ac="AC2">test_delete_memory_success - Mock ChromaDB.get and delete, verify 200 with deleted=true</idea>
+      <idea ac="AC2">test_delete_memory_not_found - Mock ChromaDB.get to return empty, verify 404</idea>
+      <idea ac="AC2">test_delete_memory_unauthorized - Mock ChromaDB.get with different user_id, verify 403</idea>
+      <idea ac="AC2">test_delete_memory_cross_storage - Mock metadata flags, verify typed table deletions called</idea>
+      <idea ac="AC3">test_validation_importance_range - POST with importance=1.5, verify 422 validation error</idea>
+      <idea ac="AC3">test_validation_valence_range - POST with valence=2.0, verify 422 validation error</idea>
+      <idea ac="AC3">test_validation_content_max_length - POST with 6000-char content, verify 422 validation error</idea>
+      <idea ac="AC3">test_validation_missing_required_fields - POST without user_id, verify 422 validation error</idea>
+      <idea ac="AC4">Run pytest --cov=src/routers/memories --cov-report=term-missing to verify >80% coverage</idea>
+    </ideas>
+  </tests>
+</story-context>
