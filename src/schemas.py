@@ -666,8 +666,8 @@ class DirectMemoryResponse(BaseModel):
     )
     storage: Optional[Dict[str, bool]] = Field(
         default=None,
-        description="Storage status per backend. Keys: 'chromadb' (always), 'stored_in_episodic', 'stored_in_emotional', 'stored_in_procedural' (conditional based on request fields)",
-        example={"chromadb": True, "stored_in_episodic": True},
+        description="Storage status per backend. Keys: 'chromadb' (always), 'episodic', 'emotional', 'procedural' (conditional based on request fields)",
+        example={"chromadb": True, "episodic": True},
     )
     error_code: Optional[
         Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]
@@ -703,8 +703,8 @@ class DeleteMemoryResponse(BaseModel):
     )
     storage: Optional[Dict[str, bool]] = Field(
         default=None,
-        description="Deletion status per backend. Keys: 'chromadb', 'episodic_memories', 'emotional_memories', 'procedural_memories'. Value is True if deleted, False if not found or failed.",
-        example={"chromadb": True, "episodic_memories": True, "emotional_memories": False, "procedural_memories": False},
+        description="Deletion status per backend. Keys: 'chromadb', 'episodic', 'emotional', 'procedural'. Value is True if deleted, False if not found or failed.",
+        example={"chromadb": True, "episodic": True, "emotional": False, "procedural": False},
     )
     message: Optional[str] = Field(
         default=None,
