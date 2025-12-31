@@ -1,0 +1,217 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>7</storyId>
+    <title>Documentation Update</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-7-documentation-update.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer or API consumer</asA>
+    <iWant>complete documentation for the Direct Memory API endpoints</iWant>
+    <soThat>I can understand and properly use the new POST /v1/memories/direct and DELETE /v1/memories/{memory_id} endpoints</soThat>
+    <tasks>
+      <task id="1">Audit OpenAPI descriptions in schemas.py</task>
+      <task id="2">Add Field(example=...) to key fields</task>
+      <task id="3">Document error codes in response descriptions</task>
+      <task id="4">Update docs/api-contracts-server.md with Direct Memory API section</task>
+      <task id="5">Update docs/architecture.md with storage routing logic</task>
+      <task id="6">Verify /docs shows complete documentation</task>
+      <task id="7">Review documents for accuracy</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="OpenAPI Schema">
+      <given>the Direct Memory API endpoints are implemented</given>
+      <when>I access /docs</when>
+      <then>
+        <check>POST /v1/memories/direct fully documented</check>
+        <check>DELETE /v1/memories/{memory_id} fully documented</check>
+        <check>All request/response fields have descriptions</check>
+        <check>Examples provided via Field(example=...)</check>
+        <check>Error codes documented</check>
+      </then>
+    </criterion>
+    <criterion id="AC2" title="API Contracts Document">
+      <given>the API contracts document at docs/api-contracts-server.md</given>
+      <when>documentation update is complete</when>
+      <then>
+        <check>New section "Direct Memory API" added</check>
+        <check>POST /v1/memories/direct specification with examples</check>
+        <check>DELETE /v1/memories/{memory_id} specification with examples</check>
+        <check>Error codes and meanings documented</check>
+        <check>Performance expectations noted</check>
+      </then>
+    </criterion>
+    <criterion id="AC3" title="Architecture Document">
+      <given>the architecture document at docs/architecture.md</given>
+      <when>documentation update is complete</when>
+      <then>
+        <check>Storage routing logic documented</check>
+        <check>Metadata flag tracking explained</check>
+        <check>Delete logic flow documented</check>
+        <check>Relationship to existing pipeline explained</check>
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-10-direct-memory-api.md</path>
+        <title>Epic 10: Direct Memory API for Explicit Memory Management</title>
+        <section>Full Epic</section>
+        <snippet>Defines POST /v1/memories/direct and DELETE /v1/memories/{memory_id} endpoints with unified API design, storage routing logic, and API specifications including DirectMemoryRequest/Response schemas.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-10.md</path>
+        <title>Tech Spec: Epic 10 - Direct Memory API</title>
+        <section>Full Tech Spec</section>
+        <snippet>Implementation guidance including storage architecture, deletion flow, Pydantic schemas, error handling patterns, and acceptance criteria traceability for all Epic 10 stories.</snippet>
+      </doc>
+      <doc>
+        <path>docs/design-direct-memory-api.md</path>
+        <title>Direct Memory Storage API Design</title>
+        <section>Full Design Document</section>
+        <snippet>Detailed implementation design for POST /v1/memories/direct and DELETE /v1/memories/{memory_id} including request/response schemas, storage routing logic, and example requests/responses.</snippet>
+      </doc>
+      <doc>
+        <path>docs/api-contracts-server.md</path>
+        <title>API Contracts - Backend API (Server)</title>
+        <section>Target Document for AC2</section>
+        <snippet>Existing API contracts document covering Memory Orchestrator APIs, Core Memory APIs, Scheduled Intents API. Needs new "Direct Memory API" section added per AC2.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Agentic Memories v3.0</title>
+        <section>Target Document for AC3</section>
+        <snippet>Existing architecture document with database schema design, novel patterns, implementation patterns. Needs Direct Memory API storage routing logic added per AC3.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Agentic Memories v3.0 - User Profiles API PRD</title>
+        <section>Background Context</section>
+        <snippet>Project overview including hybrid architecture (deterministic profiles + dynamic memories), API endpoint patterns, and existing memory types.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>src/schemas.py</path>
+        <kind>schema</kind>
+        <symbol>DirectMemoryRequest, DirectMemoryResponse, DeleteMemoryResponse (to be added)</symbol>
+        <lines>all</lines>
+        <reason>Target file for AC1 - needs DirectMemoryRequest/Response schemas with Field(description=...) and Field(example=...) per story tasks 1-3. Currently has ScheduledIntentCreate, IntentFireRequest etc. as examples of proper documentation patterns.</reason>
+      </file>
+      <file>
+        <path>src/routers/memories.py</path>
+        <kind>router</kind>
+        <symbol>store_memory_direct, delete_memory (endpoints)</symbol>
+        <lines>new file</lines>
+        <reason>New router implementing POST /v1/memories/direct and DELETE /v1/memories/{memory_id}. OpenAPI docs will be auto-generated from docstrings and schema annotations.</reason>
+      </file>
+      <file>
+        <path>src/services/storage.py</path>
+        <kind>service</kind>
+        <symbol>upsert_memories, _build_metadata</symbol>
+        <lines>1-100</lines>
+        <reason>Existing storage patterns showing ChromaDB upsert. Direct memory storage reuses upsert_memories() function.</reason>
+      </file>
+      <file>
+        <path>src/services/embedding_utils.py</path>
+        <kind>service</kind>
+        <symbol>generate_embedding</symbol>
+        <lines>1-50</lines>
+        <reason>Embedding generation used by direct memory storage. generate_embedding() function reused.</reason>
+      </file>
+      <file>
+        <path>src/routers/intents.py</path>
+        <kind>router</kind>
+        <symbol>existing router pattern</symbol>
+        <lines>all</lines>
+        <reason>Reference for router patterns, OpenAPI documentation style, and error handling conventions used in this project.</reason>
+      </file>
+      <file>
+        <path>src/routers/portfolio.py</path>
+        <kind>router</kind>
+        <symbol>existing router pattern</symbol>
+        <lines>all</lines>
+        <reason>Reference for CRUD router patterns and response model documentation.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.111.0">Web framework with automatic OpenAPI generation</package>
+        <package name="pydantic" version=">=2.9.0">Schema validation with Field() for descriptions and examples</package>
+        <package name="chromadb" version="1.4.0">Vector database for memory storage</package>
+        <package name="openai" version="1.40.0">Embedding generation</package>
+        <package name="psycopg" version="latest">PostgreSQL/TimescaleDB connections</package>
+        <package name="langfuse" version="2.36.0">Observability and tracing</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="story" category="documentation">All Field() definitions in schemas.py must include description parameter for OpenAPI generation</constraint>
+    <constraint source="story" category="documentation">Key fields should include example=... parameter for interactive /docs testing</constraint>
+    <constraint source="story" category="documentation">Error codes (VALIDATION_ERROR, EMBEDDING_ERROR, STORAGE_ERROR, INTERNAL_ERROR) must be documented in schema descriptions</constraint>
+    <constraint source="architecture" category="pattern">Router follows existing pattern from src/routers/intents.py and src/routers/portfolio.py</constraint>
+    <constraint source="tech-spec" category="pattern">Schemas follow existing Pydantic patterns in src/schemas.py with ConfigDict and Field()</constraint>
+    <constraint source="epic" category="api">POST /v1/memories/direct - performance target less than 3 seconds p95</constraint>
+    <constraint source="epic" category="api">DELETE /v1/memories/{memory_id} - performance target less than 1 second p95</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /v1/memories/direct</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /v1/memories/direct -> DirectMemoryResponse</signature>
+      <path>src/routers/memories.py</path>
+    </interface>
+    <interface>
+      <name>DELETE /v1/memories/{memory_id}</name>
+      <kind>REST endpoint</kind>
+      <signature>DELETE /v1/memories/{memory_id}?user_id={user_id} -> DeleteMemoryResponse</signature>
+      <path>src/routers/memories.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryRequest</name>
+      <kind>Pydantic schema</kind>
+      <signature>class DirectMemoryRequest(BaseModel): user_id, content, layer, type, importance, confidence, persona_tags, metadata, event_timestamp, location, participants, event_type, emotional_state, valence, arousal, trigger_event, skill_name, proficiency_level</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DirectMemoryResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>class DirectMemoryResponse(BaseModel): status, memory_id, message, storage, error_code</signature>
+      <path>src/schemas.py</path>
+    </interface>
+    <interface>
+      <name>DeleteMemoryResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>class DeleteMemoryResponse(BaseModel): status, deleted, memory_id, storage, message</signature>
+      <path>src/schemas.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>This project uses pytest for testing with fixtures in tests/conftest.py. Unit tests are in tests/unit/ directory, integration tests in tests/integration/, and e2e tests in tests/e2e/. Mocks for ChromaDB and Redis are available in tests/fixtures/. Test naming convention is test_{feature}_{scenario}.py. Documentation-specific testing involves verifying OpenAPI schema generation via /docs endpoint and ensuring Field() descriptions appear correctly.</standards>
+    <locations>
+      <location>tests/unit/test_*.py</location>
+      <location>tests/integration/test_*.py</location>
+      <location>tests/e2e/test_*.py</location>
+      <location>tests/fixtures/*.py</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC1">Verify /docs endpoint returns valid OpenAPI JSON with documented POST /v1/memories/direct endpoint</idea>
+      <idea acRef="AC1">Verify all DirectMemoryRequest fields have 'description' in OpenAPI schema</idea>
+      <idea acRef="AC1">Verify DirectMemoryResponse.error_code enum values are documented in schema</idea>
+      <idea acRef="AC1">Verify example values appear in /docs interactive UI</idea>
+      <idea acRef="AC2">Manual review of docs/api-contracts-server.md for Direct Memory API section</idea>
+      <idea acRef="AC3">Manual review of docs/architecture.md for storage routing diagram</idea>
+    </ideas>
+  </tests>
+</story-context>

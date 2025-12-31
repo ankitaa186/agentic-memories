@@ -1,0 +1,206 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>10</epicId>
+    <storyId>10-2</storyId>
+    <title>Typed Table Storage (Episodic, Emotional, Procedural)</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-29</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/stories/story-10-2-typed-table-storage-episodic-emotional-procedural.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>API consumer using the direct memory endpoint</asA>
+    <iWant>to provide optional type-specific fields (event_timestamp, emotional_state, skill_name) that automatically route memories to the appropriate typed TimescaleDB tables</iWant>
+    <soThat>memories are stored both in ChromaDB (source of truth) and in typed tables for optimized retrieval patterns</soThat>
+    <tasks>
+      <task id="1">Add optional episodic fields to DirectMemoryRequest schema (event_timestamp, location, participants, event_type)</task>
+      <task id="2">Add optional emotional fields to DirectMemoryRequest schema (emotional_state, valence, arousal, trigger_event)</task>
+      <task id="3">Add optional procedural fields to DirectMemoryRequest schema (skill_name, proficiency_level)</task>
+      <task id="4">Implement _store_episodic() helper function with proper connection management</task>
+      <task id="5">Implement _store_emotional() helper function with proper connection management</task>
+      <task id="6">Implement _store_procedural() helper function with UPSERT logic</task>
+      <task id="7">Add routing logic to determine which typed tables to store in</task>
+      <task id="8">Add metadata flags (stored_in_episodic, stored_in_emotional, stored_in_procedural) to ChromaDB metadata</task>
+      <task id="9">Update response to include storage status per backend</task>
+      <task id="10">Add error handling for typed table storage failures (log and continue)</task>
+      <task id="11">Write unit tests for each helper function</task>
+      <task id="12">Write unit tests for routing logic</task>
+      <task id="13">Write integration tests for typed memory storage</task>
+      <task id="14">Verify memories stored in typed tables are retrievable via hybrid retrieval</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Schema Extension">
+      <given>The DirectMemoryRequest schema exists from Story 10.1</given>
+      <when>A user wants to store typed memories (episodic, emotional, or procedural)</when>
+      <then>The schema should support optional fields for each type</then>
+      <fields type="episodic">
+        <field name="event_timestamp" type="Optional[datetime]" description="When the event occurred - triggers episodic storage"/>
+        <field name="location" type="Optional[str]" description="Where the event occurred"/>
+        <field name="participants" type="Optional[List[str]]" description="People involved in the event"/>
+        <field name="event_type" type="Optional[str]" description="Category of event"/>
+      </fields>
+      <fields type="emotional">
+        <field name="emotional_state" type="Optional[str]" description="Emotional state - triggers emotional storage"/>
+        <field name="valence" type="Optional[float]" constraints="ge=-1.0, le=1.0" description="Emotional valence (-1.0 negative to 1.0 positive)"/>
+        <field name="arousal" type="Optional[float]" constraints="ge=0.0, le=1.0" description="Emotional arousal (0.0 calm to 1.0 excited)"/>
+        <field name="trigger_event" type="Optional[str]" description="What triggered the emotional state"/>
+      </fields>
+      <fields type="procedural">
+        <field name="skill_name" type="Optional[str]" description="Skill name - triggers procedural storage"/>
+        <field name="proficiency_level" type="Optional[str]" values="beginner, intermediate, advanced, expert" description="Skill level"/>
+      </fields>
+    </criterion>
+    <criterion id="AC2" title="Storage Routing">
+      <given>A direct memory request is received with optional typed fields</given>
+      <when>The memory is being stored</when>
+      <then>Routing should occur based on field presence</then>
+      <rules>
+        <rule>If event_timestamp is provided, store in episodic_memories table (TimescaleDB)</rule>
+        <rule>If emotional_state is provided, store in emotional_memories table (TimescaleDB)</rule>
+        <rule>If skill_name is provided, store in procedural_memories table (PostgreSQL)</rule>
+        <rule>Multiple typed fields can be provided simultaneously (e.g., both episodic and emotional)</rule>
+        <rule>ChromaDB storage always occurs regardless of typed fields (per Story 10.1)</rule>
+      </rules>
+      <helperFunctions>
+        <function name="_store_episodic(memory_id, body)">Insert into episodic_memories table</function>
+        <function name="_store_emotional(memory_id, body)">Insert into emotional_memories table</function>
+        <function name="_store_procedural(memory_id, body)">Insert into procedural_memories with UPSERT logic</function>
+      </helperFunctions>
+    </criterion>
+    <criterion id="AC3" title="Metadata Tracking">
+      <given>A memory is stored in typed tables</given>
+      <when>The storage operation completes</when>
+      <then>Metadata flags should be stored in ChromaDB</then>
+      <metadataFlags>
+        <flag name="stored_in_episodic" type="bool">True if stored in episodic_memories table</flag>
+        <flag name="stored_in_emotional" type="bool">True if stored in emotional_memories table</flag>
+        <flag name="stored_in_procedural" type="bool">True if stored in procedural_memories table</flag>
+        <flag name="source" value="direct_api">Indicates memory came from direct API</flag>
+      </metadataFlags>
+      <purpose>Enable efficient cross-storage deletion in Story 10.3</purpose>
+    </criterion>
+    <criterion id="AC4" title="Response">
+      <given>A direct memory storage request is processed</given>
+      <when>The response is returned</when>
+      <then>The response should include storage status per backend</then>
+      <rules>
+        <rule>storage field contains status for each backend attempted</rule>
+        <rule>ChromaDB success is required for overall success (source of truth)</rule>
+        <rule>Typed table storage is best-effort - failures are logged but don't fail the request</rule>
+      </rules>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-10.md" title="Tech Spec: Epic 10 - Direct Memory API" section="Section 4 - Detailed Design">
+        Defines DirectMemoryRequest schema, helper functions (_store_episodic, _store_emotional, _store_procedural),
+        metadata flags (stored_in_episodic, stored_in_emotional, stored_in_procedural), and error handling patterns.
+      </doc>
+      <doc path="docs/epic-10-direct-memory-api.md" title="Epic 10: Direct Memory API" section="Technical Design">
+        Documents storage routing logic, delete logic, and API specifications for typed memory storage.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Database Schema Design">
+        Contains existing database schema patterns for PostgreSQL/TimescaleDB tables including connection pooling patterns.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="src/schemas.py" kind="schema" symbol="class ScheduledIntentCreate" lines="311-339" reason="Reference for Pydantic schema patterns with Field validators and type hints"/>
+      <artifact path="src/services/storage.py" kind="service" symbol="upsert_memories()" lines="61-101" reason="Core ChromaDB storage function to be called from direct memory endpoint - reuse for Story 10.1"/>
+      <artifact path="src/services/storage.py" kind="helper" symbol="_build_metadata()" lines="34-58" reason="Pattern for building ChromaDB metadata dictionary"/>
+      <artifact path="src/dependencies/timescale.py" kind="dependency" symbol="get_timescale_conn, release_timescale_conn" lines="42-84" reason="Connection pooling pattern for PostgreSQL/TimescaleDB - MUST use try/finally with release"/>
+      <artifact path="src/services/episodic_memory.py" kind="service" symbol="_store_in_timescale()" lines="68-107" reason="Existing pattern for inserting into episodic_memories table"/>
+      <artifact path="src/services/episodic_memory.py" kind="service" symbol="delete_memory()" lines="362-386" reason="Cross-storage delete pattern to reference for Story 10.3"/>
+      <artifact path="src/services/emotional_memory.py" kind="service" symbol="_store_emotional_memory()" lines="130-170" reason="Existing pattern for inserting into emotional_memories table"/>
+      <artifact path="src/services/procedural_memory.py" kind="service" symbol="_store_procedural_memory()" lines="117-196" reason="Existing pattern for inserting into procedural_memories table with UPSERT"/>
+      <artifact path="src/routers/intents.py" kind="router" symbol="router" reason="Reference for FastAPI router patterns and Pydantic response models"/>
+      <artifact path="src/routers/portfolio.py" kind="router" symbol="router" reason="Reference for FastAPI router patterns"/>
+      <artifact path="src/routers/profile.py" kind="router" symbol="router" reason="Reference for FastAPI router patterns"/>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="fastapi" version="0.111.0"/>
+        <package name="pydantic" version="2.8.2"/>
+        <package name="psycopg" version="latest"/>
+        <package name="psycopg_pool" version="latest"/>
+        <package name="chromadb" version="0.5.3"/>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">MUST use get_timescale_conn()/release_timescale_conn() pattern with try/finally for all PostgreSQL operations</constraint>
+    <constraint type="pattern">MUST call conn.commit() before release_timescale_conn() for write operations</constraint>
+    <constraint type="pattern">MUST call conn.rollback() in except blocks before re-raising</constraint>
+    <constraint type="architecture">ChromaDB is the source of truth - typed table storage is best-effort (failures logged but don't fail request)</constraint>
+    <constraint type="architecture">Memory ID format: mem_{uuid.hex[:12]} - consistent with existing storage.py pattern</constraint>
+    <constraint type="testing">Unit tests required for each helper function with >80% coverage</constraint>
+    <constraint type="testing">Integration tests must verify typed memories are retrievable via hybrid retrieval</constraint>
+    <constraint type="performance">Typed table write latency target: less than 200ms per table</constraint>
+    <constraint type="error-handling">Typed table failures caught, logged at ERROR level, and tracked in storage_results dict</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="DirectMemoryRequest" kind="pydantic-model" path="src/schemas.py">
+      Extended with optional typed fields: event_timestamp, location, participants, event_type (episodic);
+      emotional_state, valence, arousal, trigger_event (emotional); skill_name, proficiency_level (procedural)
+    </interface>
+    <interface name="_store_episodic(memory_id: str, body: DirectMemoryRequest)" kind="function" path="src/routers/memories.py">
+      INSERT INTO episodic_memories (id, user_id, event_timestamp, event_type, content, location, participants, importance_score, tags, metadata)
+    </interface>
+    <interface name="_store_emotional(memory_id: str, body: DirectMemoryRequest)" kind="function" path="src/routers/memories.py">
+      INSERT INTO emotional_memories (id, user_id, timestamp, emotional_state, valence, arousal, context, trigger_event, metadata)
+      Default valence to 0.0, arousal to 0.5 if not provided
+    </interface>
+    <interface name="_store_procedural(memory_id: str, body: DirectMemoryRequest)" kind="function" path="src/routers/memories.py">
+      INSERT INTO procedural_memories (id, user_id, skill_name, proficiency_level, context, metadata)
+      ON CONFLICT (id) DO UPDATE SET proficiency_level = EXCLUDED.proficiency_level, context = EXCLUDED.context
+      Default proficiency_level to "beginner" if not provided
+    </interface>
+    <interface name="episodic_memories" kind="table" path="TimescaleDB">
+      Columns: id TEXT PK, user_id TEXT, event_timestamp TIMESTAMPTZ, event_type TEXT, content TEXT,
+      location TEXT, participants TEXT[], importance_score FLOAT, tags TEXT[], metadata JSONB
+    </interface>
+    <interface name="emotional_memories" kind="table" path="TimescaleDB">
+      Columns: id TEXT PK, user_id TEXT, timestamp TIMESTAMPTZ, emotional_state TEXT, valence FLOAT,
+      arousal FLOAT, context TEXT, trigger_event TEXT, metadata JSONB
+    </interface>
+    <interface name="procedural_memories" kind="table" path="PostgreSQL">
+      Columns: id TEXT PK, user_id TEXT, skill_name TEXT, proficiency_level TEXT, context TEXT, metadata JSONB
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Unit tests use pytest with mocking for database connections. Integration tests use TestClient with actual
+      ChromaDB and TimescaleDB connections. All tests follow existing patterns in tests/unit/ directory.
+      Code coverage requirement: >80% for memories router code.
+    </standards>
+    <locations>
+      <location>tests/unit/test_memories_router.py</location>
+      <location>tests/integration/test_direct_memory_api.py</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC1">test_schema_accepts_episodic_fields - Validate DirectMemoryRequest accepts event_timestamp, location, participants, event_type</idea>
+      <idea acRef="AC1">test_schema_accepts_emotional_fields - Validate DirectMemoryRequest accepts emotional_state, valence, arousal, trigger_event</idea>
+      <idea acRef="AC1">test_schema_accepts_procedural_fields - Validate DirectMemoryRequest accepts skill_name, proficiency_level</idea>
+      <idea acRef="AC1">test_valence_arousal_constraints - Validate valence is -1.0 to 1.0, arousal is 0.0 to 1.0</idea>
+      <idea acRef="AC2">test_store_episodic_when_event_timestamp_provided - Verify episodic_memories INSERT when event_timestamp present</idea>
+      <idea acRef="AC2">test_store_emotional_when_emotional_state_provided - Verify emotional_memories INSERT when emotional_state present</idea>
+      <idea acRef="AC2">test_store_procedural_when_skill_name_provided - Verify procedural_memories INSERT with UPSERT when skill_name present</idea>
+      <idea acRef="AC2">test_store_multiple_typed_tables - Verify can store in multiple typed tables simultaneously</idea>
+      <idea acRef="AC2">test_chromadb_always_stored - Verify ChromaDB storage happens regardless of typed fields</idea>
+      <idea acRef="AC3">test_metadata_flags_set_correctly - Verify stored_in_episodic, stored_in_emotional, stored_in_procedural flags in ChromaDB metadata</idea>
+      <idea acRef="AC3">test_source_direct_api_in_metadata - Verify source="direct_api" in ChromaDB metadata</idea>
+      <idea acRef="AC4">test_response_includes_storage_status - Verify response.storage contains status per backend</idea>
+      <idea acRef="AC4">test_chromadb_failure_fails_request - Verify overall failure when ChromaDB fails</idea>
+      <idea acRef="AC4">test_typed_table_failure_logs_and_continues - Verify request succeeds when typed table fails (best-effort)</idea>
+      <idea acRef="AC2">test_episodic_memory_retrievable_via_hybrid - Integration test: store episodic, retrieve via time-based query</idea>
+      <idea acRef="AC2">test_emotional_memory_retrievable_via_hybrid - Integration test: store emotional, retrieve via emotional query</idea>
+      <idea acRef="AC2">test_procedural_memory_retrievable - Integration test: store procedural, retrieve via skill query</idea>
+    </ideas>
+  </tests>
+</story-context>
