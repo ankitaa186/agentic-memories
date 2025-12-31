@@ -243,6 +243,76 @@ def _store_procedural(memory_id: str, body: DirectMemoryRequest) -> bool:
             release_timescale_conn(conn)
 
 
+def _rollback_typed_tables(
+    typed_table_id: str,
+    user_id: str,
+    stored_in_episodic: bool,
+    stored_in_emotional: bool,
+    stored_in_procedural: bool,
+) -> None:
+    """
+    Rollback typed table inserts when ChromaDB storage fails.
+
+    This ensures consistency by removing orphaned rows from typed tables
+    when the primary ChromaDB storage fails. Best-effort cleanup - failures
+    are logged but don't raise exceptions.
+
+    Args:
+        typed_table_id: The UUID used for typed table primary keys
+        user_id: The user ID for logging context
+        stored_in_episodic: Whether episodic insert succeeded
+        stored_in_emotional: Whether emotional insert succeeded
+        stored_in_procedural: Whether procedural insert succeeded
+    """
+    if stored_in_episodic:
+        try:
+            _delete_from_episodic(typed_table_id, user_id)
+            logger.info(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s episodic_rolled_back",
+                user_id,
+                typed_table_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s episodic_rollback_failed error=%s",
+                user_id,
+                typed_table_id,
+                exc,
+            )
+
+    if stored_in_emotional:
+        try:
+            _delete_from_emotional(typed_table_id, user_id)
+            logger.info(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s emotional_rolled_back",
+                user_id,
+                typed_table_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s emotional_rollback_failed error=%s",
+                user_id,
+                typed_table_id,
+                exc,
+            )
+
+    if stored_in_procedural:
+        try:
+            _delete_from_procedural(typed_table_id, user_id)
+            logger.info(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s procedural_rolled_back",
+                user_id,
+                typed_table_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[memories._rollback_typed_tables] user_id=%s typed_table_id=%s procedural_rollback_failed error=%s",
+                user_id,
+                typed_table_id,
+                exc,
+            )
+
+
 @router.post("/direct", response_model=DirectMemoryResponse)
 def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
     """
@@ -402,6 +472,11 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
             exc,
             exc_info=True,
         )
+        # Rollback typed table inserts to avoid orphaned rows
+        _rollback_typed_tables(
+            typed_table_id, body.user_id,
+            stored_in_episodic, stored_in_emotional, stored_in_procedural
+        )
         return DirectMemoryResponse(
             status="error",
             memory_id=None,
@@ -414,6 +489,11 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
             "[memories.direct] user_id=%s memory_id=%s chromadb_storage_returned_empty",
             body.user_id,
             memory_id,
+        )
+        # Rollback typed table inserts to avoid orphaned rows
+        _rollback_typed_tables(
+            typed_table_id, body.user_id,
+            stored_in_episodic, stored_in_emotional, stored_in_procedural
         )
         return DirectMemoryResponse(
             status="error",
