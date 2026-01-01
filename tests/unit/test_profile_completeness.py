@@ -13,16 +13,14 @@ def test_expected_profile_fields_structure():
     """Test EXPECTED_PROFILE_FIELDS has correct structure (AC1)"""
     from src.services.profile_storage import EXPECTED_PROFILE_FIELDS, TOTAL_EXPECTED_FIELDS
 
-    # Verify 5 categories
-    assert len(EXPECTED_PROFILE_FIELDS) == 5
-    assert set(EXPECTED_PROFILE_FIELDS.keys()) == {'basics', 'preferences', 'goals', 'interests', 'background'}
+    # Verify 8 categories
+    assert len(EXPECTED_PROFILE_FIELDS) == 8
+    assert set(EXPECTED_PROFILE_FIELDS.keys()) == {
+        'basics', 'preferences', 'goals', 'interests', 'background', 'health', 'personality', 'values'
+    }
 
-    # Verify 5 fields per category
-    for category, fields in EXPECTED_PROFILE_FIELDS.items():
-        assert len(fields) == 5, f"Category {category} should have 5 fields"
-
-    # Verify total is 25
-    assert TOTAL_EXPECTED_FIELDS == 25
+    # Verify total is 27
+    assert TOTAL_EXPECTED_FIELDS == 27
 
 
 def test_expected_profile_fields_content():
@@ -31,14 +29,18 @@ def test_expected_profile_fields_content():
 
     # Verify basics fields
     assert 'name' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'age' in EXPECTED_PROFILE_FIELDS['basics']
+    assert 'birthday' in EXPECTED_PROFILE_FIELDS['basics']
     assert 'location' in EXPECTED_PROFILE_FIELDS['basics']
     assert 'occupation' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'education' in EXPECTED_PROFILE_FIELDS['basics']
+    assert 'family_status' in EXPECTED_PROFILE_FIELDS['basics']
 
     # Verify goals fields
     assert 'short_term' in EXPECTED_PROFILE_FIELDS['goals']
     assert 'long_term' in EXPECTED_PROFILE_FIELDS['goals']
+
+    # Verify new categories exist
+    assert 'allergies' in EXPECTED_PROFILE_FIELDS['health']
+    assert 'personality_type' in EXPECTED_PROFILE_FIELDS['personality']
 
 
 # Mock classes for testing
@@ -82,13 +84,13 @@ class _MockConnection:
 # Test completeness calculation
 def test_completeness_calculation_empty_profile():
     """Test completeness is 0% for empty profile (AC2)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
     # Mock cursor with no profile fields
     mock_cursor = _MockCursor(
-        fetchone_result=(0.0, 0, 25),  # profile exists but empty
+        fetchone_result=(0.0, 0, TOTAL_EXPECTED_FIELDS),  # profile exists but empty
         results=[]  # no fields
     )
     mock_conn = _MockConnection(cursor=mock_cursor)
@@ -101,52 +103,40 @@ def test_completeness_calculation_empty_profile():
     assert result is not None
     assert result["overall_completeness_pct"] == 0.0
     assert result["populated_fields"] == 0
-    assert result["total_fields"] == 25
+    assert result["total_fields"] == TOTAL_EXPECTED_FIELDS
 
 
 def test_completeness_calculation_partial_profile():
     """Test completeness calculation with partial fields (AC1, AC2)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
-    # Mock profile with some fields populated
+    # Mock profile with some fields populated (using new canonical field names)
+    # 10 fields that match EXPECTED_PROFILE_FIELDS
     mock_cursor = _MockCursor(
-        fetchone_result=(40.0, 10, 25),  # profile metadata
-        results=[
-            # Fields from profile_fields table
-            ('basics', 'name'),
-            ('basics', 'age'),
-            ('basics', 'location'),
-            ('preferences', 'likes'),
-            ('preferences', 'dislikes'),
-            ('goals', 'short_term'),
-            ('interests', 'hobbies'),
-            ('interests', 'topics'),
-            ('background', 'skills'),
-            ('background', 'experiences'),
-        ]
+        fetchone_result=(37.0, 10, TOTAL_EXPECTED_FIELDS),  # profile metadata
+        results=[]
     )
 
     # We need to handle multiple fetchall calls
     call_count = [0]
-    original_fetchall = mock_cursor.fetchall
 
     def mock_fetchall():
         call_count[0] += 1
         if call_count[0] == 1:
-            # profile_fields query
+            # profile_fields query - use fields from EXPECTED_PROFILE_FIELDS
             return [
                 ('basics', 'name'),
-                ('basics', 'age'),
+                ('basics', 'birthday'),
                 ('basics', 'location'),
-                ('preferences', 'likes'),
-                ('preferences', 'dislikes'),
+                ('preferences', 'communication_style'),
+                ('preferences', 'food_preferences'),
                 ('goals', 'short_term'),
                 ('interests', 'hobbies'),
-                ('interests', 'topics'),
+                ('interests', 'learning_areas'),
                 ('background', 'skills'),
-                ('background', 'experiences'),
+                ('background', 'current_employer'),
             ]
         elif call_count[0] == 2:
             # confidence_scores query
@@ -162,10 +152,10 @@ def test_completeness_calculation_partial_profile():
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
-    # 10 fields / 25 total = 40%
-    assert result["overall_completeness_pct"] == 40.0
+    # 10 fields / 27 total ≈ 37%
+    assert abs(result["overall_completeness_pct"] - 37.0) < 1.0
     assert result["populated_fields"] == 10
-    assert result["total_fields"] == 25
+    assert result["total_fields"] == TOTAL_EXPECTED_FIELDS
 
     # Verify per-category breakdown
     assert "categories" in result
@@ -176,24 +166,25 @@ def test_completeness_calculation_partial_profile():
 
 def test_completeness_category_breakdown():
     """Test per-category completeness breakdown (AC1)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
     # Mock profile with full basics, empty goals
-    mock_cursor = _MockCursor(fetchone_result=(20.0, 5, 25))
+    mock_cursor = _MockCursor(fetchone_result=(21.7, 5, TOTAL_EXPECTED_FIELDS))
 
     call_count = [0]
 
     def mock_fetchall():
         call_count[0] += 1
         if call_count[0] == 1:
+            # All 5 basics fields from EXPECTED_PROFILE_FIELDS
             return [
                 ('basics', 'name'),
-                ('basics', 'age'),
+                ('basics', 'birthday'),
                 ('basics', 'location'),
                 ('basics', 'occupation'),
-                ('basics', 'education'),
+                ('basics', 'family_status'),
             ]
         return []
 
@@ -211,18 +202,18 @@ def test_completeness_category_breakdown():
     assert result["categories"]["basics"]["completeness_pct"] == 100.0
     assert result["categories"]["basics"]["missing"] == []
 
-    # Goals should be 0%
+    # Goals should be 0% (3 expected fields in goals)
     assert result["categories"]["goals"]["completeness_pct"] == 0.0
-    assert len(result["categories"]["goals"]["missing"]) == 5
+    assert len(result["categories"]["goals"]["missing"]) == 3
 
 
 def test_completeness_missing_fields():
     """Test missing fields are correctly identified (AC1)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
-    mock_cursor = _MockCursor(fetchone_result=(4.0, 1, 25))
+    mock_cursor = _MockCursor(fetchone_result=(4.3, 1, TOTAL_EXPECTED_FIELDS))
 
     call_count = [0]
 
@@ -240,23 +231,23 @@ def test_completeness_missing_fields():
             with patch("src.services.profile_storage.get_redis_client", return_value=None):
                 result = service.get_completeness_details("test-user")
 
-    # Check missing basics fields
+    # Check missing basics fields (using new canonical names)
     basics_missing = result["categories"]["basics"]["missing"]
-    assert "age" in basics_missing
+    assert "birthday" in basics_missing
     assert "location" in basics_missing
     assert "occupation" in basics_missing
-    assert "education" in basics_missing
+    assert "family_status" in basics_missing
     assert "name" not in basics_missing  # name is populated
 
 
 # Test high-value gap identification
 def test_high_value_gaps_basics_priority():
     """Test basics fields have highest priority in gaps (AC3)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
-    mock_cursor = _MockCursor(fetchone_result=(0.0, 0, 25))
+    mock_cursor = _MockCursor(fetchone_result=(0.0, 0, TOTAL_EXPECTED_FIELDS))
 
     call_count = [0]
 
@@ -274,19 +265,19 @@ def test_high_value_gaps_basics_priority():
 
     gaps = result["high_value_gaps"]
 
-    # First 5 gaps should be basics fields
-    basics_fields = {'name', 'age', 'location', 'occupation', 'education'}
+    # First 5 gaps should be basics fields (using new canonical names)
+    basics_fields = {'name', 'birthday', 'location', 'occupation', 'family_status'}
     first_five = set(gaps[:5])
-    assert first_five == basics_fields, "First 5 gaps should be basics fields"
+    assert first_five == basics_fields, f"First 5 gaps should be basics fields, got {first_five}"
 
 
 def test_high_value_gaps_limit():
     """Test high-value gaps are limited to 10 items (AC3)"""
-    from src.services.profile_storage import ProfileStorageService
+    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
 
     service = ProfileStorageService()
 
-    mock_cursor = _MockCursor(fetchone_result=(0.0, 0, 25))
+    mock_cursor = _MockCursor(fetchone_result=(0.0, 0, TOTAL_EXPECTED_FIELDS))
 
     call_count = [0]
 

@@ -203,6 +203,101 @@ def test_update_profile_field_invalid_category(api_client, monkeypatch):
     assert "invalid category" in response.json()["detail"].lower()
 
 
+def test_update_profile_field_null_value_rejected(api_client, monkeypatch):
+    """Test 400 when trying to set field value to null"""
+    response = api_client.put(
+        "/v1/profile/basics/name",
+        json={"user_id": "test-user-123", "value": None, "source": "manual"}
+    )
+
+    assert response.status_code == 400
+    assert "cannot set field value to null" in response.json()["detail"].lower()
+    assert "DELETE" in response.json()["detail"]
+
+
+# Test DELETE /v1/profile/{category}/{field_name} endpoint
+def test_delete_profile_field_success(api_client, mock_db_conn, monkeypatch):
+    """Test successful single field deletion"""
+    conn, cursor = mock_db_conn
+
+    # Mock: profile exists, field exists, then remaining fields after delete
+    # fetchone calls: 1) profile exists check, 2) field exists check
+    # fetchall call: for _update_profile_metadata to get remaining fields
+    cursor.results = [("test-user-123",), ("name",)]
+
+    # Override fetchall to return empty list (no remaining fields after deletion)
+    original_fetchall = cursor.fetchall
+    cursor.fetchall = lambda: []
+
+    def mock_get_conn():
+        return conn
+
+    def mock_release_conn(c):
+        pass
+
+    with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
+        with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
+            response = api_client.delete("/v1/profile/basics/name?user_id=test-user-123")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted"] is True
+    assert data["user_id"] == "test-user-123"
+    assert data["category"] == "basics"
+    assert data["field_name"] == "name"
+
+
+def test_delete_profile_field_invalid_category(api_client, monkeypatch):
+    """Test 400 for invalid category in field delete"""
+    response = api_client.delete("/v1/profile/invalid_category/name?user_id=test-user-123")
+
+    assert response.status_code == 400
+    assert "invalid category" in response.json()["detail"].lower()
+
+
+def test_delete_profile_field_profile_not_found(api_client, mock_db_conn, monkeypatch):
+    """Test 404 when profile doesn't exist for field delete"""
+    conn, cursor = mock_db_conn
+
+    # Mock: profile doesn't exist
+    cursor.results = [None]
+
+    def mock_get_conn():
+        return conn
+
+    def mock_release_conn(c):
+        pass
+
+    with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
+        with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
+            response = api_client.delete("/v1/profile/basics/name?user_id=nonexistent")
+
+    assert response.status_code == 404
+    assert "profile not found" in response.json()["detail"].lower()
+
+
+def test_delete_profile_field_field_not_found(api_client, mock_db_conn, monkeypatch):
+    """Test 404 when field doesn't exist"""
+    conn, cursor = mock_db_conn
+
+    # Mock: profile exists, but field doesn't exist
+    cursor.results = [("test-user-123",), None]
+
+    def mock_get_conn():
+        return conn
+
+    def mock_release_conn(c):
+        pass
+
+    with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
+        with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
+            response = api_client.delete("/v1/profile/basics/nonexistent_field?user_id=test-user-123")
+
+    assert response.status_code == 404
+    assert "field" in response.json()["detail"].lower()
+    assert "not found" in response.json()["detail"].lower()
+
+
 # Test DELETE /v1/profile endpoint
 def test_delete_profile_success(api_client, mock_db_conn, monkeypatch):
     """Test successful profile deletion"""

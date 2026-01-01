@@ -13,15 +13,18 @@ from src.dependencies.redis_client import get_redis_client
 logger = logging.getLogger("agentic_memories.profile_storage")
 
 
-# Expected profile fields per category (Story 1.6)
-# Total: 25 fields (5 categories × 5 fields)
+# Expected profile fields per category
 # These define the baseline for completeness calculation
+# Core fields a "complete" profile should have
 EXPECTED_PROFILE_FIELDS: Dict[str, List[str]] = {
-    'basics': ['name', 'age', 'location', 'occupation', 'education'],
-    'preferences': ['communication_style', 'likes', 'dislikes', 'favorites', 'style'],
-    'goals': ['short_term', 'long_term', 'aspirations', 'plans', 'targets'],
-    'interests': ['hobbies', 'topics', 'activities', 'passions', 'learning'],
-    'background': ['history', 'experiences', 'skills', 'achievements', 'journey']
+    'basics': ['name', 'birthday', 'location', 'occupation', 'family_status'],
+    'preferences': ['communication_style', 'food_preferences', 'love_language', 'gift_preferences'],
+    'goals': ['short_term', 'long_term', 'bucket_list'],
+    'interests': ['hobbies', 'learning_areas', 'favorite_topics'],
+    'background': ['skills', 'education_history', 'work_history', 'current_employer'],
+    'health': ['allergies', 'dietary_needs'],
+    'personality': ['personality_type', 'stress_response', 'social_battery'],
+    'values': ['life_values', 'philanthropy', 'spiritual_alignment']
 }
 
 # Total expected fields count
@@ -503,7 +506,10 @@ class ProfileStorageService:
                 "preferences": {},
                 "goals": {},
                 "interests": {},
-                "background": {}
+                "background": {},
+                "health": {},
+                "personality": {},
+                "values": {}
             }
 
             for row in fields_rows:
