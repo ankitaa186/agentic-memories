@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from src.models import Memory
 from src.services.extract_utils import _call_llm_json
+from src.services.profile_storage import VALID_CATEGORIES
 
 logger = logging.getLogger("agentic_memories.profile_extraction")
 
@@ -470,7 +471,7 @@ class ProfileExtractor:
         """
         validated = []
 
-        valid_categories = {'basics', 'preferences', 'goals', 'interests', 'background', 'health', 'personality', 'values'}
+        valid_categories = set(VALID_CATEGORIES)
         valid_source_types = {'explicit', 'implicit', 'inferred'}
 
         for extraction in extractions:

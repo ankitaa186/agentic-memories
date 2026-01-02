@@ -30,6 +30,9 @@ EXPECTED_PROFILE_FIELDS: Dict[str, List[str]] = {
 # Total expected fields count
 TOTAL_EXPECTED_FIELDS = sum(len(fields) for fields in EXPECTED_PROFILE_FIELDS.values())  # 25
 
+# Valid category names - single source of truth
+VALID_CATEGORIES = list(EXPECTED_PROFILE_FIELDS.keys())
+
 # Redis cache key pattern and TTL for completeness data
 COMPLETENESS_CACHE_KEY = "profile_completeness:{user_id}"
 COMPLETENESS_CACHE_TTL = 3600  # 1 hour
