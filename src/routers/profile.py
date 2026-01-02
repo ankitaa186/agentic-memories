@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
-from src.services.profile_storage import ProfileStorageService
+from src.services.profile_storage import ProfileStorageService, VALID_CATEGORIES
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 
 logger = logging.getLogger("agentic_memories.profile_api")
@@ -220,11 +220,10 @@ def get_profile_category(
     logger.info("[profile.api.get_category] user_id=%s category=%s", user_id, category)
 
     # Validate category
-    valid_categories = ["basics", "preferences", "goals", "interests", "background", "health", "personality", "values"]
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}"
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
         )
 
     # Get full profile and extract category
@@ -262,11 +261,10 @@ def update_profile_field(
     )
 
     # Validate category
-    valid_categories = ["basics", "preferences", "goals", "interests", "background", "health", "personality", "values"]
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}"
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
         )
 
     # Reject null values - use DELETE endpoint instead
@@ -404,11 +402,10 @@ def delete_profile_field(
     )
 
     # Validate category
-    valid_categories = ["basics", "preferences", "goals", "interests", "background", "health", "personality", "values"]
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}"
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
         )
 
     conn = None
