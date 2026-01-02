@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
-from src.services.profile_storage import ProfileStorageService
+from src.services.profile_storage import ProfileStorageService, VALID_CATEGORIES
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 
 logger = logging.getLogger("agentic_memories.profile_api")
@@ -72,6 +72,14 @@ class DeleteResponse(BaseModel):
     """Response model for profile deletion"""
     deleted: bool
     user_id: str
+
+
+class FieldDeleteResponse(BaseModel):
+    """Response model for single field deletion"""
+    deleted: bool
+    user_id: str
+    category: str
+    field_name: str
 
 
 class FieldUpdateResponse(BaseModel):
@@ -212,11 +220,10 @@ def get_profile_category(
     logger.info("[profile.api.get_category] user_id=%s category=%s", user_id, category)
 
     # Validate category
-    valid_categories = ["basics", "preferences", "goals", "interests", "background"]
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}"
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
         )
 
     # Get full profile and extract category
@@ -254,11 +261,17 @@ def update_profile_field(
     )
 
     # Validate category
-    valid_categories = ["basics", "preferences", "goals", "interests", "background"]
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid category '{category}'. Must be one of: {', '.join(valid_categories)}"
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
+        )
+
+    # Reject null values - use DELETE endpoint instead
+    if body.value is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot set field value to null. Use DELETE /v1/profile/{category}/{field_name}?user_id={body.user_id} to remove the field."
         )
 
     conn = None
@@ -322,15 +335,8 @@ def update_profile_field(
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (body.user_id, category, field_name, "manual", "explicit", datetime.now(timezone.utc)))
 
-        # Update user_profiles metadata
+        # Update user_profiles metadata (also updates last_updated)
         _update_profile_metadata(cursor, body.user_id)
-
-        # Update last_updated timestamp
-        cursor.execute("""
-            UPDATE user_profiles
-            SET last_updated = %s
-            WHERE user_id = %s
-        """, (datetime.now(timezone.utc), body.user_id))
 
         conn.commit()
 
@@ -362,6 +368,119 @@ def update_profile_field(
             exc_info=True
         )
         raise HTTPException(status_code=500, detail=f"Failed to update profile field: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            release_timescale_conn(conn)
+
+
+@router.delete("/{category}/{field_name}", response_model=FieldDeleteResponse)
+def delete_profile_field(
+    category: str,
+    field_name: str,
+    user_id: str = Query(..., description="User identifier")
+) -> FieldDeleteResponse:
+    """
+    Delete a single profile field.
+
+    Removes the field from profile_fields, profile_confidence_scores, and profile_sources.
+    Updates profile metadata (completeness, populated_fields count).
+    """
+    logger.info(
+        "[profile.api.delete_field] user_id=%s category=%s field_name=%s",
+        user_id,
+        category,
+        field_name
+    )
+
+    # Validate category
+    if category not in VALID_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category '{category}'. Must be one of: {', '.join(VALID_CATEGORIES)}"
+        )
+
+    conn = None
+    cursor = None
+
+    try:
+        conn = get_timescale_conn()
+        cursor = conn.cursor()
+
+        # Check if user profile exists
+        cursor.execute("""
+            SELECT user_id FROM user_profiles WHERE user_id = %s
+        """, (user_id,))
+
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Profile not found for user_id: {user_id}")
+
+        # Check if field exists
+        cursor.execute("""
+            SELECT field_name FROM profile_fields
+            WHERE user_id = %s AND category = %s AND field_name = %s
+        """, (user_id, category, field_name))
+
+        if cursor.fetchone() is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Field '{field_name}' not found in category '{category}' for user_id: {user_id}"
+            )
+
+        # Delete from profile_sources first (FK constraint)
+        cursor.execute("""
+            DELETE FROM profile_sources
+            WHERE user_id = %s AND category = %s AND field_name = %s
+        """, (user_id, category, field_name))
+
+        # Delete from profile_confidence_scores (FK constraint)
+        cursor.execute("""
+            DELETE FROM profile_confidence_scores
+            WHERE user_id = %s AND category = %s AND field_name = %s
+        """, (user_id, category, field_name))
+
+        # Delete from profile_fields
+        cursor.execute("""
+            DELETE FROM profile_fields
+            WHERE user_id = %s AND category = %s AND field_name = %s
+        """, (user_id, category, field_name))
+
+        # Update user_profiles metadata (also updates last_updated)
+        _update_profile_metadata(cursor, user_id)
+
+        conn.commit()
+
+        logger.info(
+            "[profile.api.delete_field] user_id=%s category=%s field_name=%s success",
+            user_id,
+            category,
+            field_name
+        )
+
+        return FieldDeleteResponse(
+            deleted=True,
+            user_id=user_id,
+            category=category,
+            field_name=field_name
+        )
+
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(
+            "[profile.api.delete_field] user_id=%s category=%s field_name=%s error=%s",
+            user_id,
+            category,
+            field_name,
+            e,
+            exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete profile field: {str(e)}")
     finally:
         if cursor:
             cursor.close()

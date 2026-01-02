@@ -16,14 +16,14 @@ class IngestionPolicy:
     high_volume_cutoff: int = 8
     """Past this many messages we aggressively batch to control costs."""
 
-    low_volume_batch_size: int = 2
-    medium_volume_batch_size: int = 5
-    high_volume_batch_size: int = 8
+    low_volume_batch_size: int = 3
+    medium_volume_batch_size: int = 8
+    high_volume_batch_size: int = 12
 
-    flush_interval: timedelta = timedelta(seconds=30)
+    flush_interval: timedelta = timedelta(seconds=120)
     """Maximum time between writes even if a batch target is not reached."""
 
-    max_buffer_size: int = 15
+    max_buffer_size: int = 20
     """Safety cap to prevent unbounded growth when downstream storage is slow."""
 
 
