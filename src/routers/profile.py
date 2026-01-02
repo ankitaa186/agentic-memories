@@ -335,15 +335,8 @@ def update_profile_field(
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (body.user_id, category, field_name, "manual", "explicit", datetime.now(timezone.utc)))
 
-        # Update user_profiles metadata
+        # Update user_profiles metadata (also updates last_updated)
         _update_profile_metadata(cursor, body.user_id)
-
-        # Update last_updated timestamp
-        cursor.execute("""
-            UPDATE user_profiles
-            SET last_updated = %s
-            WHERE user_id = %s
-        """, (datetime.now(timezone.utc), body.user_id))
 
         conn.commit()
 
@@ -453,15 +446,8 @@ def delete_profile_field(
             WHERE user_id = %s AND category = %s AND field_name = %s
         """, (user_id, category, field_name))
 
-        # Update user_profiles metadata
+        # Update user_profiles metadata (also updates last_updated)
         _update_profile_metadata(cursor, user_id)
-
-        # Update last_updated timestamp
-        cursor.execute("""
-            UPDATE user_profiles
-            SET last_updated = %s
-            WHERE user_id = %s
-        """, (datetime.now(timezone.utc), user_id))
 
         conn.commit()
 
