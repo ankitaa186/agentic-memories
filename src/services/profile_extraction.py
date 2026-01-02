@@ -168,7 +168,7 @@ Be HIGHLY SELECTIVE. Extract only what defines WHO the user IS, not tasks or tra
 
 ```json
 {
-  "category": "basics|preferences|goals|interests|background",
+  "category": "basics|preferences|goals|interests|background|health|personality|values",
   "field_name": "one of the canonical names above",
   "field_value": "string, number, array, or object",
   "confidence": 50-100,
