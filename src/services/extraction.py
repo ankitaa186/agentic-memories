@@ -51,47 +51,6 @@ def _is_user_message(message: Message) -> bool:
 
 
 
-def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_array: bool = False) -> Optional[Any]:
-	logger = logging.getLogger("extraction")
-	api_key = os.getenv("OPENAI_API_KEY")
-	if not api_key or api_key.strip() == "":
-		return None
-	try:
-		from openai import OpenAI  # type: ignore
-
-		client = OpenAI(api_key=api_key)
-		timeout_s = max(1, get_extraction_timeouts_ms() // 1000)
-		retries = max(0, get_extraction_retries())
-		last_exc: Optional[Exception] = None
-		for _ in range(retries + 1):
-			try:
-				resp = client.chat.completions.create(
-					model=EXTRACTION_MODEL,
-					messages=[
-						{"role": "system", "content": system_prompt},
-						{"role": "user", "content": json.dumps(user_payload)},
-					],
-					response_format=None if expect_array else {"type": "json_object"},
-					timeout=timeout_s,
-				)
-				text = resp.choices[0].message.content or ("[]" if expect_array else "{}")
-				logger.info("LLM call ok | model=%s | expect_array=%s | payload=%s | output=%s",
-					EXTRACTION_MODEL,
-					expect_array,
-					json.dumps(user_payload)[:1000],
-					text[:1000],
-				)
-				return json.loads(text)
-			except Exception as exc:  # retry
-				last_exc = exc
-				continue
-		if last_exc:
-			raise last_exc
-	except Exception:
-		logger.exception("LLM call failed | model=%s | expect_array=%s | payload=%s", EXTRACTION_MODEL, expect_array, json.dumps(user_payload)[:1000])
-		return None
-
-
 def _normalize_llm_content(content: str, source_text: str) -> str:
 	text = (content or "").strip()
 	if not text:

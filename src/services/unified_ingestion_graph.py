@@ -997,49 +997,80 @@ def build_unified_ingestion_graph() -> StateGraph:
 def run_unified_ingestion(request: TranscriptRequest) -> Dict[str, Any]:
 	"""Run the unified ingestion graph with native LangChain/Langfuse tracing"""
 	from src.config import is_langfuse_enabled, get_langfuse_public_key, get_langfuse_secret_key, get_langfuse_host
-	
+
 	graph = build_unified_ingestion_graph()
 	compiled_graph = graph.compile()
-	
+
 	initial_state = {
 		"request": request,
 		"user_id": request.user_id,
 		"history": request.history,
 	}
-	
-	# Use LangChain's native Langfuse callback handler
+
+	# Use LangChain's native Langfuse callback handler with Langfuse v3 context propagation
 	if is_langfuse_enabled():
 		try:
-			from langfuse.callback import CallbackHandler
-			
-			# Create Langfuse callback handler with proper configuration
-			langfuse_handler = CallbackHandler(
+			from langfuse.langchain import CallbackHandler
+			from langfuse import Langfuse, observe, propagate_attributes
+
+			# Create Langfuse client
+			langfuse_client = Langfuse(
 				public_key=get_langfuse_public_key(),
 				secret_key=get_langfuse_secret_key(),
 				host=get_langfuse_host(),
-				trace_name="unified_memory_ingestion",
-				user_id=request.user_id,
-				metadata={
-					"history_length": len(request.history),
-					"endpoint": "/v1/store"
+			)
+
+			# Prepare input for tracing
+			trace_input = {
+				"user_id": request.user_id,
+				"history_length": len(request.history),
+				"messages": [{"role": m.role, "content": m.content[:200]} for m in request.history[:3]]
+			}
+
+			# Generate a trace_id upfront so we can reference it
+			trace_id = langfuse_client.create_trace_id()
+			logger.info("[unified_graph] Starting with Langfuse trace_id=%s for user_id=%s", trace_id, request.user_id)
+
+			# Use start_as_current_observation as root - this creates a trace implicitly
+			# All OpenAI wrapper calls inside will be linked to this trace
+			with langfuse_client.start_as_current_observation(
+				as_type="span",
+				name="unified_memory_ingestion",
+				trace_context={
+					"trace_id": trace_id,
+					"user_id": request.user_id,
+					"session_id": f"session_{request.user_id}",
 				},
-				version="1.0.0",
-				session_id=f"session_{request.user_id}"
-			)
-			
-			logger.info("[unified_graph] Starting with Langfuse callback handler for user_id=%s", request.user_id)
-			
-			# Run graph with LangChain callback - this will create proper hierarchy
-			final_state: Dict[str, Any] = compiled_graph.invoke(
-				initial_state,
-				config={
-					"callbacks": [langfuse_handler],
-					"run_name": "unified_memory_ingestion"
+				input=trace_input,
+				metadata={
+					"endpoint": "/v1/store",
+					"history_length": str(len(request.history)),
+				},
+			) as root_span:
+				# Create callback handler - inherits context
+				langfuse_handler = CallbackHandler()
+
+				# Run graph with LangChain callback
+				final_state: Dict[str, Any] = compiled_graph.invoke(
+					initial_state,
+					config={
+						"callbacks": [langfuse_handler],
+						"run_name": "memory_pipeline"
+					}
+				)
+
+				# Update span with output
+				trace_output = {
+					"memories_created": len(final_state.get("memory_ids", [])),
+					"storage_results": final_state.get("storage_results", {}),
+					"total_ms": final_state.get("metrics", {}).get("total_ms", 0),
+					"errors": len(final_state.get("errors", []))
 				}
-			)
-			
-			# Flush to ensure all traces are sent
-			langfuse_handler.flush()
+				root_span.update(output=trace_output)
+
+			# Flush all traces
+			langfuse_client.flush()
+
 			logger.info("[unified_graph] Flushed Langfuse traces")
 			
 		except ImportError as e:

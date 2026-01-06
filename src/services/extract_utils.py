@@ -87,29 +87,12 @@ def _parse_json_from_text(text: str, expect_array: bool) -> Any:
 
 
 def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_array: bool = False) -> Optional[Any]:
-	from src.services.tracing import get_current_trace
-	
+	"""Call LLM and parse JSON response. Uses Langfuse OpenAI wrapper for auto-instrumentation."""
+	from src.config import is_langfuse_enabled
+
 	logger = logging.getLogger("extraction")
 	provider = get_llm_provider()
-	
-	# Start Langfuse generation tracking if trace exists
-	trace = get_current_trace()
-	generation = None
-	
-	if trace:
-		try:
-			generation = trace.generation(
-				name=f"llm_extraction_{provider}",
-				model=EXTRACTION_MODEL,
-				input=[
-					{"role": "system", "content": system_prompt[:500]},
-					{"role": "user", "content": str(user_payload)[:500]}
-				],
-				metadata={"expect_array": expect_array, "provider": provider}
-			)
-		except Exception as e:
-			logger.debug(f"Failed to start Langfuse generation: {e}")
-	
+
 	try:
 		timeout_s = max(1, get_extraction_timeouts_ms() // 1000)
 		retries = max(0, get_extraction_retries())
@@ -119,7 +102,16 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 			api_key = (get_openai_api_key() or "").strip()
 			if not api_key:
 				return None
-			from openai import OpenAI  # type: ignore
+
+			# Use Langfuse OpenAI wrapper for auto-instrumentation if enabled
+			if is_langfuse_enabled():
+				try:
+					from langfuse.openai import OpenAI  # type: ignore
+				except ImportError:
+					from openai import OpenAI  # type: ignore
+			else:
+				from openai import OpenAI  # type: ignore
+
 			client = OpenAI(api_key=api_key)
 			for _ in range(retries + 1):
 				try:
@@ -140,20 +132,6 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 						json.dumps(user_payload)[:1000],
 						text[:1000],
 					)
-					
-					# End Langfuse generation with success
-					if generation:
-						try:
-							generation.end(
-								output=text[:500],
-								usage={
-									"prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
-									"completion_tokens": resp.usage.completion_tokens if resp.usage else 0
-								}
-							)
-						except Exception as e:
-							logger.debug(f"Failed to end Langfuse generation: {e}")
-					
 					return _parse_json_from_text(text, expect_array)
 				except Exception as exc:  # retry
 					last_exc = exc
@@ -163,10 +141,18 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 			api_key = (get_xai_api_key() or "").strip()
 			if not api_key:
 				return None
-			# xAI chat completions API (OpenAI-compatible-ish with base_url)
-			from openai import OpenAI  # type: ignore
+
+			# xAI uses OpenAI-compatible API with custom base_url
+			# Langfuse wrapper supports base_url parameter
+			if is_langfuse_enabled():
+				try:
+					from langfuse.openai import OpenAI  # type: ignore
+				except ImportError:
+					from openai import OpenAI  # type: ignore
+			else:
+				from openai import OpenAI  # type: ignore
+
 			client = OpenAI(api_key=api_key, base_url=get_xai_base_url())
-			# Model naming left to EXTRACTION_MODEL (e.g., "grok-4-fast-reasoning")
 			for _ in range(retries + 1):
 				try:
 					resp = client.chat.completions.create(
@@ -186,20 +172,6 @@ def _call_llm_json(system_prompt: str, user_payload: Dict[str, Any], *, expect_a
 						json.dumps(user_payload)[:1000],
 						text[:1000],
 					)
-					
-					# End Langfuse generation with success
-					if generation:
-						try:
-							generation.end(
-								output=text[:500],
-								usage={
-									"prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
-									"completion_tokens": resp.usage.completion_tokens if resp.usage else 0
-								}
-							)
-						except Exception as e:
-							logger.debug(f"Failed to end Langfuse generation: {e}")
-					
 					return _parse_json_from_text(text, expect_array)
 				except Exception as exc:  # retry
 					last_exc = exc
