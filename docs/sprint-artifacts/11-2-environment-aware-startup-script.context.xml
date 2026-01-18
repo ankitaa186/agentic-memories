@@ -1,0 +1,90 @@
+<story-context id="11-2-environment-aware-startup-script" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>2</storyId>
+    <title>Environment-Aware Startup Script</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-2-environment-aware-startup-script.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>DevOps engineer</asA>
+    <iWant>the startup script to detect environment mode and apply appropriate safety checks</iWant>
+    <soThat>production deployments fail fast with clear error messages if prerequisites are missing, while development mode remains unchanged</soThat>
+    <tasks>
+      <task id="1" ac="1,8">Add environment detection (ENV defaults to dev) and color codes</task>
+      <task id="2" ac="2,4">Implement check_loki_plugin() function with install instructions on failure</task>
+      <task id="3" ac="3,5">Implement validate_prod_env() function to check LOKI_URL</task>
+      <task id="4" ac="6,8">Modify startup section for production mode with correct compose files</task>
+      <task id="5" ac="7,8">Preserve development mode behavior in else block</task>
+      <task id="6" ac="all">Test both modes manually</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.2.1">ENV variable defaults to dev when not set</criterion>
+    <criterion id="AC-11.2.2">ENV=prod triggers Loki plugin check before startup</criterion>
+    <criterion id="AC-11.2.3">ENV=prod validates LOKI_URL is set and not REPLACE_ME</criterion>
+    <criterion id="AC-11.2.4">Missing Loki plugin displays install command and exits non-zero</criterion>
+    <criterion id="AC-11.2.5">Missing LOKI_URL displays configuration example and exits non-zero</criterion>
+    <criterion id="AC-11.2.6">Prod mode uses -f docker-compose.yml -f docker-compose.prod.yml</criterion>
+    <criterion id="AC-11.2.7">Dev mode (ENV=dev or unset) works identically to current behavior</criterion>
+    <criterion id="AC-11.2.8">Console output clearly indicates which mode (dev/prod) is active</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.2" snippet="Modify scripts/run_docker.sh to support ENV-based production mode with proper safety checks." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="Workflows - Startup" snippet="Defines production startup sequence with plugin check, env validation, and compose file selection." />
+    </docs>
+    <code>
+      <file path="scripts/run_docker.sh" kind="script" symbol="main" lines="1-240" reason="Existing startup script to modify - add ENV detection, check_loki_plugin(), validate_prod_env() functions" />
+      <file path="docker-compose.yml" kind="config" symbol="services" lines="1-53" reason="Base compose file used in both dev and prod modes" />
+    </code>
+    <dependencies>
+      <shell>
+        <command name="docker plugin ls" purpose="Check for Loki plugin installation" />
+        <command name="grep" purpose="Parse plugin list output" />
+      </shell>
+      <environment>
+        <var name="ENV" default="dev" values="dev,prod" />
+        <var name="LOKI_URL" required="prod only" />
+      </environment>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="backward-compatibility">Dev mode must work exactly as before - no changes to existing workflow</constraint>
+    <constraint type="fail-fast">Production mode must fail immediately with clear instructions if prerequisites missing</constraint>
+    <constraint type="exit-codes">Use exit 1 for failures, exit 0 for success</constraint>
+    <constraint type="output">Use color codes (RED, GREEN, YELLOW) for visual clarity</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="check_loki_plugin()" kind="function">
+      <signature>check_loki_plugin() -&gt; void (exits 1 on failure)</signature>
+      <description>Checks if Loki Docker plugin is installed and enabled</description>
+    </interface>
+    <interface name="validate_prod_env()" kind="function">
+      <signature>validate_prod_env() -&gt; void (exits 1 on failure)</signature>
+      <description>Validates LOKI_URL environment variable is set and not placeholder</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Infrastructure story - manual validation only. Test all code paths.</standards>
+    <locations>N/A - manual testing of script behavior</locations>
+    <ideas>
+      <idea ac="AC-11.2.1">Run script without ENV set, verify defaults to dev mode</idea>
+      <idea ac="AC-11.2.2">Run ENV=prod without plugin, verify check_loki_plugin fails</idea>
+      <idea ac="AC-11.2.3">Run ENV=prod with plugin but no LOKI_URL, verify validate_prod_env fails</idea>
+      <idea ac="AC-11.2.4">Verify error message includes docker plugin install command</idea>
+      <idea ac="AC-11.2.5">Verify error message includes LOKI_URL format example</idea>
+      <idea ac="AC-11.2.6">Run ENV=prod with all prerequisites, verify uses both compose files</idea>
+      <idea ac="AC-11.2.7">Run ENV=dev, verify existing behavior unchanged</idea>
+      <idea ac="AC-11.2.8">Verify output clearly shows "development mode" or "production mode"</idea>
+    </ideas>
+  </tests>
+</story-context>

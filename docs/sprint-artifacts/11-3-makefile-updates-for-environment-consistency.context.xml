@@ -1,0 +1,84 @@
+<story-context id="11-3-makefile-updates-for-environment-consistency" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>3</storyId>
+    <title>Makefile Updates for Environment Consistency</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-3-makefile-updates-for-environment-consistency.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>Makefile commands to respect the ENV variable and select appropriate compose files</iWant>
+    <soThat>make stop, make docker-logs, and other commands work correctly in both development and production modes</soThat>
+    <tasks>
+      <task id="1" ac="1">Add ENV variable and COMPOSE_FILES conditional logic</task>
+      <task id="2" ac="2">Update stop target to use COMPOSE_FILES</task>
+      <task id="3" ac="3">Update docker-logs target with SERVICE support</task>
+      <task id="4" ac="4">Update docker-rebuild target</task>
+      <task id="5" ac="5">Update docker-health target</task>
+      <task id="6" ac="2">Update docker-shell target for consistency</task>
+      <task id="7" ac="6">Add check-loki target</task>
+      <task id="8" ac="7">Update help target with ENV documentation</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.3.1">COMPOSE_FILES variable selects correct files based on ENV</criterion>
+    <criterion id="AC-11.3.2">make stop ENV=prod stops containers started with prod config</criterion>
+    <criterion id="AC-11.3.3">make docker-logs ENV=prod tails logs from prod containers</criterion>
+    <criterion id="AC-11.3.4">make docker-rebuild ENV=prod rebuilds with prod config</criterion>
+    <criterion id="AC-11.3.5">make docker-health ENV=prod shows prod container status</criterion>
+    <criterion id="AC-11.3.6">make check-loki returns success if plugin installed, error if not</criterion>
+    <criterion id="AC-11.3.7">make help documents ENV=prod usage</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.3" snippet="Update Makefile to pass ENV to all relevant commands and ensure stop/logs work correctly in prod." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="APIs - Makefile Interface" snippet="Documents all Makefile commands and their expected behavior with ENV=prod." />
+    </docs>
+    <code>
+      <file path="Makefile" kind="build" symbol="docker targets" lines="131-195" reason="Existing Makefile to modify - add ENV, COMPOSE_FILES, update docker targets" />
+    </code>
+    <dependencies>
+      <make>
+        <feature name="conditional" syntax="$(if $(filter prod,$(ENV)),...)" />
+        <feature name="shell" syntax="@if [...]; then [...]; fi" />
+      </make>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use $(COMPOSE_FILES) in all docker compose commands for consistency</constraint>
+    <constraint type="backward-compatibility">Default ENV=dev means all commands work without specifying ENV</constraint>
+    <constraint type="variable-scope">ENV must be passed to all docker compose invocations</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="COMPOSE_FILES" kind="make-variable">
+      <definition>COMPOSE_FILES = $(if $(filter prod,$(ENV)),-f docker-compose.yml -f docker-compose.prod.yml,)</definition>
+      <description>Conditional compose file selection based on ENV value</description>
+    </interface>
+    <interface name="check-loki" kind="make-target">
+      <usage>make check-loki</usage>
+      <description>Verifies Loki Docker plugin is installed and enabled</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Infrastructure story - manual validation only.</standards>
+    <locations>N/A - manual testing of Makefile targets</locations>
+    <ideas>
+      <idea ac="AC-11.3.1">Verify COMPOSE_FILES is empty for ENV=dev, contains both files for ENV=prod</idea>
+      <idea ac="AC-11.3.2">Start containers with ENV=prod, then run make stop ENV=prod</idea>
+      <idea ac="AC-11.3.3">Run make docker-logs ENV=prod, verify shows logs</idea>
+      <idea ac="AC-11.3.4">Run make docker-rebuild ENV=prod, verify rebuilds with prod config</idea>
+      <idea ac="AC-11.3.5">Run make docker-health ENV=prod, verify shows container status</idea>
+      <idea ac="AC-11.3.6">Run make check-loki with and without plugin installed</idea>
+      <idea ac="AC-11.3.7">Run make help, verify ENV documentation visible</idea>
+    </ideas>
+  </tests>
+</story-context>
