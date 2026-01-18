@@ -1,0 +1,80 @@
+<story-context id="11-1-production-docker-compose-override" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>1</storyId>
+    <title>Production Docker Compose Override</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-1-production-docker-compose-override.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>DevOps engineer</asA>
+    <iWant>a production Docker Compose override file with Loki logging configuration</iWant>
+    <soThat>container logs are shipped to Grafana Cloud for remote observability without modifying the base docker-compose.yml</soThat>
+    <tasks>
+      <task id="1" ac="1,4">Create docker-compose.prod.yml file at project root with header comments</task>
+      <task id="2" ac="2">Define x-loki-logging YAML anchor with driver and options (retries, batch-size, timeout)</task>
+      <task id="3" ac="1,3">Configure logging for api service with external labels</task>
+      <task id="4" ac="1,3">Configure logging for ui service with external labels</task>
+      <task id="5" ac="1,3">Configure logging for redis service with external labels</task>
+      <task id="6" ac="5">Validate configuration with docker compose config command</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.1.1">docker-compose.prod.yml exists and configures Loki logging driver for all 3 services (api, ui, redis)</criterion>
+    <criterion id="AC-11.1.2">YAML anchor (x-loki-logging) used to avoid configuration duplication</criterion>
+    <criterion id="AC-11.1.3">Each service has labels: service, env=prod, project=agentic-memories</criterion>
+    <criterion id="AC-11.1.4">File includes usage documentation in header comments</criterion>
+    <criterion id="AC-11.1.5">docker compose -f docker-compose.yml -f docker-compose.prod.yml config validates without errors</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.1" snippet="Create docker-compose.prod.yml with Loki logging configuration for all services using YAML anchors." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="Story 11.1 AC" snippet="Defines all acceptance criteria including YAML anchor usage, labels, and validation requirements." />
+    </docs>
+    <code>
+      <file path="docker-compose.yml" kind="config" symbol="services" lines="1-53" reason="Base Docker Compose configuration - defines api, ui, redis services that will be extended by prod override" />
+    </code>
+    <dependencies>
+      <docker>
+        <plugin name="grafana/loki-docker-driver" version="latest" alias="loki" required="true" />
+      </docker>
+      <environment>
+        <var name="LOKI_URL" required="true" format="https://user:key@host/loki/api/v1/push" />
+      </environment>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="file-location">Create docker-compose.prod.yml at project root (same level as docker-compose.yml)</constraint>
+    <constraint type="compatibility">Must work with both docker compose v2 and docker-compose v1</constraint>
+    <constraint type="pattern">Use YAML anchors for DRY configuration</constraint>
+    <constraint type="labels">Include service, env, and project labels for log filtering in Grafana</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Docker Compose Override" kind="config">
+      <description>Production overlay file that extends docker-compose.yml with Loki logging</description>
+      <usage>docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d</usage>
+    </interface>
+    <interface name="Grafana Loki Push API" kind="REST">
+      <endpoint>POST https://logs-prod-us-central1.grafana.net/loki/api/v1/push</endpoint>
+      <auth>Basic auth embedded in LOKI_URL</auth>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Infrastructure story - manual validation only. No unit tests required.</standards>
+    <locations>N/A - validation via docker compose config command</locations>
+    <ideas>
+      <idea ac="AC-11.1.5">Run docker compose -f docker-compose.yml -f docker-compose.prod.yml config and verify YAML parses without errors</idea>
+      <idea ac="AC-11.1.1">Verify output contains logging configuration for all 3 services</idea>
+      <idea ac="AC-11.1.2">Verify x-loki-logging anchor is defined and referenced</idea>
+      <idea ac="AC-11.1.3">Verify loki-external-labels contain correct values for each service</idea>
+    </ideas>
+  </tests>
+</story-context>
