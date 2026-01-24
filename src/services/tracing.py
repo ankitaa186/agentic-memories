@@ -8,9 +8,7 @@ from contextvars import ContextVar
 from typing import Optional, Dict, Any
 
 _current_client: ContextVar[Optional[Any]] = ContextVar('current_client', default=None)
-_current_trace_id: ContextVar[Optional[str]] = ContextVar('current_trace_id', default=None)
 _current_root_span: ContextVar[Optional[Any]] = ContextVar('current_root_span', default=None)
-_current_span: ContextVar[Optional[Any]] = ContextVar('current_span', default=None)
 _span_stack: ContextVar[list] = ContextVar('span_stack', default=[])
 
 
@@ -55,7 +53,6 @@ def start_trace(name: str, user_id: str, metadata: Optional[Dict[str, Any]] = No
 
 		# Store in context vars (keep context_manager for proper cleanup)
 		_current_client.set(client)
-		_current_trace_id.set(trace_id)
 		_current_root_span.set((context_manager, root_span))
 		_span_stack.set([])
 
@@ -231,7 +228,6 @@ def end_trace(output: Optional[Dict[str, Any]] = None) -> None:
 
 		# Clear context vars
 		_current_client.set(None)
-		_current_trace_id.set(None)
 		_current_root_span.set(None)
 		_span_stack.set([])
 
