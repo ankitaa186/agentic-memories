@@ -1,0 +1,45 @@
+# docker-compose.prod.yml
+# Production overrides - Grafana Cloud Loki logging
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Or via Makefile:
+#   make start ENV=prod
+#
+# Prerequisites:
+#   1. Install Loki Docker plugin:
+#      docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+#   2. Set LOKI_URL in .env:
+#      LOKI_URL=https://<user-id>:<api-key>@logs-prod-us-central1.grafana.net/loki/api/v1/push
+#
+# This file extends docker-compose.yml with Loki logging driver configuration
+# for all services. Logs are shipped to Grafana Cloud for remote observability.
+
+x-loki-options: &loki-options
+  loki-url: "${LOKI_URL}"
+  loki-retries: "5"
+  loki-batch-size: "1200"
+  loki-timeout: "5s"
+
+services:
+  api:
+    logging:
+      driver: loki
+      options:
+        <<: *loki-options
+        loki-external-labels: "service=api,env=prod,project=agentic-memories"
+
+  ui:
+    logging:
+      driver: loki
+      options:
+        <<: *loki-options
+        loki-external-labels: "service=ui,env=prod,project=agentic-memories"
+
+  redis:
+    logging:
+      driver: loki
+      options:
+        <<: *loki-options
+        loki-external-labels: "service=redis,env=prod,project=agentic-memories"

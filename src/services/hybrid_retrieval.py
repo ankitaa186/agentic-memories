@@ -154,15 +154,34 @@ class HybridRetrievalService:
                     for i, memory_id in enumerate(search_results['ids'][0]):
                         distance = search_results['distances'][0][i] if search_results.get('distances') else 0.0
                         similarity = 1.0 - distance
+                        metadata = search_results['metadatas'][0][i] or {}
+
+                        # Extract timestamp and calculate recency score
+                        timestamp_str = metadata.get('timestamp')
+                        if timestamp_str:
+                            try:
+                                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                recency = self._calculate_recency_score(timestamp)
+                            except (ValueError, TypeError):
+                                recency = 0.5
+                        else:
+                            recency = 0.5
+
+                        # Extract importance from metadata
+                        try:
+                            importance = float(metadata.get('importance', 0.5))
+                        except (ValueError, TypeError):
+                            importance = 0.5
+
                         result = RetrievalResult(
                             memory_id=memory_id,
                             memory_type="semantic",
                             content=search_results['documents'][0][i],
                             relevance_score=similarity,
-                            recency_score=0.5,
-                            importance_score=0.5,
+                            recency_score=recency,
+                            importance_score=importance,
                             semantic_similarity=similarity,
-                            metadata=search_results['metadatas'][0][i]
+                            metadata=metadata
                         )
                         results.append(result)
             except Exception as e:

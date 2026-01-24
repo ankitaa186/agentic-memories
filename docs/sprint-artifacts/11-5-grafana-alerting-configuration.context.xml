@@ -1,0 +1,81 @@
+<story-context id="11-5-grafana-alerting-configuration" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>5</storyId>
+    <title>Grafana Alerting Configuration</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-5-grafana-alerting-configuration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>DevOps engineer</asA>
+    <iWant>documented alerting rules and LogQL queries for Grafana Cloud</iWant>
+    <soThat>I can set up proactive monitoring and receive notifications for critical issues</soThat>
+    <tasks>
+      <task id="1" ac="1">Create docs/operations directory and ALERTING.md file</task>
+      <task id="2" ac="1,2">Document critical alerts with LogQL queries (error spike, ChromaDB, redis, health check)</task>
+      <task id="3" ac="1,2">Document warning alerts with LogQL queries (LLM latency, store failures, extraction errors)</task>
+      <task id="4" ac="1">Document cost monitoring alerts</task>
+      <task id="5" ac="3">Write step-by-step Grafana Cloud alert setup instructions</task>
+      <task id="6" ac="4">Provide YAML export example for alert rule automation</task>
+      <task id="7" ac="2">Add useful LogQL query reference section</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.5.1">docs/operations/ALERTING.md created with recommended alert rules</criterion>
+    <criterion id="AC-11.5.2">LogQL queries provided for: error spike, ChromaDB failure, redis disconnect, LLM latency</criterion>
+    <criterion id="AC-11.5.3">Step-by-step Grafana Cloud alert setup instructions included</criterion>
+    <criterion id="AC-11.5.4">YAML export example provided for alert rule automation</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.5" snippet="Document and provide example alert rules for Grafana Cloud with LogQL queries and YAML exports." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="NFR - Observability" snippet="Required LogQL queries and recommended alerts with conditions and severity levels." />
+    </docs>
+    <code>
+      <!-- No existing code to reference - this is a documentation-only story -->
+    </code>
+    <dependencies>
+      <external>
+        <service name="Grafana Cloud Alerting" tier="free" limit="50 alert rules" />
+        <service name="Grafana Cloud Loki" query="LogQL" />
+      </external>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="free-tier">Stay within Grafana Cloud free tier limits (50 alert rules)</constraint>
+    <constraint type="labels">All queries must use project=agentic-memories label for filtering</constraint>
+    <constraint type="testable">LogQL queries must be validated for syntax correctness</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="LogQL" kind="query-language">
+      <description>Grafana Loki query language for log filtering and aggregation</description>
+      <examples>
+        <example purpose="error-spike">sum(count_over_time({project="agentic-memories"} |= "ERROR" [5m]))</example>
+        <example purpose="service-filter">{service="api", project="agentic-memories"}</example>
+        <example purpose="json-parse">{service="api"} | json | level="error"</example>
+      </examples>
+    </interface>
+    <interface name="Grafana Alert Rule YAML" kind="config">
+      <apiVersion>1</apiVersion>
+      <description>YAML format for Grafana alert rule export/import</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Documentation story - file inspection and LogQL syntax validation.</standards>
+    <locations>docs/operations/ALERTING.md</locations>
+    <ideas>
+      <idea ac="AC-11.5.1">Verify docs/operations/ALERTING.md exists</idea>
+      <idea ac="AC-11.5.2">Verify LogQL queries are syntactically correct (can test in Grafana Explore)</idea>
+      <idea ac="AC-11.5.3">Verify step-by-step instructions are clear and complete</idea>
+      <idea ac="AC-11.5.4">Verify YAML export is valid apiVersion 1 format</idea>
+    </ideas>
+  </tests>
+</story-context>

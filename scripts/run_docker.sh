@@ -1,10 +1,51 @@
 #!/usr/bin/env bash
+#
+# Run Docker stack for Agentic Memories
+#
+# Usage:
+#   ./scripts/run_docker.sh           # Uses ENVIRONMENT from .env (or dev if unset)
+#   ENV=prod ./scripts/run_docker.sh  # Force production mode
+#   ENV=dev ./scripts/run_docker.sh   # Force development mode
 
 set -euo pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
 echo "[agentic-memories] Starting Docker stack..."
 
 # Ensure Docker is available and the daemon is running
+# Check Loki Docker plugin (for production mode)
+check_loki_plugin() {
+    if ! docker plugin ls 2>/dev/null | grep -q "loki.*true"; then
+        echo -e "${RED}Error: Loki Docker plugin not installed or not enabled${NC}"
+        echo ""
+        echo "Install with:"
+        echo "  docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions"
+        echo ""
+        echo "Or run in dev mode: ENV=dev make start"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Loki Docker plugin installed${NC}"
+}
+
+# Validate production environment variables
+validate_prod_env() {
+    if [ -z "${LOKI_URL:-}" ] || [ "${LOKI_URL:-}" = "REPLACE_ME" ]; then
+        echo -e "${RED}Error: LOKI_URL required for production mode${NC}"
+        echo ""
+        echo "Set in .env:"
+        echo "  LOKI_URL=https://<user-id>:<api-key>@logs-prod-us-central1.grafana.net/loki/api/v1/push"
+        echo ""
+        echo "Or run in dev mode: ENV=dev make start"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ LOKI_URL configured${NC}"
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: docker is not installed or not in PATH." >&2
   exit 1
@@ -69,6 +110,13 @@ if [ -f .env ]; then
   set +a
   set -u
 fi
+
+# Environment detection: ENV shell variable > ENVIRONMENT from .env > default "dev"
+# This allows ENVIRONMENT=prod in .env for persistent production mode
+if [ -z "${ENV:-}" ]; then
+    ENV="${ENVIRONMENT:-dev}"
+fi
+export ENV
 
 # Hint when OPENAI_API_KEY is not set
 if [ -z "${OPENAI_API_KEY:-}" ]; then
@@ -223,17 +271,35 @@ unset LANGFUSE_SECRET_KEY
 unset LANGFUSE_HOST
 unset VITE_API_BASE_URL
 
-# Build and start services
-${COMPOSE_CMD} up -d --build
+# Build and start services based on environment
+if [ "$ENV" = "prod" ]; then
+    echo ""
+    echo -e "${YELLOW}Production mode enabled (ENV=prod)${NC}"
+    check_loki_plugin
+    validate_prod_env
+    echo ""
+    echo -e "${GREEN}Starting Agentic Memories services (${YELLOW}production${GREEN} mode)...${NC}"
+    ${COMPOSE_CMD} -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+    echo ""
+    echo -e "${GREEN}✓ Services started with Loki logging enabled${NC}"
+    echo "View logs at: https://grafana.com (your Grafana Cloud stack)"
+else
+    echo ""
+    echo -e "${GREEN}Starting Agentic Memories services (${YELLOW}development${GREEN} mode)...${NC}"
+    ${COMPOSE_CMD} up -d --build
+fi
 
-echo "\n[agentic-memories] Services started with restart policy 'unless-stopped'."
+echo ""
+echo "[agentic-memories] Services started with restart policy 'unless-stopped'."
 echo "- API:          http://localhost:8080"
 echo "- UI:           http://localhost:80"
 echo "- ChromaDB:     http://localhost:8000 (external)"
 echo "- Redis:        localhost:6379"
 
-echo "\nLogs (follow) -> ${COMPOSE_CMD} logs -f"
+echo ""
+echo "Logs (follow) -> ${COMPOSE_CMD} logs -f"
 echo "Stop services  -> ${COMPOSE_CMD} down"
-echo "\nDone."
+echo ""
+echo "Done."
 
 

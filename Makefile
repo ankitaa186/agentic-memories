@@ -6,8 +6,19 @@
 UV_AVAILABLE := $(shell command -v uv 2>/dev/null)
 PYTHON_VERSION := 3.12
 
+# Environment mode (dev or prod) - used for Docker commands
+# Reads ENVIRONMENT from .env file, falls back to "dev" if not found
+ENV ?= $(shell grep -E '^ENVIRONMENT=' .env 2>/dev/null | cut -d'=' -f2 || echo "dev")
+
+# Compose file selection based on ENV
+# In prod mode, use both base and production override files
+COMPOSE_FILES = $(if $(filter prod,$(ENV)),-f docker-compose.yml -f docker-compose.prod.yml,)
+
 # Default target
 help: ## Show this help message
+	@echo ""
+	@echo "  Environment: Use ENV=prod for production mode (e.g., make start ENV=prod)"
+	@echo ""
 	@echo "Available commands:"
 	@echo ""
 	@echo "  Setup:"
@@ -35,16 +46,17 @@ help: ## Show this help message
 install: venv ## Setup venv and install dependencies
 	@echo "Dependencies installed in .venv/"
 
-start: ## Start Docker containers
-	./scripts/run_docker.sh
+start: ## Start Docker containers (use ENV=prod for production)
+	@ENV=$(ENV) ./scripts/run_docker.sh
 	@echo "Application started at http://localhost:8080"
 
-stop: ## Stop Docker containers
-	docker-compose down
+stop: ## Stop Docker containers (use ENV=prod for production)
+	@echo "Stopping Agentic Memories services..."
+	@docker compose $(COMPOSE_FILES) down
 
 clean: ## Clean up logs, results, and volumes
 	rm -rf tests/e2e/logs/ tests/e2e/results/
-	docker-compose down -v
+	@docker compose $(COMPOSE_FILES) down -v
 
 clean-all: clean ## Clean everything including venv
 	rm -rf .venv
@@ -132,14 +144,44 @@ test-coverage: venv ## Run tests with coverage report
 # DOCKER
 # ============================================================
 
-docker-logs: ## Show Docker container logs
-	docker-compose logs -f app
+docker-logs: ## Show Docker container logs (use ENV=prod for production, SERVICE=name for specific)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Viewing logs from all services..."; \
+		docker compose $(COMPOSE_FILES) logs -f; \
+	else \
+		echo "Viewing logs from $(SERVICE)..."; \
+		docker compose $(COMPOSE_FILES) logs -f $(SERVICE); \
+	fi
 
-docker-shell: ## Open shell in Docker container
-	docker exec -it agentic-memories-app-1 /bin/bash
+docker-shell: ## Open shell in Docker container (use SERVICE=name)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Error: SERVICE variable is required"; \
+		echo "Usage: make docker-shell SERVICE=api"; \
+		exit 1; \
+	fi
+	@echo "Accessing $(SERVICE) shell..."
+	@docker compose $(COMPOSE_FILES) exec $(SERVICE) /bin/bash || docker compose $(COMPOSE_FILES) exec $(SERVICE) /bin/sh
 
 docker-test: ## Run tests inside Docker container
-	docker exec -it agentic-memories-app-1 pytest tests/unit tests/integration -v
+	docker compose $(COMPOSE_FILES) exec api pytest tests/unit tests/integration -v
+
+docker-rebuild: ## Rebuild Docker containers (use ENV=prod for production)
+	@echo "Rebuilding containers..."
+	@docker compose $(COMPOSE_FILES) build --no-cache
+	@echo "Containers rebuilt."
+
+docker-health: ## Check service health (use ENV=prod for production)
+	@echo "Checking service health..."
+	@docker compose $(COMPOSE_FILES) ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
+check-loki: ## Verify Loki Docker plugin is installed
+	@if docker plugin ls 2>/dev/null | grep -q "loki.*true"; then \
+		echo "✓ Loki plugin installed and enabled"; \
+	else \
+		echo "✗ Loki plugin not installed"; \
+		echo "Install with: docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions"; \
+		exit 1; \
+	fi
 
 # ============================================================
 # CODE QUALITY
@@ -164,9 +206,6 @@ endif
 # ============================================================
 # GITHUB ENVIRONMENT MANAGEMENT
 # ============================================================
-
-# Default environment is dev
-ENV ?= dev
 
 gh: ## Interactive GitHub environment manager
 	@python3 scripts/github_env.py

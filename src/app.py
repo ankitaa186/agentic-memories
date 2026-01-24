@@ -925,7 +925,7 @@ def retrieve(
         limit: int = Query(default=50, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
-        from src.services.tracing import start_trace
+        from src.services.tracing import start_trace, end_trace
 
         # Start trace for this request
         trace = start_trace(
@@ -1048,6 +1048,7 @@ def retrieve(
                         trace.update(output={"results_count": len(items), "total": total})
                 except Exception:
                         pass
+                end_trace()
 
         return response
 
@@ -1156,8 +1157,8 @@ def retrieve_persona(body: PersonaRetrieveRequest) -> PersonaRetrieveResponse:
 # Advanced structured retrieval endpoint
 @app.post("/v1/retrieve/structured", response_model=StructuredRetrieveResponse)
 def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveResponse:
-	from src.services.tracing import start_trace
-	
+	from src.services.tracing import start_trace, end_trace
+
 	# Start trace for this request
 	trace = start_trace(
 		name="retrieve_structured",
@@ -1341,15 +1342,16 @@ def retrieve_structured(body: StructuredRetrieveRequest) -> StructuredRetrieveRe
 			trace.update(output={"total_structured_items": total_items})
 		except Exception:
 			pass
-	
+		end_trace()
+
 	return response
 
 
 # Narrative endpoint
 @app.post("/v1/narrative", response_model=NarrativeResponse)
 def narrative(body: NarrativeRequest) -> NarrativeResponse:
-    from src.services.tracing import start_trace
-    
+    from src.services.tracing import start_trace, end_trace
+
     # Start trace for this request
     trace = start_trace(
         name="narrative_generation",
@@ -1386,7 +1388,8 @@ def narrative(body: NarrativeRequest) -> NarrativeResponse:
             trace.update(output={"sources_count": len(ntv.sources)})
         except Exception:
             pass
-    
+        end_trace()
+
     return response
 
 
@@ -1410,8 +1413,8 @@ def maintenance(body: MaintenanceRequest) -> MaintenanceResponse:
 
 @app.get("/v1/portfolio/summary", response_model=PortfolioSummaryResponse)
 def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200, ge=1, le=1000)) -> PortfolioSummaryResponse:
-    from src.services.tracing import start_trace
-    
+    from src.services.tracing import start_trace, end_trace
+
     # Start trace for this request
     trace = start_trace(
         name="portfolio_summary",
@@ -1471,7 +1474,8 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
                 trace.update(output={"holdings_count": len(holdings), "source": "postgres"})
             except Exception:
                 pass
-        
+            end_trace()
+
         return response
     except Exception as exc:
         logger.warning("[portfolio.summary] Failed to fetch from DB, falling back to ChromaDB: %s", exc)
@@ -1565,7 +1569,8 @@ def portfolio_summary(user_id: str = Query(...), limit: int = Query(default=200,
             trace.update(output={"holdings_count": len(holdings), "source": "chromadb_fallback"})
         except Exception:
             pass
-    
+        end_trace()
+
     return response
 
 
