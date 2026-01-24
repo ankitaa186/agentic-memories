@@ -19,8 +19,8 @@
 x-loki-options: &loki-options
   loki-url: "${LOKI_URL}"
   loki-retries: "5"
-  loki-batch-size: "400"
-  loki-timeout: "2s"
+  loki-batch-size: "1200"
+  loki-timeout: "5s"
 
 services:
   api:
