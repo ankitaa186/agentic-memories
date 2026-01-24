@@ -112,7 +112,7 @@ class PersonaContext(BaseModel):
 class PersonaRetrieveRequest(BaseModel):
 	user_id: str
 	query: Optional[str] = None
-	limit: int = Field(default=10, ge=1, le=50)
+	limit: int = Field(default=10, ge=1, le=1000)
 	offset: int = Field(default=0, ge=0)
 	persona_context: Optional[PersonaContext] = None
 	granularity: Literal["raw", "episodic", "arc", "auto"] = "auto"

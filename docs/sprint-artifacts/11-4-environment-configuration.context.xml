@@ -1,0 +1,65 @@
+<story-context id="11-4-environment-configuration" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>4</storyId>
+    <title>Environment Configuration</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-4-environment-configuration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>LOKI_URL documented in env.example with clear instructions</iWant>
+    <soThat>I know how to configure cloud logging for production deployments</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Add Cloud Logging section to env.example with LOKI_URL, format documentation, and plugin install instructions</task>
+      <task id="2" ac="1,2">Verify documentation completeness</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.4.1">LOKI_URL added to env.example with format documentation</criterion>
+    <criterion id="AC-11.4.2">Loki plugin installation command documented in env.example</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.4" snippet="Add Loki configuration to environment files and documentation." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="Dependencies - Setup" snippet="Grafana Cloud setup requirements and LOKI_URL format." />
+    </docs>
+    <code>
+      <file path="env.example" kind="config" symbol="environment" lines="1-23" reason="Existing env.example to modify - add LOKI_URL and cloud logging section" />
+    </code>
+    <dependencies>
+      <external>
+        <service name="Grafana Cloud" url="https://grafana.com/products/cloud/" tier="free" />
+      </external>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="security">LOKI_URL contains credentials - never commit actual values to git</constraint>
+    <constraint type="format">URL format must be documented: https://user-id:api-key@host/loki/api/v1/push</constraint>
+    <constraint type="clarity">Include Grafana Cloud navigation path for obtaining URL</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="LOKI_URL" kind="environment-variable">
+      <format>https://&lt;user-id&gt;:&lt;api-key&gt;@&lt;host&gt;/loki/api/v1/push</format>
+      <example>https://123456:glc_abc123@logs-prod-us-central1.grafana.net/loki/api/v1/push</example>
+      <required>Only when ENV=prod</required>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Documentation story - file inspection only.</standards>
+    <locations>N/A</locations>
+    <ideas>
+      <idea ac="AC-11.4.1">Verify env.example contains LOKI_URL= with format documentation</idea>
+      <idea ac="AC-11.4.2">Verify env.example contains docker plugin install command in comments</idea>
+      <idea ac="AC-11.4.1">Verify Grafana Cloud navigation path is documented</idea>
+    </ideas>
+  </tests>
+</story-context>

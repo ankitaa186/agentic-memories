@@ -1,0 +1,88 @@
+<story-context id="11-6-integration-testing-validation" v="1.0">
+  <metadata>
+    <epicId>11</epicId>
+    <storyId>6</storyId>
+    <title>Integration Testing and Validation</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/11-6-integration-testing-validation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>DevOps engineer</asA>
+    <iWant>to validate the complete cloud logging setup works end-to-end</iWant>
+    <soThat>I can confirm both development and production modes function correctly before deploying to production</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Validate development mode (regression testing)</task>
+      <task id="2" ac="6">Validate production mode prerequisites check (error handling)</task>
+      <task id="3" ac="3">Install Loki plugin if not present</task>
+      <task id="4" ac="3,4,5">Configure Grafana Cloud (prerequisite)</task>
+      <task id="5" ac="3">Validate production mode startup</task>
+      <task id="6" ac="4,5">Validate log delivery to Grafana Cloud</task>
+      <task id="7" ac="3">Validate Makefile commands in prod mode</task>
+      <task id="8" ac="all">Create validation checklist document with results</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-11.6.1">Dev mode: make start works without ENV set</criterion>
+    <criterion id="AC-11.6.2">Dev mode: No Loki-related errors in startup</criterion>
+    <criterion id="AC-11.6.3">Prod mode: make start ENV=prod starts with Loki logging</criterion>
+    <criterion id="AC-11.6.4">Prod mode: Logs appear in Grafana Cloud within 10 seconds</criterion>
+    <criterion id="AC-11.6.5">Prod mode: Labels (service, env, project) visible in Grafana</criterion>
+    <criterion id="AC-11.6.6">Error handling: Graceful failure with instructions when prerequisites missing</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epic-cloud-logging.md" title="Epic 11: Cloud Logging" section="Story 11.6" snippet="Validate the complete setup works end-to-end with manual validation checklist." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-11.md" title="Tech Spec Epic 11" section="Test Strategy Summary" snippet="Manual validation checklist covering dev mode, prod mode, and error handling scenarios." />
+    </docs>
+    <code>
+      <file path="docker-compose.prod.yml" kind="config" reason="Created in Story 11.1 - validate Loki configuration" />
+      <file path="scripts/run_docker.sh" kind="script" reason="Modified in Story 11.2 - validate ENV detection and safety checks" />
+      <file path="Makefile" kind="build" reason="Modified in Story 11.3 - validate all docker commands with ENV=prod" />
+      <file path="env.example" kind="config" reason="Modified in Story 11.4 - validate LOKI_URL documentation" />
+      <file path="docs/operations/ALERTING.md" kind="docs" reason="Created in Story 11.5 - validate exists with LogQL queries" />
+    </code>
+    <dependencies>
+      <external>
+        <service name="Grafana Cloud" required="true" purpose="Verify logs appear within 10 seconds" />
+      </external>
+      <local>
+        <plugin name="grafana/loki-docker-driver" required="true" purpose="Production mode testing" />
+      </local>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="ordering">Stories 11.1-11.5 must be complete before this validation story</constraint>
+    <constraint type="latency">Log delivery must be verified within 10 seconds</constraint>
+    <constraint type="regression">Development mode must work identically to before Epic 11</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Grafana Cloud Explore" kind="UI">
+      <purpose>Query logs to verify delivery and labels</purpose>
+      <query>{project="agentic-memories"}</query>
+    </interface>
+    <interface name="docker plugin ls" kind="CLI">
+      <purpose>Verify Loki plugin installed</purpose>
+      <expected>loki:latest  Loki Logging Driver  true</expected>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration validation story - comprehensive manual testing of all Epic 11 deliverables.</standards>
+    <locations>N/A - manual validation with checklist</locations>
+    <ideas>
+      <idea ac="AC-11.6.1">Run make start without ENV, verify services start in dev mode</idea>
+      <idea ac="AC-11.6.2">Check startup output for any Loki-related errors</idea>
+      <idea ac="AC-11.6.3">Run make start ENV=prod with all prerequisites, verify success</idea>
+      <idea ac="AC-11.6.4">Query Grafana Cloud: {project="agentic-memories"}, verify logs within 10s</idea>
+      <idea ac="AC-11.6.5">Expand log entry in Grafana, verify service/env/project labels</idea>
+      <idea ac="AC-11.6.6">Test missing plugin and missing LOKI_URL scenarios</idea>
+    </ideas>
+  </tests>
+</story-context>

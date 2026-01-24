@@ -41,8 +41,9 @@
 # 2025-12-22: Re-added Epic 5 (Scheduled Intents API) to backlog
 # 2025-12-24: Added Epic 6 (Intents API Alignment) with 6 stories - extends Epic 5 for Annie integration
 # 2025-12-29: Added Epic 10 (Direct Memory API) with 7 stories - enables Annie explicit memory control
+# 2026-01-17: Added Epic 11 (Cloud Logging) with 6 stories - Grafana Cloud Loki integration (mirrors Annie Epic 17)
 
-generated: 2025-12-29
+generated: 2026-01-17
 project: agentic-memories
 project_key: agentic-memories
 tracking_system: file-system
@@ -159,6 +160,22 @@ development_status:
   10-6-integration-tests: done
   10-7-documentation-update: done
   epic-10-retrospective: optional
+
+  # ============================================================
+  # EPIC 11: Cloud Logging - Grafana Cloud Loki Integration
+  # Source: docs/epic-cloud-logging.md
+  # Priority: P1 (Operational observability)
+  # Dependencies: None
+  # Mirrors: Annie Epic 17 (Cloud Logging)
+  # ============================================================
+  epic-11: done
+  11-1-production-docker-compose-override: done
+  11-2-environment-aware-startup-script: done
+  11-3-makefile-updates-for-environment-consistency: done
+  11-4-environment-configuration: done
+  11-5-grafana-alerting-configuration: done
+  11-6-integration-testing-validation: done
+  epic-11-retrospective: optional
 
   # ============================================================
   # EPIC (TBD): Ingestion Graph Optimization
