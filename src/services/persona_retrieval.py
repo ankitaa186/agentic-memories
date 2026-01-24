@@ -11,11 +11,23 @@ from src.services.summary_manager import SummaryManager
 
 
 PERSONA_WEIGHT_PROFILES: Dict[str, Dict[str, float]] = {
+    # Core personas (general-purpose)
     "identity": {"semantic": 0.5, "temporal": 0.2, "importance": 0.2, "emotional": 0.1},
     "relationships": {"semantic": 0.3, "temporal": 0.2, "importance": 0.2, "emotional": 0.3},
     "health": {"semantic": 0.25, "temporal": 0.25, "importance": 0.25, "emotional": 0.25},
     "finance": {"semantic": 0.3, "temporal": 0.3, "importance": 0.3, "emotional": 0.1},
     "creativity": {"semantic": 0.4, "temporal": 0.15, "importance": 0.25, "emotional": 0.2},
+    # Annie companion personas
+    # - partner: Intimate companion with deep emotional bond, pattern recognition, mirror work
+    "partner": {"semantic": 0.25, "temporal": 0.25, "importance": 0.15, "emotional": 0.35},
+    # - guide: Wise mentor for decisions, goals, accountability, transformation
+    "guide": {"semantic": 0.30, "temporal": 0.25, "importance": 0.30, "emotional": 0.15},
+    # - strategist: Financial advisor for investments, portfolio, wealth planning
+    "strategist": {"semantic": 0.25, "temporal": 0.30, "importance": 0.35, "emotional": 0.10},
+    # - expert: Technical peer for DIY, cooking, smart home, domain knowledge
+    "expert": {"semantic": 0.50, "temporal": 0.15, "importance": 0.20, "emotional": 0.15},
+    # - friend: Casual warm companion for everyday moments
+    "friend": {"semantic": 0.30, "temporal": 0.25, "importance": 0.15, "emotional": 0.30},
 }
 
 
