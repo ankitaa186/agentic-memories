@@ -39,7 +39,7 @@ class ReconstructionService:
         *,
         query: Optional[str] = None,
         time_range: Optional[Tuple[datetime, datetime]] = None,
-        limit: int = 25,
+        limit: int = 100,
         prefetched_memories: Optional[List[Dict[str, Any]]] = None,
         summaries: Optional[List[Dict[str, Any]]] = None,
         persona: Optional[str] = None,
@@ -94,7 +94,7 @@ class ReconstructionService:
                     user_id=user_id,
                     query_text=query,
                     time_range=time_range,
-                    limit=max(1, min(limit, 50)),
+                    limit=max(1, min(limit, 100)),
                 )
                 results = self.retrieval.retrieve_memories(rq)
                 for r in results:
