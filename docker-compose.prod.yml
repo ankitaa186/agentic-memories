@@ -16,32 +16,30 @@
 # This file extends docker-compose.yml with Loki logging driver configuration
 # for all services. Logs are shipped to Grafana Cloud for remote observability.
 
-x-loki-logging: &loki-logging
-  driver: loki
-  options:
-    loki-url: "${LOKI_URL}"
-    loki-retries: "5"
-    loki-batch-size: "400"
-    loki-timeout: "2s"
+x-loki-options: &loki-options
+  loki-url: "${LOKI_URL}"
+  loki-retries: "5"
+  loki-batch-size: "400"
+  loki-timeout: "2s"
 
 services:
   api:
     logging:
-      <<: *loki-logging
+      driver: loki
       options:
-        loki-url: "${LOKI_URL}"
+        <<: *loki-options
         loki-external-labels: "service=api,env=prod,project=agentic-memories"
 
   ui:
     logging:
-      <<: *loki-logging
+      driver: loki
       options:
-        loki-url: "${LOKI_URL}"
+        <<: *loki-options
         loki-external-labels: "service=ui,env=prod,project=agentic-memories"
 
   redis:
     logging:
-      <<: *loki-logging
+      driver: loki
       options:
-        loki-url: "${LOKI_URL}"
+        <<: *loki-options
         loki-external-labels: "service=redis,env=prod,project=agentic-memories"
