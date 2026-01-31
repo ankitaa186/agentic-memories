@@ -570,10 +570,19 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 		for i, (memory, classification) in enumerate(zip(memories, classifications)):
 			if not classification.get("is_episodic"):
 				continue
-			
+
 			# Generate a proper UUID for episodic storage (different from ChromaDB mem_xxx ID)
 			episodic_id = str(uuid.uuid4())
-			
+
+			# Extract emotional valence/arousal from sentiment analysis (if available)
+			sentiment = classification.get("sentiment") or {}
+			emotional_valence = float(sentiment.get("valence", 0.0))
+			emotional_arousal = float(sentiment.get("arousal", 0.0))
+
+			if sentiment:
+				logger.debug("[graph.episodic] Applying sentiment to episodic memory: valence=%.2f arousal=%.2f emotion=%s",
+				            emotional_valence, emotional_arousal, sentiment.get("dominant_emotion", "unknown"))
+
 			episodic_memory = EpisodicMemory(
 				id=episodic_id,
 				user_id=user_id,
@@ -582,8 +591,8 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 				content=memory.content,
 				location=memory.metadata.get('location'),
 				participants=memory.metadata.get('participants'),
-				emotional_valence=0.0,
-				emotional_arousal=0.0,
+				emotional_valence=emotional_valence,
+				emotional_arousal=emotional_arousal,
 				importance_score=memory.confidence,
 				tags=memory.metadata.get('tags', []),
 				metadata=memory.metadata

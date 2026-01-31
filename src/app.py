@@ -922,6 +922,7 @@ def retrieve(
         layer: Optional[str] = Query(default=None),
         type: Optional[str] = Query(default=None),
         persona: Optional[str] = Query(default=None),
+        sort: Optional[str] = Query(default=None, description="Sort order: 'newest' or 'oldest' (by timestamp)"),
         limit: int = Query(default=50, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
@@ -969,6 +970,13 @@ def retrieve(
         else:
                 fallback_filters = dict(metadata_filters)
                 raw_items, total = search_memories(user_id=user_id, query=query or "", filters=fallback_filters, limit=limit, offset=offset)
+
+        # Sort by timestamp if requested
+        if sort in ("newest", "oldest"):
+                def _ts_key(r: dict) -> str:
+                        meta = r.get("metadata", {}) if isinstance(r, dict) else {}
+                        return meta.get("timestamp", "") if isinstance(meta, dict) else ""
+                raw_items.sort(key=_ts_key, reverse=(sort == "newest"))
 
         items = _convert_to_retrieve_items(raw_items)
 

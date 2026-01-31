@@ -48,15 +48,18 @@ def _build_metadata(memory: Memory) -> Dict[str, Any]:
 		meta["emotional_signature"] = json.dumps(memory.emotional_signature)
 	if memory.ttl is not None:
 		meta["ttl_epoch"] = _ttl_epoch_from_ttl(memory.ttl)
-	# Pass-through structured fields where present
-	for key in ("project", "relationship", "learning_journal", "portfolio",
-	            "source", "typed_table_id", "stored_in_episodic", 
-	            "stored_in_emotional", "stored_in_procedural"):
-		if key in memory.metadata:
-			if isinstance(memory.metadata[key], (list, dict)):
-				meta[key] = json.dumps(memory.metadata[key])  # Serialize if non-scalar
-			else:
-				meta[key] = memory.metadata[key]
+	# Pass-through all metadata fields not already in meta
+	for key, value in memory.metadata.items():
+		if key in meta or key == "tags":  # tags already handled above
+			continue
+		if value is None:
+			continue
+		if isinstance(value, (list, dict)):
+			meta[key] = json.dumps(value)
+		elif isinstance(value, (str, int, float, bool)):
+			meta[key] = value
+		else:
+			meta[key] = str(value)  # Coerce unsupported types for ChromaDB
 	return meta
 
 
