@@ -10,7 +10,8 @@ class Memory(BaseModel):
 	id: Optional[str] = None
 	user_id: str
 	content: str
-	layer: Literal["short-term", "semantic", "long-term"]
+	# Extended layers: episodic (time-bound events), procedural (skills), emotional (mood states)
+	layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]
 	type: Literal["explicit", "implicit"]
 	embedding: Optional[List[float]] = None
 	timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

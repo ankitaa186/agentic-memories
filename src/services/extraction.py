@@ -20,7 +20,8 @@ from src.config import (
 	get_extraction_timeouts_ms,
 	get_max_memories_per_request,
 )
-from src.services.prompts import WORTHINESS_PROMPT, TYPING_PROMPT, EXTRACTION_PROMPT
+from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3
+from src.services.prompts import TYPING_PROMPT  # Still use V1 for typing if needed
 from src.services.graph_extraction import run_extraction_graph
 from src.services.extract_utils import _call_llm_json
 from src.services.embedding_utils import generate_embedding

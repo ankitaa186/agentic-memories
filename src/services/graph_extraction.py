@@ -7,7 +7,7 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
-from src.services.prompts import WORTHINESS_PROMPT, EXTRACTION_PROMPT
+from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3
 from src.schemas import TranscriptRequest
 from src.services.extract_utils import _call_llm_json
 from src.services.memory_context import get_relevant_existing_memories, format_memories_for_llm_context
@@ -23,7 +23,7 @@ def build_extraction_graph() -> StateGraph:
 
 		# Process all messages to capture initial profile information
 		payload = {"history": state["history"]}
-		resp = _call_llm_json(WORTHINESS_PROMPT, payload)
+		resp = _call_llm_json(WORTHINESS_PROMPT_V3, payload)
 		state["worthy"] = bool(resp and resp.get("worthy", False))
 		state["worthy_raw"] = resp
 
@@ -50,8 +50,8 @@ def build_extraction_graph() -> StateGraph:
 			"existing_memories_context": existing_context
 		}
 
-		# Enhanced extraction prompt with context
-		enhanced_prompt = f"{EXTRACTION_PROMPT}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
+		# Enhanced V3 extraction prompt with context (includes emotional/narrative support)
+		enhanced_prompt = f"{EXTRACTION_PROMPT_V3}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
 
 		items = _call_llm_json(enhanced_prompt, payload, expect_array=True) or []
 		state["items"] = items

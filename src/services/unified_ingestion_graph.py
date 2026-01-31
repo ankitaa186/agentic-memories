@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from langgraph.graph import StateGraph, END
 from src.schemas import TranscriptRequest
-from src.services.prompts import WORTHINESS_PROMPT, EXTRACTION_PROMPT
+from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3
 from src.services.extract_utils import _call_llm_json
 from src.services.memory_context import format_memories_for_llm_context, get_relevant_existing_memories
 from src.services.storage import upsert_memories
@@ -136,7 +136,7 @@ def node_worthiness(state: IngestionState) -> IngestionState:
 	# Process ALL messages to capture initial profile information
 	payload = {"history": history_dicts}
 	
-	resp = _call_llm_json(WORTHINESS_PROMPT, payload)
+	resp = _call_llm_json(WORTHINESS_PROMPT_V3, payload)
 	worthy = bool(resp and resp.get("worthy", False))
 	
 	state["worthy"] = worthy
@@ -176,8 +176,8 @@ def node_extract(state: IngestionState) -> IngestionState:
 		"existing_memories_context": existing_context
 	}
 	
-	# Enhanced extraction prompt with context
-	enhanced_prompt = f"{EXTRACTION_PROMPT}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
+	# Enhanced extraction prompt with context (using V3 prompt with emotional/narrative support)
+	enhanced_prompt = f"{EXTRACTION_PROMPT_V3}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
 	
 	items = _call_llm_json(enhanced_prompt, payload, expect_array=True) or []
 	state["extracted_items"] = items
@@ -190,39 +190,58 @@ def node_extract(state: IngestionState) -> IngestionState:
 
 
 def node_classify_and_enrich(state: IngestionState) -> IngestionState:
-	"""Classify memory types and enrich with sentiment analysis"""
+	"""Classify memory types and enrich with sentiment analysis
+
+	V3 Enhancement: Uses emotional_context from extraction output when available,
+	reducing redundant LLM calls and providing richer emotional data.
+	"""
 	from src.services.tracing import start_span, end_span
-	
+
 	span = start_span("classification_enrichment", input={
 		"items_count": len(state.get("extracted_items", []))
 	})
-	
+
 	items = state.get("extracted_items", [])
 	classifications = []
-	
+
 	for item in items:
 		content = str(item.get("content", "")).strip()
 		tags = item.get("tags", [])
-		
-		# Basic classification
+		layer = item.get("layer", "semantic")
+
+		# V3: Use layer from extraction for classification
 		classification = {
-			"is_episodic": _is_episodic(item, tags),
-			"is_procedural": _is_procedural(item, tags),
+			"is_episodic": layer == "episodic" or _is_episodic(item, tags),
+			"is_procedural": layer == "procedural" or _is_procedural(item, tags),
 			"is_financial": bool(item.get("portfolio")),
 			"has_relationship": bool(item.get("relationship")),
 			"has_learning": bool(item.get("learning_journal")),
 		}
-		
-		# LLM-based sentiment analysis for potential emotional content
-		sentiment = None
-		if _might_have_emotion(content, tags):
+
+		# V3: Use emotional_context from extraction if available (no extra LLM call needed)
+		emotional_context = item.get("emotional_context")
+		if emotional_context:
+			# Convert V3 emotional_context to sentiment format
+			sentiment = {
+				"has_emotional_content": True,
+				"valence": float(emotional_context.get("valence", 0.0)),
+				"arousal": float(emotional_context.get("arousal", 0.5)),
+				"dominant_emotion": emotional_context.get("dominant_emotion", "neutral"),
+				"importance": float(emotional_context.get("importance", 0.5)),
+			}
+			classification["sentiment"] = sentiment
+			classification["is_emotional"] = layer == "emotional" or emotional_context.get("importance", 0) > 0.7
+			logger.debug("[graph.classify] Using V3 emotional_context: valence=%.2f arousal=%.2f emotion=%s",
+			            sentiment["valence"], sentiment["arousal"], sentiment["dominant_emotion"])
+		elif layer == "emotional" or _might_have_emotion(content, tags):
+			# Fallback: LLM-based sentiment analysis if no emotional_context provided
 			sentiment = _analyze_sentiment_llm(content)
 			classification["sentiment"] = sentiment
 			classification["is_emotional"] = sentiment.get("has_emotional_content", False) if sentiment else False
 		else:
 			classification["is_emotional"] = False
 			classification["sentiment"] = None
-		
+
 		classifications.append(classification)
 	
 	state["classifications"] = classifications
@@ -549,24 +568,29 @@ def node_store_chromadb(state: IngestionState) -> IngestionState:
 
 
 def node_store_episodic(state: IngestionState) -> IngestionState:
-	"""Store episodic memories in TimescaleDB + ChromaDB"""
+	"""Store episodic memories in TimescaleDB + ChromaDB
+
+	V3 Enhancement: Uses emotional_context from extraction for richer emotional data,
+	including importance scoring and dominant emotion.
+	"""
 	from src.services.tracing import start_span, end_span
-	
+
 	span = start_span("store_episodic", input={"user_id": state.get("user_id")})
-	
+
 	memories = state.get("memories", [])
 	memory_ids = state.get("memory_ids", [])
 	classifications = state.get("classifications", [])
+	extracted_items = state.get("extracted_items", [])
 	user_id = state.get("user_id")
-	
+
 	stored_count = 0
-	
+
 	try:
 		from src.services.episodic_memory import EpisodicMemoryService, EpisodicMemory
 		import uuid
-		
+
 		service = EpisodicMemoryService()
-		
+
 		for i, (memory, classification) in enumerate(zip(memories, classifications)):
 			if not classification.get("is_episodic"):
 				continue
@@ -574,14 +598,25 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 			# Generate a proper UUID for episodic storage (different from ChromaDB mem_xxx ID)
 			episodic_id = str(uuid.uuid4())
 
-			# Extract emotional valence/arousal from sentiment analysis (if available)
+			# V3: Get emotional_context from extraction OR classification sentiment
 			sentiment = classification.get("sentiment") or {}
 			emotional_valence = float(sentiment.get("valence", 0.0))
 			emotional_arousal = float(sentiment.get("arousal", 0.0))
 
-			if sentiment:
-				logger.debug("[graph.episodic] Applying sentiment to episodic memory: valence=%.2f arousal=%.2f emotion=%s",
-				            emotional_valence, emotional_arousal, sentiment.get("dominant_emotion", "unknown"))
+			# V3: Use importance from emotional_context if available, else confidence
+			importance = float(sentiment.get("importance", memory.confidence))
+
+			# Also check metadata for emotional_context (V3 extraction output)
+			emotional_context = memory.metadata.get("emotional_context") or {}
+			if emotional_context:
+				emotional_valence = float(emotional_context.get("valence", emotional_valence))
+				emotional_arousal = float(emotional_context.get("arousal", emotional_arousal))
+				importance = float(emotional_context.get("importance", importance))
+
+			if sentiment or emotional_context:
+				logger.debug("[graph.episodic] V3 emotional data: valence=%.2f arousal=%.2f importance=%.2f emotion=%s",
+				            emotional_valence, emotional_arousal, importance,
+				            sentiment.get("dominant_emotion") or emotional_context.get("dominant_emotion", "unknown"))
 
 			episodic_memory = EpisodicMemory(
 				id=episodic_id,
@@ -593,7 +628,7 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 				participants=memory.metadata.get('participants'),
 				emotional_valence=emotional_valence,
 				emotional_arousal=emotional_arousal,
-				importance_score=memory.confidence,
+				importance_score=importance,
 				tags=memory.metadata.get('tags', []),
 				metadata=memory.metadata
 			)
@@ -828,38 +863,61 @@ def node_finalize(state: IngestionState) -> IngestionState:
 # ============================================================================
 
 def _is_episodic(item: Dict[str, Any], tags: List[str]) -> bool:
-	"""Determine if a memory should be stored as episodic"""
-	event_tags = {'event', 'meeting', 'conversation', 'activity', 'trip', 'workout'}
-	has_event_tag = any(tag in event_tags for tag in tags)
-	
+	"""Determine if a memory should be stored as episodic
+
+	V3 Enhancement: Also checks for V3's explicit 'episodic' layer classification.
+	"""
+	# V3: Check if extraction already classified as episodic
 	layer = item.get("layer", "")
+	if layer == "episodic":
+		return True
+
+	# Check for episodic_context from V3 extraction
+	if item.get("episodic_context"):
+		return True
+
+	event_tags = {'event', 'meeting', 'conversation', 'activity', 'trip', 'workout', 'milestone'}
+	has_event_tag = any(tag in event_tags for tag in tags)
+
 	is_short_term = layer == "short-term"
-	
+
 	mtype = item.get("type", "")
 	is_explicit = mtype == "explicit"
-	
+
 	is_episodic = has_event_tag or (is_short_term and is_explicit)
-	
+
 	# Debug logging
-	logger.debug("[_is_episodic] tags=%s layer=%s type=%s has_event_tag=%s result=%s", 
+	logger.debug("[_is_episodic] tags=%s layer=%s type=%s has_event_tag=%s result=%s",
 	            tags, layer, mtype, has_event_tag, is_episodic)
-	
+
 	return is_episodic
 
 
 def _is_procedural(item: Dict[str, Any], tags: List[str]) -> bool:
-	"""Determine if a memory should be stored as procedural"""
-	skill_tags = {'skill', 'learning', 'practice', 'technique', 'method', 'process', 'workflow'}
+	"""Determine if a memory should be stored as procedural
+
+	V3 Enhancement: Also checks for V3's explicit 'procedural' layer and skill_context.
+	"""
+	# V3: Check if extraction already classified as procedural
+	layer = item.get("layer", "")
+	if layer == "procedural":
+		return True
+
+	# Check for skill_context from V3 extraction
+	if item.get("skill_context"):
+		return True
+
+	skill_tags = {'skill', 'learning', 'practice', 'technique', 'method', 'process', 'workflow', 'breakthrough'}
 	has_skill_tag = any(tag in skill_tags for tag in tags)
-	
+
 	has_learning_journal = item.get('learning_journal') is not None
-	
+
 	is_procedural = has_skill_tag or has_learning_journal
-	
+
 	# Debug logging
 	logger.debug("[_is_procedural] tags=%s has_skill_tag=%s has_learning_journal=%s result=%s",
 	            tags, has_skill_tag, has_learning_journal, is_procedural)
-	
+
 	return is_procedural
 
 

@@ -91,10 +91,13 @@ class HybridRetrievalService:
         
         all_results = []
         
-        # 1. Semantic retrieval (if query text provided)
+        # 1. Semantic retrieval (query) or browse-all (no query)
         if query.query_text:
             semantic_results = self._semantic_retrieval(query)
             all_results.extend(semantic_results)
+        else:
+            browse_results = self._browse_all(query)
+            all_results.extend(browse_results)
         
         # 2. Temporal retrieval (if time range provided)
         if query.time_range:
@@ -192,6 +195,133 @@ class HybridRetrievalService:
         
         return results
     
+    def _browse_all(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Fetch all memories across every layer when no query text is provided (browse mode)."""
+        results = []
+
+        # 1. ChromaDB (semantic / short-term / long-term)
+        if self.chroma_client:
+            try:
+                from src.services.retrieval import _standard_collection_name
+                collection_name = _standard_collection_name()
+                collection = self.chroma_client.get_collection(collection_name)
+                browse_results = collection.get(
+                    where={"user_id": query.user_id},
+                    limit=query.limit,
+                )
+                ids = browse_results.get("ids", [])
+                docs = browse_results.get("documents", [])
+                metas = browse_results.get("metadatas", [])
+
+                for i, memory_id in enumerate(ids):
+                    if i >= len(docs) or i >= len(metas):
+                        continue
+                    metadata = metas[i] or {}
+                    timestamp_str = metadata.get("timestamp")
+                    recency = 0.5
+                    if timestamp_str:
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                            recency = self._calculate_recency_score(timestamp)
+                        except (ValueError, TypeError):
+                            pass
+                    try:
+                        importance = float(metadata.get("importance", 0.5))
+                    except (ValueError, TypeError):
+                        importance = 0.5
+
+                    results.append(RetrievalResult(
+                        memory_id=memory_id,
+                        memory_type=metadata.get("layer", "semantic"),
+                        content=docs[i],
+                        relevance_score=0.5,
+                        recency_score=recency,
+                        importance_score=importance,
+                        semantic_similarity=0.0,
+                        metadata=metadata,
+                    ))
+            except Exception as e:
+                print(f"Error in browse-all ChromaDB retrieval: {e}")
+
+        # 2. Episodic memories (TimescaleDB)
+        seen_ids = {r.memory_id for r in results}
+        conn = get_timescale_conn()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, content, event_timestamp, importance_score,
+                               emotional_valence, emotional_arousal, location, participants, tags, metadata
+                        FROM episodic_memories
+                        WHERE user_id = %s
+                        ORDER BY event_timestamp DESC
+                        LIMIT %s
+                    """, (query.user_id, query.limit))
+                    for row in cur.fetchall():
+                        mid = str(row["id"])
+                        if mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+                        recency = self._calculate_recency_score(row["event_timestamp"]) if row.get("event_timestamp") else 0.5
+                        meta = row.get("metadata") or {}
+                        if row.get("event_timestamp"):
+                            meta["timestamp"] = row["event_timestamp"].isoformat()
+                        meta["layer"] = "episodic"
+                        meta["emotional_valence"] = row.get("emotional_valence")
+                        meta["emotional_arousal"] = row.get("emotional_arousal")
+                        results.append(RetrievalResult(
+                            memory_id=mid,
+                            memory_type="episodic",
+                            content=row["content"] or "",
+                            relevance_score=0.5,
+                            recency_score=recency,
+                            importance_score=float(row.get("importance_score") or 0.5),
+                            semantic_similarity=0.0,
+                            metadata=meta,
+                        ))
+                conn.commit()
+            except Exception as e:
+                print(f"Error in browse-all episodic retrieval: {e}")
+
+            # 3. Emotional memories (TimescaleDB)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, context, timestamp, valence, arousal, intensity, emotional_state
+                        FROM emotional_memories
+                        WHERE user_id = %s
+                        ORDER BY timestamp DESC
+                        LIMIT %s
+                    """, (query.user_id, query.limit))
+                    for row in cur.fetchall():
+                        mid = str(row["id"])
+                        if mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+                        recency = self._calculate_recency_score(row["timestamp"]) if row.get("timestamp") else 0.5
+                        meta = {
+                            "layer": "emotional",
+                            "timestamp": row["timestamp"].isoformat() if row.get("timestamp") else None,
+                            "emotional_valence": row.get("valence"),
+                            "emotional_arousal": row.get("arousal"),
+                            "dominant_emotion": row.get("emotional_state"),
+                        }
+                        results.append(RetrievalResult(
+                            memory_id=mid,
+                            memory_type="emotional",
+                            content=row["context"] or "",
+                            relevance_score=0.5,
+                            recency_score=recency,
+                            importance_score=float(row.get("intensity") or 0.5),
+                            semantic_similarity=0.0,
+                            metadata=meta,
+                        ))
+                conn.commit()
+            except Exception as e:
+                print(f"Error in browse-all emotional retrieval: {e}")
+
+        return results
+
     def _temporal_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
         """Retrieve memories by time range"""
         results = []
@@ -391,7 +521,7 @@ class HybridRetrievalService:
                 importance_score = skill.success_rate or 0.5
                 
                 # Create searchable content
-                content = f"{skill.skill_name}: {' '.join(skill.steps)}"
+                content = f"{skill.skill_name}: {' '.join(skill.steps or [])}"
                 if skill.context:
                     content += f" (Context: {skill.context})"
                 
