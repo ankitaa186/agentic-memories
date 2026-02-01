@@ -244,13 +244,20 @@ class MemoryRouter:
 			)
 			
 			# Use the record_emotional_state method
+			# Context should be actual content text, not stringified tags/context list
+			context_value = emotional_data.get("content", "")
+			if not context_value:
+				# Fallback: join context list items if content is empty
+				ctx = emotional_data.get("context", [])
+				context_value = ", ".join(ctx) if isinstance(ctx, list) else str(ctx)
+
 			success = self.emotional_service.record_emotional_state(
 				user_id=user_id,
 				emotional_state=emotional_state,
 				valence=emotional_data.get("valence", 0.0),
 				arousal=emotional_data.get("arousal", 0.5),
-				context=str(emotional_data.get("context", [])),
-				trigger_event=emotional_data.get("content", "")
+				context=context_value,
+				trigger_event=emotional_data.get("trigger", "")
 			)
 			
 			end_span(output={"success": success})

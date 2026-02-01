@@ -41,8 +41,8 @@ class IngestionBatch:
                 # Skip tool messages or convert to assistant - tool role not in Message schema
                 role_str = "assistant"
             
-            # Only include supported roles
-            if role_str in ("user", "assistant", "system"):
+            # Only include supported roles with non-empty content
+            if role_str in ("user", "assistant", "system") and event.content and event.content.strip():
                 history.append(Message(role=role_str, content=event.content))
         
         if not history:

@@ -62,7 +62,7 @@ class OrchestratorRetrieveResponse(OrchestratorStreamResponse):
 class StoreMemoryItem(BaseModel):
 	id: str
 	content: str
-	layer: Literal["short-term", "semantic", "long-term"]
+	layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]
 	type: Literal["explicit", "implicit"]
 	confidence: float
 	ttl: Optional[int] = None
@@ -83,7 +83,7 @@ class StoreResponse(BaseModel):
 class RetrieveItem(BaseModel):
 	id: str
 	content: str
-	layer: Literal["short-term", "semantic", "long-term"]
+	layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]
 	type: Literal["explicit", "implicit"]
 	score: float
 	metadata: Optional[dict[str, Any]] = None
@@ -146,7 +146,7 @@ class PersonaRetrieveResponse(BaseModel):
 
 
 class ForgetRequest(BaseModel):
-	scopes: List[Literal["short-term", "semantic", "long-term"]] = Field(default_factory=list)
+	scopes: List[Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]] = Field(default_factory=list)
 	dry_run: bool = False
 
 
@@ -539,9 +539,9 @@ class DirectMemoryRequest(BaseModel):
     )
 
     # General memory fields
-    layer: Literal["short-term", "semantic", "long-term"] = Field(
+    layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"] = Field(
         default="semantic",
-        description="Memory layer: 'short-term' (ephemeral), 'semantic' (facts), 'long-term' (persistent)",
+        description="Memory layer: 'short-term' (ephemeral), 'semantic' (facts), 'long-term' (persistent), 'episodic' (events), 'procedural' (skills), 'emotional' (feelings)",
         example="semantic",
     )
     type: Literal["explicit", "implicit"] = Field(
