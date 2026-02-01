@@ -8,8 +8,11 @@ import time as _time
 
 from langgraph.graph import StateGraph, END  # type: ignore
 
-from src.services.compaction_ops import ttl_cleanup, simple_deduplicate
-from src.services.compaction_ops import _get_collection  # type: ignore
+from src.services.compaction_ops import (
+	ttl_cleanup, simple_deduplicate,
+	deduplicate_episodic, deduplicate_emotional, ttl_cleanup_timescale,
+	_get_collection,
+)
 from src.services.embedding_utils import generate_embedding
 from src.services.storage import upsert_memories
 from src.models import Memory
@@ -319,42 +322,82 @@ def build_compaction_graph() -> StateGraph:
 
 	def node_ttl(state: Dict[str, Any]) -> Dict[str, Any]:
 		from src.services.tracing import start_span, end_span
-		
+
 		span = start_span("compaction_ttl_cleanup", input={})
-		
+
 		# Global TTL cleanup (idempotent)
 		_t = _time.perf_counter()
 		deleted = ttl_cleanup()
 		state["metrics"]["ttl_deleted"] = state["metrics"].get("ttl_deleted", 0) + int(deleted or 0)
+
+		# TimescaleDB TTL cleanup (best-effort)
+		ts_deleted = 0
+		try:
+			ts_deleted = ttl_cleanup_timescale()
+			state["metrics"]["ttl_timescale_deleted"] = ts_deleted
+		except Exception as exc:
+			logger.warning("[graph.ttl.timescale_error] %s", exc)
+			state["metrics"]["ttl_timescale_deleted"] = 0
+
 		latency_ms = int((_time.perf_counter() - _t) * 1000)
-		logger.info("[graph.ttl] deleted=%s latency_ms=%s", deleted, latency_ms)
-		
-		end_span(output={"deleted": deleted, "latency_ms": latency_ms})
+		logger.info("[graph.ttl] chromadb_deleted=%s timescale_deleted=%s latency_ms=%s",
+		           deleted, ts_deleted, latency_ms)
+
+		end_span(output={"deleted": deleted, "timescale_deleted": ts_deleted, "latency_ms": latency_ms})
 		return state
 
 	def node_dedup(state: Dict[str, Any]) -> Dict[str, Any]:
 		from src.services.tracing import start_span, end_span
-		
+
 		user_id = state.get("user_id")
 		lim = int(state.get("limit") or 500)
-		
+
 		span = start_span("compaction_deduplication", input={
 			"user_id": user_id,
 			"limit": lim
 		})
-		
+
 		_t = _time.perf_counter()
+
+		# ChromaDB dedup
 		stats = simple_deduplicate(str(user_id), limit=lim)
 		state["metrics"].update({
 			"dedup_scanned": stats.get("scanned", 0),
 			"dedup_removed": stats.get("removed", 0),
 		})
+
+		# TimescaleDB episodic dedup (best-effort)
+		try:
+			ep_stats = deduplicate_episodic(str(user_id), limit=lim)
+			state["metrics"]["dedup_episodic_scanned"] = ep_stats.get("scanned", 0)
+			state["metrics"]["dedup_episodic_removed"] = ep_stats.get("removed", 0)
+		except Exception as exc:
+			logger.warning("[graph.dedup.episodic_error] user_id=%s %s", user_id, exc)
+			state["metrics"]["dedup_episodic_scanned"] = 0
+			state["metrics"]["dedup_episodic_removed"] = 0
+
+		# TimescaleDB emotional dedup (best-effort)
+		try:
+			em_stats = deduplicate_emotional(str(user_id), limit=lim)
+			state["metrics"]["dedup_emotional_scanned"] = em_stats.get("scanned", 0)
+			state["metrics"]["dedup_emotional_removed"] = em_stats.get("removed", 0)
+		except Exception as exc:
+			logger.warning("[graph.dedup.emotional_error] user_id=%s %s", user_id, exc)
+			state["metrics"]["dedup_emotional_scanned"] = 0
+			state["metrics"]["dedup_emotional_removed"] = 0
+
 		latency_ms = int((_time.perf_counter() - _t) * 1000)
-		logger.info("[graph.dedup] user_id=%s stats=%s latency_ms=%s", user_id, stats, latency_ms)
-		
+		logger.info("[graph.dedup] user_id=%s chromadb=%s episodic=%s emotional=%s latency_ms=%s",
+		           user_id, stats,
+		           state["metrics"].get("dedup_episodic_removed", 0),
+		           state["metrics"].get("dedup_emotional_removed", 0),
+		           latency_ms)
+
 		end_span(output={
 			"scanned": stats.get("scanned", 0),
 			"removed": stats.get("removed", 0),
+			"episodic_removed": state["metrics"].get("dedup_episodic_removed", 0),
+			"emotional_removed": state["metrics"].get("dedup_emotional_removed", 0),
 			"latency_ms": latency_ms
 		})
 		return state

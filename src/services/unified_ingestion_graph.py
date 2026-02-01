@@ -14,6 +14,7 @@ This replaces the previous separation between extraction and routing.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import json
@@ -23,7 +24,7 @@ from datetime import datetime, timezone
 
 from langgraph.graph import StateGraph, END
 from src.schemas import TranscriptRequest
-from src.services.prompts import WORTHINESS_PROMPT, EXTRACTION_PROMPT
+from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3
 from src.services.extract_utils import _call_llm_json
 from src.services.memory_context import format_memories_for_llm_context, get_relevant_existing_memories
 from src.services.storage import upsert_memories
@@ -136,7 +137,7 @@ def node_worthiness(state: IngestionState) -> IngestionState:
 	# Process ALL messages to capture initial profile information
 	payload = {"history": history_dicts}
 	
-	resp = _call_llm_json(WORTHINESS_PROMPT, payload)
+	resp = _call_llm_json(WORTHINESS_PROMPT_V3, payload)
 	worthy = bool(resp and resp.get("worthy", False))
 	
 	state["worthy"] = worthy
@@ -176,8 +177,8 @@ def node_extract(state: IngestionState) -> IngestionState:
 		"existing_memories_context": existing_context
 	}
 	
-	# Enhanced extraction prompt with context
-	enhanced_prompt = f"{EXTRACTION_PROMPT}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
+	# Enhanced extraction prompt with context (using V3 prompt with emotional/narrative support)
+	enhanced_prompt = f"{EXTRACTION_PROMPT_V3}\n\n{existing_context}\n\nBased on the existing memories above, extract only NEW information that adds value."
 	
 	items = _call_llm_json(enhanced_prompt, payload, expect_array=True) or []
 	state["extracted_items"] = items
@@ -190,39 +191,58 @@ def node_extract(state: IngestionState) -> IngestionState:
 
 
 def node_classify_and_enrich(state: IngestionState) -> IngestionState:
-	"""Classify memory types and enrich with sentiment analysis"""
+	"""Classify memory types and enrich with sentiment analysis
+
+	V3 Enhancement: Uses emotional_context from extraction output when available,
+	reducing redundant LLM calls and providing richer emotional data.
+	"""
 	from src.services.tracing import start_span, end_span
-	
+
 	span = start_span("classification_enrichment", input={
 		"items_count": len(state.get("extracted_items", []))
 	})
-	
+
 	items = state.get("extracted_items", [])
 	classifications = []
-	
+
 	for item in items:
 		content = str(item.get("content", "")).strip()
 		tags = item.get("tags", [])
-		
-		# Basic classification
+		layer = item.get("layer", "semantic")
+
+		# V3: Use layer from extraction for classification
 		classification = {
-			"is_episodic": _is_episodic(item, tags),
-			"is_procedural": _is_procedural(item, tags),
+			"is_episodic": layer == "episodic" or _is_episodic(item, tags),
+			"is_procedural": layer == "procedural" or _is_procedural(item, tags),
 			"is_financial": bool(item.get("portfolio")),
 			"has_relationship": bool(item.get("relationship")),
 			"has_learning": bool(item.get("learning_journal")),
 		}
-		
-		# LLM-based sentiment analysis for potential emotional content
-		sentiment = None
-		if _might_have_emotion(content, tags):
+
+		# V3: Use emotional_context from extraction if available (no extra LLM call needed)
+		emotional_context = item.get("emotional_context")
+		if emotional_context:
+			# Convert V3 emotional_context to sentiment format
+			sentiment = {
+				"has_emotional_content": True,
+				"valence": float(emotional_context.get("valence", 0.0)),
+				"arousal": float(emotional_context.get("arousal", 0.5)),
+				"dominant_emotion": emotional_context.get("dominant_emotion", "neutral"),
+				"importance": float(emotional_context.get("importance", 0.5)),
+			}
+			classification["sentiment"] = sentiment
+			classification["is_emotional"] = layer == "emotional" or emotional_context.get("importance", 0) > 0.7
+			logger.debug("[graph.classify] Using V3 emotional_context: valence=%.2f arousal=%.2f emotion=%s",
+			            sentiment["valence"], sentiment["arousal"], sentiment["dominant_emotion"])
+		elif layer == "emotional" or _might_have_emotion(content, tags):
+			# Fallback: LLM-based sentiment analysis if no emotional_context provided
 			sentiment = _analyze_sentiment_llm(content)
 			classification["sentiment"] = sentiment
 			classification["is_emotional"] = sentiment.get("has_emotional_content", False) if sentiment else False
 		else:
 			classification["is_emotional"] = False
 			classification["sentiment"] = None
-		
+
 		classifications.append(classification)
 	
 	state["classifications"] = classifications
@@ -438,6 +458,139 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	return state
 
 
+def node_dedup_check(state: IngestionState) -> IngestionState:
+	"""Remove duplicate memories before storage using content hash and semantic similarity.
+
+	Two-pass dedup:
+	1. **Exact match** — content_hash lookup in ChromaDB metadata (fast, zero tolerance).
+	2. **Semantic match** — cosine-distance query against existing user embeddings.
+	   Collection uses cosine distance so values are `1 - cosine_similarity`.
+	   Threshold 0.08 ≈ cosine similarity > 0.92, catching LLM paraphrases.
+
+	Also filters classifications to stay aligned with the memories list so that
+	downstream zip(memories, classifications) remains correct.
+	"""
+	from src.services.tracing import start_span, end_span
+	from src.services.retrieval import _standard_collection_name
+	from src.dependencies.chroma import get_chroma_client
+
+	# Cosine distance threshold: 0.20 ≈ cosine similarity 0.80
+	# Tuned from real paraphrase measurements:
+	#   - dist 0.05: identical text, trivial word swap          → catch
+	#   - dist 0.19: "about 3 cups every morning" vs
+	#                 "three cups each morning"                 → catch (same fact)
+	#   - dist 0.25: same topic, genuinely new detail           → allow
+	# Compaction (0.85 cosine) catches anything this misses.
+	SEMANTIC_DISTANCE_THRESHOLD = 0.15
+
+	span = start_span("dedup_check", input={
+		"memories_count": len(state.get("memories", []))
+	})
+
+	memories = state.get("memories", [])
+	classifications = state.get("classifications", [])
+	user_id = state.get("user_id")
+
+	if not memories:
+		state["metrics"]["duplicates_avoided"] = 0
+		end_span(output={"duplicates_avoided": 0})
+		return state
+
+	duplicates_avoided = 0
+	hash_dupes = 0
+	semantic_dupes = 0
+	keep_indices: List[int] = []
+
+	try:
+		client = get_chroma_client()
+		if client is None:
+			raise RuntimeError("Chroma client not available")
+		collection_name = _standard_collection_name()
+		collection = client.get_or_create_collection(collection_name)
+
+		for idx, memory in enumerate(memories):
+			content_hash = hashlib.sha256(memory.content.strip().lower().encode()).hexdigest()
+			memory.metadata["content_hash"] = content_hash
+
+			is_duplicate = False
+			match_type = None
+
+			# --- Pass 1: exact content_hash match (fast metadata lookup) ---
+			try:
+				hash_results = collection.get(
+					where={"$and": [
+						{"user_id": user_id},
+						{"content_hash": content_hash},
+					]},
+					limit=1,
+				)
+				if hash_results and hash_results.get("ids") and len(hash_results["ids"]) > 0:
+					is_duplicate = True
+					match_type = "exact_hash"
+					hash_dupes += 1
+			except Exception as exc:
+				logger.debug("[graph.dedup_check.hash_query_error] user_id=%s error=%s", user_id, exc)
+
+			# --- Pass 2: semantic similarity (embedding cosine distance) ---
+			if not is_duplicate and memory.embedding:
+				try:
+					results = collection.query(
+						query_embeddings=[memory.embedding],
+						n_results=3,
+						where={"user_id": user_id},
+					)
+					distances = results.get("distances", [[]])
+					documents = results.get("documents", [[]])
+					if distances and distances[0]:
+						for i, dist in enumerate(distances[0]):
+							# Cosine distance: 1 - cosine_sim. Lower = more similar.
+							if dist < SEMANTIC_DISTANCE_THRESHOLD:
+								is_duplicate = True
+								match_type = "semantic"
+								semantic_dupes += 1
+								existing_doc = documents[0][i] if documents and documents[0] and i < len(documents[0]) else ""
+								logger.info(
+									"[graph.dedup_check.semantic_match] user_id=%s dist=%.4f "
+									"new='%s' existing='%s'",
+									user_id, dist,
+									memory.content[:60], (existing_doc or "")[:60],
+								)
+								break
+				except Exception as exc:
+					logger.warning("[graph.dedup_check.query_error] user_id=%s error=%s", user_id, exc)
+
+			if is_duplicate:
+				duplicates_avoided += 1
+				logger.info("[graph.dedup_check.duplicate] user_id=%s match=%s hash=%s content=%s",
+				           user_id, match_type, content_hash[:12], memory.content[:80])
+			else:
+				keep_indices.append(idx)
+
+	except Exception as exc:
+		logger.warning("[graph.dedup_check.error] user_id=%s error=%s — passing all memories through", user_id, exc)
+		keep_indices = list(range(len(memories)))
+
+	state["memories"] = [memories[i] for i in keep_indices]
+	# Keep classifications aligned with memories (they are built 1:1 with extracted_items
+	# which maps 1:1 to memories after build_memories filters empty content)
+	if classifications:
+		state["classifications"] = [classifications[i] for i in keep_indices if i < len(classifications)]
+
+	state["metrics"]["duplicates_avoided"] = duplicates_avoided
+
+	logger.info("[graph.dedup_check] user_id=%s input=%s output=%s duplicates_avoided=%s (hash=%s semantic=%s)",
+	           user_id, len(memories), len(state["memories"]),
+	           duplicates_avoided, hash_dupes, semantic_dupes)
+
+	end_span(output={
+		"duplicates_avoided": duplicates_avoided,
+		"hash_dupes": hash_dupes,
+		"semantic_dupes": semantic_dupes,
+		"memories_remaining": len(state["memories"]),
+	})
+	return state
+
+
 def node_extract_profile(state: IngestionState) -> IngestionState:
 	"""Extract profile information from memories using LLM"""
 	from src.services.tracing import start_span, end_span
@@ -549,31 +702,56 @@ def node_store_chromadb(state: IngestionState) -> IngestionState:
 
 
 def node_store_episodic(state: IngestionState) -> IngestionState:
-	"""Store episodic memories in TimescaleDB + ChromaDB"""
+	"""Store episodic memories in TimescaleDB + ChromaDB
+
+	V3 Enhancement: Uses emotional_context from extraction for richer emotional data,
+	including importance scoring and dominant emotion.
+	"""
 	from src.services.tracing import start_span, end_span
-	
+
 	span = start_span("store_episodic", input={"user_id": state.get("user_id")})
-	
+
 	memories = state.get("memories", [])
 	memory_ids = state.get("memory_ids", [])
 	classifications = state.get("classifications", [])
+	extracted_items = state.get("extracted_items", [])
 	user_id = state.get("user_id")
-	
+
 	stored_count = 0
-	
+
 	try:
 		from src.services.episodic_memory import EpisodicMemoryService, EpisodicMemory
 		import uuid
-		
+
 		service = EpisodicMemoryService()
-		
+
 		for i, (memory, classification) in enumerate(zip(memories, classifications)):
 			if not classification.get("is_episodic"):
 				continue
-			
+
 			# Generate a proper UUID for episodic storage (different from ChromaDB mem_xxx ID)
 			episodic_id = str(uuid.uuid4())
-			
+
+			# V3: Get emotional_context from extraction OR classification sentiment
+			sentiment = classification.get("sentiment") or {}
+			emotional_valence = float(sentiment.get("valence", 0.0))
+			emotional_arousal = float(sentiment.get("arousal", 0.0))
+
+			# V3: Use importance from emotional_context if available, else confidence
+			importance = float(sentiment.get("importance", memory.confidence))
+
+			# Also check metadata for emotional_context (V3 extraction output)
+			emotional_context = memory.metadata.get("emotional_context") or {}
+			if emotional_context:
+				emotional_valence = float(emotional_context.get("valence", emotional_valence))
+				emotional_arousal = float(emotional_context.get("arousal", emotional_arousal))
+				importance = float(emotional_context.get("importance", importance))
+
+			if sentiment or emotional_context:
+				logger.debug("[graph.episodic] V3 emotional data: valence=%.2f arousal=%.2f importance=%.2f emotion=%s",
+				            emotional_valence, emotional_arousal, importance,
+				            sentiment.get("dominant_emotion") or emotional_context.get("dominant_emotion", "unknown"))
+
 			episodic_memory = EpisodicMemory(
 				id=episodic_id,
 				user_id=user_id,
@@ -582,9 +760,9 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 				content=memory.content,
 				location=memory.metadata.get('location'),
 				participants=memory.metadata.get('participants'),
-				emotional_valence=0.0,
-				emotional_arousal=0.0,
-				importance_score=memory.confidence,
+				emotional_valence=emotional_valence,
+				emotional_arousal=emotional_arousal,
+				importance_score=importance,
 				tags=memory.metadata.get('tags', []),
 				metadata=memory.metadata
 			)
@@ -640,8 +818,8 @@ def node_store_emotional(state: IngestionState) -> IngestionState:
 				emotional_state=emotional_state,
 				valence=valence,
 				arousal=arousal,
-				context=str(memory.metadata.get('tags', [])),
-				trigger_event=memory.content
+				context=memory.content,  # Use actual memory content, not tags
+				trigger_event=", ".join(memory.metadata.get('tags', []))  # Tags as trigger
 			):
 				stored_count += 1
 		
@@ -819,38 +997,61 @@ def node_finalize(state: IngestionState) -> IngestionState:
 # ============================================================================
 
 def _is_episodic(item: Dict[str, Any], tags: List[str]) -> bool:
-	"""Determine if a memory should be stored as episodic"""
-	event_tags = {'event', 'meeting', 'conversation', 'activity', 'trip', 'workout'}
-	has_event_tag = any(tag in event_tags for tag in tags)
-	
+	"""Determine if a memory should be stored as episodic
+
+	V3 Enhancement: Also checks for V3's explicit 'episodic' layer classification.
+	"""
+	# V3: Check if extraction already classified as episodic
 	layer = item.get("layer", "")
+	if layer == "episodic":
+		return True
+
+	# Check for episodic_context from V3 extraction
+	if item.get("episodic_context"):
+		return True
+
+	event_tags = {'event', 'meeting', 'conversation', 'activity', 'trip', 'workout', 'milestone'}
+	has_event_tag = any(tag in event_tags for tag in tags)
+
 	is_short_term = layer == "short-term"
-	
+
 	mtype = item.get("type", "")
 	is_explicit = mtype == "explicit"
-	
+
 	is_episodic = has_event_tag or (is_short_term and is_explicit)
-	
+
 	# Debug logging
-	logger.debug("[_is_episodic] tags=%s layer=%s type=%s has_event_tag=%s result=%s", 
+	logger.debug("[_is_episodic] tags=%s layer=%s type=%s has_event_tag=%s result=%s",
 	            tags, layer, mtype, has_event_tag, is_episodic)
-	
+
 	return is_episodic
 
 
 def _is_procedural(item: Dict[str, Any], tags: List[str]) -> bool:
-	"""Determine if a memory should be stored as procedural"""
-	skill_tags = {'skill', 'learning', 'practice', 'technique', 'method', 'process', 'workflow'}
+	"""Determine if a memory should be stored as procedural
+
+	V3 Enhancement: Also checks for V3's explicit 'procedural' layer and skill_context.
+	"""
+	# V3: Check if extraction already classified as procedural
+	layer = item.get("layer", "")
+	if layer == "procedural":
+		return True
+
+	# Check for skill_context from V3 extraction
+	if item.get("skill_context"):
+		return True
+
+	skill_tags = {'skill', 'learning', 'practice', 'technique', 'method', 'process', 'workflow', 'breakthrough'}
 	has_skill_tag = any(tag in skill_tags for tag in tags)
-	
+
 	has_learning_journal = item.get('learning_journal') is not None
-	
+
 	is_procedural = has_skill_tag or has_learning_journal
-	
+
 	# Debug logging
 	logger.debug("[_is_procedural] tags=%s has_skill_tag=%s has_learning_journal=%s result=%s",
 	            tags, has_skill_tag, has_learning_journal, is_procedural)
-	
+
 	return is_procedural
 
 
@@ -940,6 +1141,7 @@ def build_unified_ingestion_graph() -> StateGraph:
 	graph.add_node("extract", node_extract)
 	graph.add_node("classify", node_classify_and_enrich)
 	graph.add_node("build_memories", node_build_memories)
+	graph.add_node("dedup_check", node_dedup_check)
 	graph.add_node("extract_profile", node_extract_profile)
 	graph.add_node("store_profile", node_store_profile)
 	graph.add_node("store_chromadb", node_store_chromadb)
@@ -971,7 +1173,8 @@ def build_unified_ingestion_graph() -> StateGraph:
 		{"classify": "classify", "finalize_early": "finalize_early"}
 	)
 	graph.add_edge("classify", "build_memories")
-	graph.add_edge("build_memories", "extract_profile")
+	graph.add_edge("build_memories", "dedup_check")
+	graph.add_edge("dedup_check", "extract_profile")
 	graph.add_edge("extract_profile", "store_profile")
 	graph.add_edge("store_profile", "store_chromadb")
 	

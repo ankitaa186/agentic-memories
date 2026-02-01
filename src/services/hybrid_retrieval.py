@@ -7,18 +7,40 @@ with intelligent ranking and fusion algorithms.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 
+logger = logging.getLogger(__name__)
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.chroma import get_chroma_client
 from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
 from src.services.emotional_memory import EmotionalMemory, EmotionalMemoryService
 from src.services.procedural_memory import ProceduralMemory, ProceduralMemoryService
 from src.services.embedding_utils import get_embeddings
+
+
+def _deserialize_metadata_lists(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Deserialize JSON-stringified lists back to Python lists.
+
+    ChromaDB only supports primitive types in metadata, so lists are
+    serialized to JSON strings on storage. This function reverses that.
+    """
+    if not metadata:
+        return metadata
+
+    list_fields = ['persona_tags', 'tags', 'topics', 'people_mentioned', 'participants']
+    for field in list_fields:
+        if field in metadata and isinstance(metadata[field], str):
+            try:
+                metadata[field] = json.loads(metadata[field])
+            except (json.JSONDecodeError, ValueError):
+                pass  # Keep as string if not valid JSON
+    return metadata
 
 
 class RetrievalStrategy(Enum):
@@ -91,10 +113,13 @@ class HybridRetrievalService:
         
         all_results = []
         
-        # 1. Semantic retrieval (if query text provided)
+        # 1. Semantic retrieval (query) or browse-all (no query)
         if query.query_text:
             semantic_results = self._semantic_retrieval(query)
             all_results.extend(semantic_results)
+        else:
+            browse_results = self._browse_all(query)
+            all_results.extend(browse_results)
         
         # 2. Temporal retrieval (if time range provided)
         if query.time_range:
@@ -154,7 +179,7 @@ class HybridRetrievalService:
                     for i, memory_id in enumerate(search_results['ids'][0]):
                         distance = search_results['distances'][0][i] if search_results.get('distances') else 0.0
                         similarity = 1.0 - distance
-                        metadata = search_results['metadatas'][0][i] or {}
+                        metadata = _deserialize_metadata_lists(search_results['metadatas'][0][i] or {})
 
                         # Extract timestamp and calculate recency score
                         timestamp_str = metadata.get('timestamp')
@@ -185,13 +210,146 @@ class HybridRetrievalService:
                         )
                         results.append(result)
             except Exception as e:
-                print(f"Error searching collection {collection_name}: {e}")
+                logger.error("Error searching collection %s: %s", collection_name, e)
         
         except Exception as e:
-            print(f"Error in semantic retrieval: {e}")
+            logger.error("Error in semantic retrieval: %s", e)
         
         return results
     
+    def _browse_all(self, query: RetrievalQuery) -> List[RetrievalResult]:
+        """Fetch all memories across every layer when no query text is provided (browse mode)."""
+        results = []
+
+        # 1. ChromaDB (semantic / short-term / long-term)
+        if self.chroma_client:
+            try:
+                from src.services.retrieval import _standard_collection_name
+                collection_name = _standard_collection_name()
+                collection = self.chroma_client.get_collection(collection_name)
+                browse_results = collection.get(
+                    where={"user_id": query.user_id},
+                    limit=query.limit,
+                )
+                ids = browse_results.get("ids", [])
+                docs = browse_results.get("documents", [])
+                metas = browse_results.get("metadatas", [])
+
+                for i, memory_id in enumerate(ids):
+                    if i >= len(docs) or i >= len(metas):
+                        continue
+                    metadata = _deserialize_metadata_lists(metas[i] or {})
+                    timestamp_str = metadata.get("timestamp")
+                    recency = 0.5
+                    if timestamp_str:
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                            recency = self._calculate_recency_score(timestamp)
+                        except (ValueError, TypeError):
+                            pass
+                    try:
+                        importance = float(metadata.get("importance", 0.5))
+                    except (ValueError, TypeError):
+                        importance = 0.5
+
+                    results.append(RetrievalResult(
+                        memory_id=memory_id,
+                        memory_type=metadata.get("layer", "semantic"),
+                        content=docs[i],
+                        relevance_score=0.5,
+                        recency_score=recency,
+                        importance_score=importance,
+                        semantic_similarity=0.0,
+                        metadata=metadata,
+                    ))
+            except Exception as e:
+                logger.error("Error in browse-all ChromaDB retrieval: %s", e)
+
+        # 2. Episodic memories (TimescaleDB)
+        # Build seen_ids from both memory_id AND typed_table_id to avoid duplicates
+        # When stored via direct API, ChromaDB has mem_XXXX with typed_table_id metadata
+        # pointing to the UUID in the typed table
+        seen_ids = {r.memory_id for r in results}
+        for r in results:
+            typed_id = (r.metadata or {}).get("typed_table_id")
+            if typed_id:
+                seen_ids.add(typed_id)
+        conn = get_timescale_conn()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, content, event_timestamp, importance_score,
+                               emotional_valence, emotional_arousal, location, participants, tags, metadata
+                        FROM episodic_memories
+                        WHERE user_id = %s
+                        ORDER BY event_timestamp DESC
+                        LIMIT %s
+                    """, (query.user_id, query.limit))
+                    for row in cur.fetchall():
+                        mid = str(row["id"])
+                        if mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+                        recency = self._calculate_recency_score(row["event_timestamp"]) if row.get("event_timestamp") else 0.5
+                        meta = row.get("metadata") or {}
+                        if row.get("event_timestamp"):
+                            meta["timestamp"] = row["event_timestamp"].isoformat()
+                        meta["layer"] = "episodic"
+                        meta["emotional_valence"] = row.get("emotional_valence")
+                        meta["emotional_arousal"] = row.get("emotional_arousal")
+                        results.append(RetrievalResult(
+                            memory_id=mid,
+                            memory_type="episodic",
+                            content=row["content"] or "",
+                            relevance_score=0.5,
+                            recency_score=recency,
+                            importance_score=float(row.get("importance_score") or 0.5),
+                            semantic_similarity=0.0,
+                            metadata=meta,
+                        ))
+                conn.commit()
+
+                # 3. Emotional memories (TimescaleDB)
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, context, timestamp, valence, arousal, intensity, emotional_state
+                        FROM emotional_memories
+                        WHERE user_id = %s
+                        ORDER BY timestamp DESC
+                        LIMIT %s
+                    """, (query.user_id, query.limit))
+                    for row in cur.fetchall():
+                        mid = str(row["id"])
+                        if mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+                        recency = self._calculate_recency_score(row["timestamp"]) if row.get("timestamp") else 0.5
+                        meta = {
+                            "layer": "emotional",
+                            "timestamp": row["timestamp"].isoformat() if row.get("timestamp") else None,
+                            "emotional_valence": row.get("valence"),
+                            "emotional_arousal": row.get("arousal"),
+                            "dominant_emotion": row.get("emotional_state"),
+                        }
+                        results.append(RetrievalResult(
+                            memory_id=mid,
+                            memory_type="emotional",
+                            content=row["context"] or "",
+                            relevance_score=0.5,
+                            recency_score=recency,
+                            importance_score=float(row.get("intensity") or 0.5),
+                            semantic_similarity=0.0,
+                            metadata=meta,
+                        ))
+                conn.commit()
+            except Exception as e:
+                logger.error("Error in browse-all TimescaleDB retrieval: %s", e)
+            finally:
+                release_timescale_conn(conn)
+
+        return results
+
     def _temporal_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
         """Retrieve memories by time range"""
         results = []
@@ -275,7 +433,7 @@ class HybridRetrievalService:
             conn.commit()
                     
         except Exception as e:
-            print(f"Error in temporal retrieval: {e}")
+            logger.error("Error in temporal retrieval: %s", e)
         
         return results
     
@@ -370,7 +528,7 @@ class HybridRetrievalService:
             conn.commit()
                         
         except Exception as e:
-            print(f"Error in emotional retrieval: {e}")
+            logger.error("Error in emotional retrieval: %s", e)
         finally:
             if conn:
                 release_timescale_conn(conn)
@@ -391,7 +549,7 @@ class HybridRetrievalService:
                 importance_score = skill.success_rate or 0.5
                 
                 # Create searchable content
-                content = f"{skill.skill_name}: {' '.join(skill.steps)}"
+                content = f"{skill.skill_name}: {' '.join(skill.steps or [])}"
                 if skill.context:
                     content += f" (Context: {skill.context})"
                 
@@ -415,7 +573,7 @@ class HybridRetrievalService:
                 results.append(result)
                 
         except Exception as e:
-            print(f"Error in procedural retrieval: {e}")
+            logger.error("Error in procedural retrieval: %s", e)
         
         return results
     
@@ -435,15 +593,34 @@ class HybridRetrievalService:
         return min(recency_score, 1.0)
     
     def _deduplicate_results(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
-        """Remove duplicate results based on memory_id"""
+        """Remove duplicate results based on memory_id and typed_table_id.
+
+        When memories are stored via direct API with typed fields (episodic, emotional, procedural),
+        they get stored in BOTH ChromaDB (with mem_ prefix) AND the typed TimescaleDB table (with UUID).
+        The ChromaDB entry's metadata contains 'typed_table_id' pointing to the typed table entry.
+
+        This deduplication ensures we don't return both entries for the same logical memory.
+        We prefer the ChromaDB entry (mem_ prefix) as it has richer metadata.
+        """
         seen_ids = set()
+        seen_typed_ids = set()  # Track typed_table_ids we've seen
         unique_results = []
-        
+
         for result in results:
+            # Check if this is a typed table entry that we've already seen via ChromaDB
+            if result.memory_id in seen_typed_ids:
+                continue
+
             if result.memory_id not in seen_ids:
                 seen_ids.add(result.memory_id)
+
+                # If this result has a typed_table_id, track it to skip the typed table duplicate
+                typed_table_id = (result.metadata or {}).get("typed_table_id")
+                if typed_table_id:
+                    seen_typed_ids.add(typed_table_id)
+
                 unique_results.append(result)
-        
+
         return unique_results
     
     def _rank_results(self, results: List[RetrievalResult], query: RetrievalQuery) -> List[RetrievalResult]:
@@ -603,7 +780,7 @@ class HybridRetrievalService:
             return context_results[:context_window]
             
         except Exception as e:
-            print(f"Error getting memory context: {e}")
+            logger.error("Error getting memory context: %s", e)
             return []
         finally:
             if conn:

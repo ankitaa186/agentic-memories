@@ -407,7 +407,7 @@ def _convert_to_retrieve_items(raw_items: List[Dict[str, Any]]) -> List[Retrieve
         except Exception:
             importance_val = None
         item = RetrieveItem(
-            id=r.get("id") if isinstance(r, dict) else "",
+            id=str(r.get("id", "")) if isinstance(r, dict) else "",
             content=r.get("content") if isinstance(r, dict) else "",
             layer=meta.get("layer", "semantic"),
             type=meta.get("type", "explicit"),
@@ -922,6 +922,7 @@ def retrieve(
         layer: Optional[str] = Query(default=None),
         type: Optional[str] = Query(default=None),
         persona: Optional[str] = Query(default=None),
+        sort: Optional[str] = Query(default=None, description="Sort order: 'newest' or 'oldest' (by timestamp)"),
         limit: int = Query(default=50, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
 ) -> RetrieveResponse:
@@ -948,11 +949,16 @@ def retrieve(
                 persona_context["forced_persona"] = persona
                 metadata_filters.setdefault("persona_tags", [persona])
 
-        limit_with_offset = limit + offset
+        # When sorting by timestamp, fetch a large pool so we can sort before paginating.
+        # ChromaDB .get() returns records in arbitrary order, so a small limit would
+        # miss recent memories.
+        sorting = sort in ("newest", "oldest")
+        fetch_limit = max(limit + offset, 1000) if sorting else limit + offset
+
         persona_results = _persona_copilot.retrieve(
                 user_id=user_id,
                 query=query or "",
-                limit=limit_with_offset,
+                limit=fetch_limit,
                 persona_context=persona_context or None,
                 metadata_filters=metadata_filters if metadata_filters else None,
                 include_summaries=False,
@@ -961,14 +967,32 @@ def retrieve(
         selected_persona = persona or (next(iter(persona_results.keys()), None))
         raw_items: List[dict] = []
         total = 0
+
+        # Define timestamp key extractor once (avoid duplication)
+        def _ts_key(r: dict) -> str:
+                meta = r.get("metadata", {}) if isinstance(r, dict) else {}
+                return meta.get("timestamp", "") if isinstance(meta, dict) else ""
+
         if selected_persona and selected_persona in persona_results:
                 persona_payload = persona_results[selected_persona]
                 pool = persona_payload.items
+
+                # Sort the full pool first, then paginate
+                if sorting:
+                        pool.sort(key=_ts_key, reverse=(sort == "newest"))
+
                 total = len(pool)
                 raw_items = pool[offset: offset + limit]
         else:
                 fallback_filters = dict(metadata_filters)
-                raw_items, total = search_memories(user_id=user_id, query=query or "", filters=fallback_filters, limit=limit, offset=offset)
+                # When sorting, fetch a larger pool first, sort, then paginate
+                # (Fixes bug: previously sorted only the paginated page, not full results)
+                if sorting:
+                        pool, total = search_memories(user_id=user_id, query=query or "", filters=fallback_filters, limit=fetch_limit, offset=0)
+                        pool.sort(key=_ts_key, reverse=(sort == "newest"))
+                        raw_items = pool[offset: offset + limit]
+                else:
+                        raw_items, total = search_memories(user_id=user_id, query=query or "", filters=fallback_filters, limit=limit, offset=offset)
 
         items = _convert_to_retrieve_items(raw_items)
 
