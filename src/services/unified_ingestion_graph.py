@@ -818,8 +818,8 @@ def node_store_emotional(state: IngestionState) -> IngestionState:
 				emotional_state=emotional_state,
 				valence=valence,
 				arousal=arousal,
-				context=str(memory.metadata.get('tags', [])),
-				trigger_event=memory.content
+				context=memory.content,  # Use actual memory content, not tags
+				trigger_event=", ".join(memory.metadata.get('tags', []))  # Tags as trigger
 			):
 				stored_count += 1
 		
