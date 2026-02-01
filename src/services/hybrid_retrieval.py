@@ -266,7 +266,14 @@ class HybridRetrievalService:
                 logger.error("Error in browse-all ChromaDB retrieval: %s", e)
 
         # 2. Episodic memories (TimescaleDB)
+        # Build seen_ids from both memory_id AND typed_table_id to avoid duplicates
+        # When stored via direct API, ChromaDB has mem_XXXX with typed_table_id metadata
+        # pointing to the UUID in the typed table
         seen_ids = {r.memory_id for r in results}
+        for r in results:
+            typed_id = (r.metadata or {}).get("typed_table_id")
+            if typed_id:
+                seen_ids.add(typed_id)
         conn = get_timescale_conn()
         if conn:
             try:
@@ -586,15 +593,34 @@ class HybridRetrievalService:
         return min(recency_score, 1.0)
     
     def _deduplicate_results(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
-        """Remove duplicate results based on memory_id"""
+        """Remove duplicate results based on memory_id and typed_table_id.
+
+        When memories are stored via direct API with typed fields (episodic, emotional, procedural),
+        they get stored in BOTH ChromaDB (with mem_ prefix) AND the typed TimescaleDB table (with UUID).
+        The ChromaDB entry's metadata contains 'typed_table_id' pointing to the typed table entry.
+
+        This deduplication ensures we don't return both entries for the same logical memory.
+        We prefer the ChromaDB entry (mem_ prefix) as it has richer metadata.
+        """
         seen_ids = set()
+        seen_typed_ids = set()  # Track typed_table_ids we've seen
         unique_results = []
-        
+
         for result in results:
+            # Check if this is a typed table entry that we've already seen via ChromaDB
+            if result.memory_id in seen_typed_ids:
+                continue
+
             if result.memory_id not in seen_ids:
                 seen_ids.add(result.memory_id)
+
+                # If this result has a typed_table_id, track it to skip the typed table duplicate
+                typed_table_id = (result.metadata or {}).get("typed_table_id")
+                if typed_table_id:
+                    seen_typed_ids.add(typed_table_id)
+
                 unique_results.append(result)
-        
+
         return unique_results
     
     def _rank_results(self, results: List[RetrievalResult], query: RetrievalQuery) -> List[RetrievalResult]:
