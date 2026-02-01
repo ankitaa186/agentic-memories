@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import hashlib
 import time
 import uuid
 import json
@@ -32,6 +33,7 @@ def _ttl_epoch_from_ttl(ttl_seconds: Optional[int]) -> Optional[int]:
 
 
 def _build_metadata(memory: Memory) -> Dict[str, Any]:
+	content_hash = hashlib.sha256(memory.content.strip().lower().encode()).hexdigest()
 	meta: Dict[str, Any] = {
 		"user_id": memory.user_id,
 		"layer": memory.layer,
@@ -41,6 +43,7 @@ def _build_metadata(memory: Memory) -> Dict[str, Any]:
 		"relevance_score": memory.relevance_score,
 		"usage_count": memory.usage_count,
 		"importance": memory.importance,
+		"content_hash": content_hash,
 		"persona_tags": json.dumps(memory.persona_tags or []),
 		"tags": json.dumps(memory.metadata.get("tags", [])),  # Serialize list to string
 	}

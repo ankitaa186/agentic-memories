@@ -14,6 +14,7 @@ This replaces the previous separation between extraction and routing.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import json
@@ -454,6 +455,139 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	           state.get("user_id"), len(memories))
 	
 	end_span(output={"memories_built": len(memories)})
+	return state
+
+
+def node_dedup_check(state: IngestionState) -> IngestionState:
+	"""Remove duplicate memories before storage using content hash and semantic similarity.
+
+	Two-pass dedup:
+	1. **Exact match** — content_hash lookup in ChromaDB metadata (fast, zero tolerance).
+	2. **Semantic match** — cosine-distance query against existing user embeddings.
+	   Collection uses cosine distance so values are `1 - cosine_similarity`.
+	   Threshold 0.08 ≈ cosine similarity > 0.92, catching LLM paraphrases.
+
+	Also filters classifications to stay aligned with the memories list so that
+	downstream zip(memories, classifications) remains correct.
+	"""
+	from src.services.tracing import start_span, end_span
+	from src.services.retrieval import _standard_collection_name
+	from src.dependencies.chroma import get_chroma_client
+
+	# Cosine distance threshold: 0.20 ≈ cosine similarity 0.80
+	# Tuned from real paraphrase measurements:
+	#   - dist 0.05: identical text, trivial word swap          → catch
+	#   - dist 0.19: "about 3 cups every morning" vs
+	#                 "three cups each morning"                 → catch (same fact)
+	#   - dist 0.25: same topic, genuinely new detail           → allow
+	# Compaction (0.85 cosine) catches anything this misses.
+	SEMANTIC_DISTANCE_THRESHOLD = 0.15
+
+	span = start_span("dedup_check", input={
+		"memories_count": len(state.get("memories", []))
+	})
+
+	memories = state.get("memories", [])
+	classifications = state.get("classifications", [])
+	user_id = state.get("user_id")
+
+	if not memories:
+		state["metrics"]["duplicates_avoided"] = 0
+		end_span(output={"duplicates_avoided": 0})
+		return state
+
+	duplicates_avoided = 0
+	hash_dupes = 0
+	semantic_dupes = 0
+	keep_indices: List[int] = []
+
+	try:
+		client = get_chroma_client()
+		if client is None:
+			raise RuntimeError("Chroma client not available")
+		collection_name = _standard_collection_name()
+		collection = client.get_or_create_collection(collection_name)
+
+		for idx, memory in enumerate(memories):
+			content_hash = hashlib.sha256(memory.content.strip().lower().encode()).hexdigest()
+			memory.metadata["content_hash"] = content_hash
+
+			is_duplicate = False
+			match_type = None
+
+			# --- Pass 1: exact content_hash match (fast metadata lookup) ---
+			try:
+				hash_results = collection.get(
+					where={"$and": [
+						{"user_id": user_id},
+						{"content_hash": content_hash},
+					]},
+					limit=1,
+				)
+				if hash_results and hash_results.get("ids") and len(hash_results["ids"]) > 0:
+					is_duplicate = True
+					match_type = "exact_hash"
+					hash_dupes += 1
+			except Exception as exc:
+				logger.debug("[graph.dedup_check.hash_query_error] user_id=%s error=%s", user_id, exc)
+
+			# --- Pass 2: semantic similarity (embedding cosine distance) ---
+			if not is_duplicate and memory.embedding:
+				try:
+					results = collection.query(
+						query_embeddings=[memory.embedding],
+						n_results=3,
+						where={"user_id": user_id},
+					)
+					distances = results.get("distances", [[]])
+					documents = results.get("documents", [[]])
+					if distances and distances[0]:
+						for i, dist in enumerate(distances[0]):
+							# Cosine distance: 1 - cosine_sim. Lower = more similar.
+							if dist < SEMANTIC_DISTANCE_THRESHOLD:
+								is_duplicate = True
+								match_type = "semantic"
+								semantic_dupes += 1
+								existing_doc = documents[0][i] if documents and documents[0] and i < len(documents[0]) else ""
+								logger.info(
+									"[graph.dedup_check.semantic_match] user_id=%s dist=%.4f "
+									"new='%s' existing='%s'",
+									user_id, dist,
+									memory.content[:60], (existing_doc or "")[:60],
+								)
+								break
+				except Exception as exc:
+					logger.warning("[graph.dedup_check.query_error] user_id=%s error=%s", user_id, exc)
+
+			if is_duplicate:
+				duplicates_avoided += 1
+				logger.info("[graph.dedup_check.duplicate] user_id=%s match=%s hash=%s content=%s",
+				           user_id, match_type, content_hash[:12], memory.content[:80])
+			else:
+				keep_indices.append(idx)
+
+	except Exception as exc:
+		logger.warning("[graph.dedup_check.error] user_id=%s error=%s — passing all memories through", user_id, exc)
+		keep_indices = list(range(len(memories)))
+
+	state["memories"] = [memories[i] for i in keep_indices]
+	# Keep classifications aligned with memories (they are built 1:1 with extracted_items
+	# which maps 1:1 to memories after build_memories filters empty content)
+	if classifications:
+		state["classifications"] = [classifications[i] for i in keep_indices if i < len(classifications)]
+
+	state["metrics"]["duplicates_avoided"] = duplicates_avoided
+
+	logger.info("[graph.dedup_check] user_id=%s input=%s output=%s duplicates_avoided=%s (hash=%s semantic=%s)",
+	           user_id, len(memories), len(state["memories"]),
+	           duplicates_avoided, hash_dupes, semantic_dupes)
+
+	end_span(output={
+		"duplicates_avoided": duplicates_avoided,
+		"hash_dupes": hash_dupes,
+		"semantic_dupes": semantic_dupes,
+		"memories_remaining": len(state["memories"]),
+	})
 	return state
 
 
@@ -1007,6 +1141,7 @@ def build_unified_ingestion_graph() -> StateGraph:
 	graph.add_node("extract", node_extract)
 	graph.add_node("classify", node_classify_and_enrich)
 	graph.add_node("build_memories", node_build_memories)
+	graph.add_node("dedup_check", node_dedup_check)
 	graph.add_node("extract_profile", node_extract_profile)
 	graph.add_node("store_profile", node_store_profile)
 	graph.add_node("store_chromadb", node_store_chromadb)
@@ -1038,7 +1173,8 @@ def build_unified_ingestion_graph() -> StateGraph:
 		{"classify": "classify", "finalize_early": "finalize_early"}
 	)
 	graph.add_edge("classify", "build_memories")
-	graph.add_edge("build_memories", "extract_profile")
+	graph.add_edge("build_memories", "dedup_check")
+	graph.add_edge("dedup_check", "extract_profile")
 	graph.add_edge("extract_profile", "store_profile")
 	graph.add_edge("store_profile", "store_chromadb")
 	
