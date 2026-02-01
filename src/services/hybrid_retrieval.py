@@ -7,18 +7,40 @@ with intelligent ranking and fusion algorithms.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 
+logger = logging.getLogger(__name__)
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.chroma import get_chroma_client
 from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
 from src.services.emotional_memory import EmotionalMemory, EmotionalMemoryService
 from src.services.procedural_memory import ProceduralMemory, ProceduralMemoryService
 from src.services.embedding_utils import get_embeddings
+
+
+def _deserialize_metadata_lists(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Deserialize JSON-stringified lists back to Python lists.
+
+    ChromaDB only supports primitive types in metadata, so lists are
+    serialized to JSON strings on storage. This function reverses that.
+    """
+    if not metadata:
+        return metadata
+
+    list_fields = ['persona_tags', 'tags', 'topics', 'people_mentioned', 'participants']
+    for field in list_fields:
+        if field in metadata and isinstance(metadata[field], str):
+            try:
+                metadata[field] = json.loads(metadata[field])
+            except (json.JSONDecodeError, ValueError):
+                pass  # Keep as string if not valid JSON
+    return metadata
 
 
 class RetrievalStrategy(Enum):
@@ -157,7 +179,7 @@ class HybridRetrievalService:
                     for i, memory_id in enumerate(search_results['ids'][0]):
                         distance = search_results['distances'][0][i] if search_results.get('distances') else 0.0
                         similarity = 1.0 - distance
-                        metadata = search_results['metadatas'][0][i] or {}
+                        metadata = _deserialize_metadata_lists(search_results['metadatas'][0][i] or {})
 
                         # Extract timestamp and calculate recency score
                         timestamp_str = metadata.get('timestamp')
@@ -188,10 +210,10 @@ class HybridRetrievalService:
                         )
                         results.append(result)
             except Exception as e:
-                print(f"Error searching collection {collection_name}: {e}")
+                logger.error("Error searching collection %s: %s", collection_name, e)
         
         except Exception as e:
-            print(f"Error in semantic retrieval: {e}")
+            logger.error("Error in semantic retrieval: %s", e)
         
         return results
     
@@ -216,7 +238,7 @@ class HybridRetrievalService:
                 for i, memory_id in enumerate(ids):
                     if i >= len(docs) or i >= len(metas):
                         continue
-                    metadata = metas[i] or {}
+                    metadata = _deserialize_metadata_lists(metas[i] or {})
                     timestamp_str = metadata.get("timestamp")
                     recency = 0.5
                     if timestamp_str:
@@ -241,7 +263,7 @@ class HybridRetrievalService:
                         metadata=metadata,
                     ))
             except Exception as e:
-                print(f"Error in browse-all ChromaDB retrieval: {e}")
+                logger.error("Error in browse-all ChromaDB retrieval: %s", e)
 
         # 2. Episodic memories (TimescaleDB)
         seen_ids = {r.memory_id for r in results}
@@ -280,11 +302,8 @@ class HybridRetrievalService:
                             metadata=meta,
                         ))
                 conn.commit()
-            except Exception as e:
-                print(f"Error in browse-all episodic retrieval: {e}")
 
-            # 3. Emotional memories (TimescaleDB)
-            try:
+                # 3. Emotional memories (TimescaleDB)
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT id, context, timestamp, valence, arousal, intensity, emotional_state
@@ -318,7 +337,9 @@ class HybridRetrievalService:
                         ))
                 conn.commit()
             except Exception as e:
-                print(f"Error in browse-all emotional retrieval: {e}")
+                logger.error("Error in browse-all TimescaleDB retrieval: %s", e)
+            finally:
+                release_timescale_conn(conn)
 
         return results
 
@@ -405,7 +426,7 @@ class HybridRetrievalService:
             conn.commit()
                     
         except Exception as e:
-            print(f"Error in temporal retrieval: {e}")
+            logger.error("Error in temporal retrieval: %s", e)
         
         return results
     
@@ -500,7 +521,7 @@ class HybridRetrievalService:
             conn.commit()
                         
         except Exception as e:
-            print(f"Error in emotional retrieval: {e}")
+            logger.error("Error in emotional retrieval: %s", e)
         finally:
             if conn:
                 release_timescale_conn(conn)
@@ -545,7 +566,7 @@ class HybridRetrievalService:
                 results.append(result)
                 
         except Exception as e:
-            print(f"Error in procedural retrieval: {e}")
+            logger.error("Error in procedural retrieval: %s", e)
         
         return results
     
@@ -733,7 +754,7 @@ class HybridRetrievalService:
             return context_results[:context_window]
             
         except Exception as e:
-            print(f"Error getting memory context: {e}")
+            logger.error("Error getting memory context: %s", e)
             return []
         finally:
             if conn:
