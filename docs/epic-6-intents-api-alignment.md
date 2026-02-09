@@ -46,8 +46,8 @@ Annie's proactive AI has evolved from a code-driven to an **LLM-driven architect
 
 ### Reference Documents
 
-- [Annie Proactive AI Architecture](file:///Users/Ankit/dev/annie/docs/design/proactive-ai-architecture.md)
-- [Annie Epic 13](file:///Users/Ankit/dev/annie/docs/epics/epic-13-proactive-ai.md)
+- Annie Proactive AI Architecture (internal reference)
+- Annie Epic 13 (internal reference)
 
 ---
 
@@ -554,8 +554,8 @@ WHERE trigger_timezone IS NULL;
 
 ## References
 
-- [Annie Proactive AI Architecture](file:///Users/Ankit/dev/annie/docs/design/proactive-ai-architecture.md)
-- [Annie Epic 13: Proactive AI Worker](file:///Users/Ankit/dev/annie/docs/epics/epic-13-proactive-ai.md)
+- Annie Proactive AI Architecture (internal reference)
+- Annie Epic 13: Proactive AI Worker (internal reference)
 - [Epic 5: Scheduled Intents API](./epic-5-scheduled-intents.md)
 - [IANA Time Zone Database](https://www.iana.org/time-zones)
 

@@ -19,10 +19,13 @@ class TimescaleClient:
     
     def __init__(self, connection_string: Optional[str] = None):
         """Initialize TimescaleDB client with connection pooling."""
-        self.connection_string = connection_string or os.getenv(
-            'TIMESCALE_DSN',
-            'postgresql://memories:memories123@localhost:5433/episodic_memories'
-        )
+        self.connection_string = connection_string or os.getenv('TIMESCALE_DSN')
+        if not self.connection_string:
+            raise ValueError(
+                "TIMESCALE_DSN environment variable is required. "
+                "Set it to a PostgreSQL connection string, e.g.: "
+                "postgresql://user:pass@localhost:5433/agentic_memories"
+            )
         
         # Create connection pool
         self.pool = SimpleConnectionPool(
