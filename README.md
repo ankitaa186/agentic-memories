@@ -4,7 +4,7 @@
 
 **A living, breathing memory system that transforms AI from stateless responders into sentient companions with human-like consciousness**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
@@ -1547,9 +1547,45 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ---
 
+## Disclaimer
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. USE AT YOUR OWN RISK.
+
+**The authors and contributors of Agentic Memories shall not be held liable
+for any damages, losses, or consequences arising from the use, misuse, or
+inability to use this software**, including but not limited to:
+
+- **Data loss or corruption** — This software manages databases and persistent
+  storage. Always maintain independent backups of any critical data.
+- **AI-generated content** — Memory extraction, consolidation, and retrieval
+  rely on large language models (LLMs) which may produce inaccurate, incomplete,
+  misleading, or biased outputs. Do not rely on this software for medical,
+  legal, financial, or safety-critical decisions.
+- **Security vulnerabilities** — While we make reasonable efforts to follow
+  security best practices, no software is guaranteed to be free of
+  vulnerabilities. You are responsible for securing your own deployment,
+  credentials, and infrastructure.
+- **Third-party services** — This software integrates with external APIs and
+  services (OpenAI, Grok, etc.) which have their own terms of service, pricing,
+  and limitations. You are solely responsible for compliance with those terms
+  and any costs incurred.
+- **Privacy and personal data** — This software stores and processes user
+  conversations and personal information. You are solely responsible for
+  compliance with all applicable data protection laws and regulations (GDPR,
+  CCPA, etc.) in your jurisdiction.
+
+**By using this software, you acknowledge that you have read this disclaimer
+and agree to assume all risks associated with its use.**
+
+This project is experimental and under active development. APIs, data formats,
+and behavior may change without notice between versions.
+
+---
+
 ## 📝 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) for details.
 
 ---
 

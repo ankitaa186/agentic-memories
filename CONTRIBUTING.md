@@ -84,4 +84,4 @@ Open a [GitHub Issue](https://github.com/ankitaa186/agentic-memories/issues) wit
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
