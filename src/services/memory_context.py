@@ -7,7 +7,7 @@ to provide context for the LLM during memory extraction.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 import logging
 
 from src.services.retrieval import search_memories

@@ -19,7 +19,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
 
 # Add project root to path
@@ -210,7 +210,7 @@ def print_suite_summary(suite_result: Dict[str, Any]) -> None:
     # Show top/bottom categories if available
     category_metrics = suite_result.get("category_metrics", {})
     if category_metrics:
-        print(f"\n📂 Category Performance (Top 5):\n")
+        print("\n📂 Category Performance (Top 5):\n")
         
         # Sort by F1 score
         sorted_categories = sorted(
@@ -232,7 +232,7 @@ def print_suite_summary(suite_result: Dict[str, Any]) -> None:
 def compare_suites(suite_results: List[Dict[str, Any]]) -> None:
     """Compare results across suites"""
     print(f"\n{'='*80}")
-    print(f"📊 Cross-Suite Comparison")
+    print("📊 Cross-Suite Comparison")
     print(f"{'='*80}\n")
     
     print(f"{'Suite':<25} {'Tests':>8} {'F1':>8} {'Precision':>10} {'Recall':>8} {'Cost':>10}")
@@ -351,7 +351,7 @@ def main():
         for r in all_suite_results if "error" not in r
     ) / max(1, len([r for r in all_suite_results if "error" not in r]))
     
-    print(f"✅ Evaluation Complete!")
+    print("✅ Evaluation Complete!")
     print(f"   • Total Tests: {total_tests}")
     print(f"   • Average F1: {avg_f1:.3f}")
     print(f"   • Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

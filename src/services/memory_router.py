@@ -10,8 +10,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from src.models import Memory
 from src.services.episodic_memory import EpisodicMemoryService, EpisodicMemory
-from src.services.emotional_memory import EmotionalMemoryService, EmotionalMemory
-from src.services.procedural_memory import ProceduralMemoryService, SkillProgression, ProceduralMemory
+from src.services.emotional_memory import EmotionalMemoryService
+from src.services.procedural_memory import ProceduralMemoryService
 from src.services.portfolio_service import PortfolioService
 
 logger = logging.getLogger("agentic_memories.memory_router")
@@ -229,7 +229,6 @@ class MemoryRouter:
 			return False
 		
 		from src.services.tracing import start_span, end_span
-		import uuid
 		
 		span = start_span("emotional_state_storage", input={
 			"user_id": user_id,
@@ -292,7 +291,6 @@ class MemoryRouter:
 			return False
 		
 		from src.services.tracing import start_span, end_span
-		import uuid
 		
 		span = start_span("procedural_memory_storage", input={
 			"user_id": user_id,

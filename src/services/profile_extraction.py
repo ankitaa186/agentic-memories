@@ -2,7 +2,7 @@
 Profile Extraction Service
 Extracts profile-worthy information from memories using LLM
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import logging
 from datetime import datetime, timezone
 

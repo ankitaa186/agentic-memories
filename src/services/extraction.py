@@ -3,9 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import os
-import json
-import logging
 import re
 
 from src.models import Memory
@@ -16,14 +13,9 @@ from src.config import (
 	get_default_short_term_ttl_seconds,
 	get_embedding_model_name,
 	get_extraction_model_name,
-	get_extraction_retries,
-	get_extraction_timeouts_ms,
 	get_max_memories_per_request,
 )
-from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3
-from src.services.prompts import TYPING_PROMPT  # Still use V1 for typing if needed
 from src.services.graph_extraction import run_extraction_graph
-from src.services.extract_utils import _call_llm_json
 from src.services.embedding_utils import generate_embedding
 
 

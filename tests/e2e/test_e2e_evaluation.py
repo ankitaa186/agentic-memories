@@ -1,9 +1,6 @@
 """E2E evaluation tests for memory extraction quality."""
-import json
 import time
 import pytest
-import requests
-from typing import Dict, List, Any
 from tests.evals.metrics import score_predictions
 
 

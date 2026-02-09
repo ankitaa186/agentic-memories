@@ -2,10 +2,8 @@
 Unit tests for Profile Completeness Tracking (Story 1.6)
 Tests completeness calculation, gap identification, caching, and enhanced endpoint
 """
-import pytest
 import json
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
 
 
 # Test EXPECTED_PROFILE_FIELDS constant
@@ -358,7 +356,7 @@ def test_completeness_cache_miss():
 
 def test_completeness_cache_ttl():
     """Test completeness cache uses correct TTL (AC4)"""
-    from src.services.profile_storage import ProfileStorageService, COMPLETENESS_CACHE_TTL
+    from src.services.profile_storage import COMPLETENESS_CACHE_TTL
 
     assert COMPLETENESS_CACHE_TTL == 3600  # 1 hour
 

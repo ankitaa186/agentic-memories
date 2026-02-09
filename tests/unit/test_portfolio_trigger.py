@@ -5,11 +5,8 @@ Tests AC5.1: 'portfolio' is valid trigger_type
 Tests AC5.2: Portfolio expressions validated with proper regex
 Tests AC5.3: Default check_interval_minutes=15 for portfolio triggers
 """
-from datetime import datetime, timezone
-from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
 
 from src.schemas import (
     ScheduledIntentCreate,

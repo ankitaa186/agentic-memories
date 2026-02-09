@@ -9,18 +9,17 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.chroma import get_chroma_client
-from src.services.episodic_memory import EpisodicMemory, EpisodicMemoryService
-from src.services.emotional_memory import EmotionalMemory, EmotionalMemoryService
-from src.services.procedural_memory import ProceduralMemory, ProceduralMemoryService
+from src.services.episodic_memory import EpisodicMemoryService
+from src.services.emotional_memory import EmotionalMemoryService
+from src.services.procedural_memory import ProceduralMemoryService
 from src.services.embedding_utils import get_embeddings
 
 

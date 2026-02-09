@@ -7,15 +7,13 @@ Stores in TimescaleDB for time-series optimization.
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Any
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.dependencies.chroma import get_chroma_client
 from src.services.embedding_utils import get_embeddings
-from src.config import get_worthy_threshold
 
 
 @dataclass

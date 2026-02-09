@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import logging
 from zoneinfo import ZoneInfo
 import os
@@ -45,13 +45,10 @@ from src.config import get_openai_api_key, get_chroma_host, get_chroma_port, is_
 from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url, get_chroma_tenant, get_chroma_database
 import httpx
-from src.services.extraction import extract_from_transcript
 from src.services.reconstruction import ReconstructionService
-from src.services.storage import upsert_memories
-from src.services.retrieval import search_memories, _standard_collection_name
+from src.services.retrieval import search_memories
 from src.services.extract_utils import _call_llm_json
 from src.dependencies.cloudflare_access import verify_cf_access_token, extract_token_from_headers
-from src.dependencies.redis_client import get_redis_client
 from src.memory_orchestrator import AdaptiveMemoryOrchestrator, MessageEvent, MessageRole, MemoryInjection
 from src.services.chat_runtime import ChatRuntimeBridge
 try:
@@ -605,7 +602,7 @@ def health_full() -> dict:
 					ORDER BY table_name
 				""")
 				all_tables = [row['table_name'] for row in cur.fetchall()]
-	except Exception as exc:
+	except Exception:
 		pass  # Individual checks will report errors
 	
 	# Memory tables check (core)

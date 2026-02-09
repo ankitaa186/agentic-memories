@@ -3,7 +3,6 @@ Test script for profile extraction pipeline
 Tests the integration of ProfileExtractor and ProfileStorageService in the unified ingestion graph
 """
 import sys
-from datetime import datetime, timezone
 from src.schemas import TranscriptRequest, Message
 from src.services.unified_ingestion_graph import run_unified_ingestion
 from src.services.profile_storage import ProfileStorageService

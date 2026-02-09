@@ -99,7 +99,7 @@ def node_init(state: IngestionState) -> IngestionState:
 	"""Initialize the ingestion pipeline"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("ingestion_init", input={
+	_span = start_span("ingestion_init", input={
 		"user_id": state.get("user_id"),
 		"history_length": len(state.get("history", []))
 	})
@@ -127,7 +127,7 @@ def node_worthiness(state: IngestionState) -> IngestionState:
 	"""Check if the conversation is worth extracting memories from"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("worthiness_check", input={
+	_span = start_span("worthiness_check", input={
 		"history_count": len(state.get("history", []))
 	})
 	
@@ -159,7 +159,7 @@ def node_extract(state: IngestionState) -> IngestionState:
 	existing_memories = get_relevant_existing_memories(request)
 	state["existing_memories"] = existing_memories
 	
-	span = start_span("memory_extraction", input={
+	_span = start_span("memory_extraction", input={
 		"user_id": user_id,
 		"existing_memories_count": len(existing_memories)
 	})
@@ -198,7 +198,7 @@ def node_classify_and_enrich(state: IngestionState) -> IngestionState:
 	"""
 	from src.services.tracing import start_span, end_span
 
-	span = start_span("classification_enrichment", input={
+	_span = start_span("classification_enrichment", input={
 		"items_count": len(state.get("extracted_items", []))
 	})
 
@@ -357,7 +357,7 @@ def node_build_memories(state: IngestionState) -> IngestionState:
 	"""Build Memory objects from extracted items"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("build_memory_objects", input={
+	_span = start_span("build_memory_objects", input={
 		"items_count": len(state.get("extracted_items", []))
 	})
 	
@@ -483,7 +483,7 @@ def node_dedup_check(state: IngestionState) -> IngestionState:
 	# Compaction (0.85 cosine) catches anything this misses.
 	SEMANTIC_DISTANCE_THRESHOLD = 0.15
 
-	span = start_span("dedup_check", input={
+	_span = start_span("dedup_check", input={
 		"memories_count": len(state.get("memories", []))
 	})
 
@@ -595,7 +595,7 @@ def node_extract_profile(state: IngestionState) -> IngestionState:
 	"""Extract profile information from memories using LLM"""
 	from src.services.tracing import start_span, end_span
 
-	span = start_span("extract_profile", input={
+	_span = start_span("extract_profile", input={
 		"memories_count": len(state.get("memories", []))
 	})
 
@@ -635,7 +635,7 @@ def node_store_profile(state: IngestionState) -> IngestionState:
 	"""Store profile extractions in PostgreSQL"""
 	from src.services.tracing import start_span, end_span
 
-	span = start_span("store_profile", input={
+	_span = start_span("store_profile", input={
 		"extractions_count": len(state.get("profile_extractions", []))
 	})
 
@@ -673,7 +673,7 @@ def node_store_chromadb(state: IngestionState) -> IngestionState:
 	"""Store memories in ChromaDB (vector database)"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("store_chromadb", input={
+	_span = start_span("store_chromadb", input={
 		"memories_count": len(state.get("memories", []))
 	})
 	
@@ -709,12 +709,12 @@ def node_store_episodic(state: IngestionState) -> IngestionState:
 	"""
 	from src.services.tracing import start_span, end_span
 
-	span = start_span("store_episodic", input={"user_id": state.get("user_id")})
+	_span = start_span("store_episodic", input={"user_id": state.get("user_id")})
 
 	memories = state.get("memories", [])
-	memory_ids = state.get("memory_ids", [])
+	_memory_ids = state.get("memory_ids", [])
 	classifications = state.get("classifications", [])
-	extracted_items = state.get("extracted_items", [])
+	_extracted_items = state.get("extracted_items", [])
 	user_id = state.get("user_id")
 
 	stored_count = 0
@@ -788,7 +788,7 @@ def node_store_emotional(state: IngestionState) -> IngestionState:
 	"""Store emotional states in TimescaleDB"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("store_emotional", input={"user_id": state.get("user_id")})
+	_span = start_span("store_emotional", input={"user_id": state.get("user_id")})
 	
 	memories = state.get("memories", [])
 	classifications = state.get("classifications", [])
@@ -841,7 +841,7 @@ def node_store_procedural(state: IngestionState) -> IngestionState:
 	"""Store procedural memories (skills) in PostgreSQL"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("store_procedural", input={"user_id": state.get("user_id")})
+	_span = start_span("store_procedural", input={"user_id": state.get("user_id")})
 	
 	memories = state.get("memories", [])
 	classifications = state.get("classifications", [])
@@ -887,7 +887,7 @@ def node_store_portfolio(state: IngestionState) -> IngestionState:
 	"""Store portfolio/financial data in PostgreSQL"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("store_portfolio", input={"user_id": state.get("user_id")})
+	_span = start_span("store_portfolio", input={"user_id": state.get("user_id")})
 	
 	memories = state.get("memories", [])
 	memory_ids = state.get("memory_ids", [])
@@ -936,7 +936,7 @@ def node_summarize_storage(state: IngestionState) -> IngestionState:
 	"""Summarize all storage operations and prepare final metrics"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("summarize_storage", input={"user_id": state.get("user_id")})
+	_span = start_span("summarize_storage", input={"user_id": state.get("user_id")})
 	
 	storage_results = state.get("storage_results", {})
 	
@@ -972,7 +972,7 @@ def node_finalize(state: IngestionState) -> IngestionState:
 	"""Finalize the ingestion and collect metrics"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("ingestion_finalize", input={})
+	_span = start_span("ingestion_finalize", input={})
 	
 	total_ms = int((time.perf_counter() - state["t_start"]) * 1000)
 	state["metrics"]["total_ms"] = total_ms
@@ -1113,7 +1113,7 @@ def node_finalize_early(state: IngestionState) -> IngestionState:
 	"""Early finalization when nothing to extract"""
 	from src.services.tracing import start_span, end_span
 	
-	span = start_span("ingestion_finalize_early", input={})
+	_span = start_span("ingestion_finalize_early", input={})
 	
 	state["memory_ids"] = []
 	state["metrics"]["total_ms"] = int((time.perf_counter() - state["t_start"]) * 1000)
@@ -1214,7 +1214,7 @@ def run_unified_ingestion(request: TranscriptRequest) -> Dict[str, Any]:
 	if is_langfuse_enabled():
 		try:
 			from langfuse.langchain import CallbackHandler
-			from langfuse import Langfuse, observe, propagate_attributes
+			from langfuse import Langfuse
 
 			# Create Langfuse client
 			langfuse_client = Langfuse(

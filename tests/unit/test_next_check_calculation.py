@@ -49,7 +49,6 @@ class TestCalculateInitialNextCheck:
 
     def test_cron_valid_expression(self, intent_service):
         """Test cron type with valid expression returns next occurrence (2.1)."""
-        from zoneinfo import ZoneInfo
 
         # Use UTC timezone explicitly to get predictable results
         schedule = TriggerSchedule(cron="0 9 * * 1", timezone="UTC")  # Every Monday at 9 AM UTC

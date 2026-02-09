@@ -25,7 +25,7 @@ from src.schemas import (
     IntentExecutionResponse,
     IntentClaimResponse,
 )
-from src.services.intent_validation import IntentValidationService, ValidationResult
+from src.services.intent_validation import IntentValidationService
 
 logger = logging.getLogger("agentic_memories.intent_service")
 

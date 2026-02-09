@@ -1,10 +1,7 @@
 """E2E test configuration for deployed application testing."""
-import os
 import time
-import json
 import requests
 import pytest
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from uuid import uuid4
 

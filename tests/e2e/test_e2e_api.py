@@ -1,9 +1,6 @@
 """End-to-end API tests running in Docker container."""
 import json
 import time
-import pytest
-import requests
-from typing import Dict, List, Any
 
 
 class TestE2EAPI:

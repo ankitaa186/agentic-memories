@@ -145,7 +145,7 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
 				elif isinstance(ts, str):
 					# Already a string, extract date portion
 					return ts[:10] if len(ts) >= 10 else ts
-			except:
+			except Exception:
 				pass
 		return "unknown"
 
@@ -188,7 +188,7 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
 			if isinstance(tags, str):
 				try:
 					tags = json.loads(tags)
-				except:
+				except Exception:
 					tags = []
 			if isinstance(tags, list):
 				all_tags.update(tags)
@@ -251,7 +251,7 @@ def _reextract_memories(user_id: str, candidates: List[Dict[str, Any]]) -> Dict[
     for c in candidates:
         mid = c.get("id")
         content = c.get("content", "")
-        metadata = c.get("metadata", {})
+        _metadata = c.get("metadata", {})
         
         # Validate candidate structure
         if not mid:

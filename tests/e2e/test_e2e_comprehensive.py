@@ -2,8 +2,6 @@
 import json
 import time
 import pytest
-import requests
-from typing import Dict, List, Any
 from pathlib import Path
 from tests.evals.metrics import score_predictions
 
@@ -105,7 +103,7 @@ class TestE2EComprehensive:
         # Calculate metrics
         metrics = score_predictions(expected_memories, predicted_memories)
         
-        print(f"Memory Quality Metrics:")
+        print("Memory Quality Metrics:")
         print(f"  Recall: {metrics['recall']:.3f}")
         print(f"  Precision: {metrics['precision']:.3f}")
         print(f"  F1 Score: {metrics['f1']:.3f}")
@@ -364,7 +362,6 @@ class TestE2EComprehensive:
         
         # Test concurrent requests
         import threading
-        import time
         
         results = []
         errors = []

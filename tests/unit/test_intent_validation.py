@@ -10,7 +10,7 @@ Tests validation rules for scheduled intent creation:
 - AC7: All errors returned in single response
 """
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,10 +18,6 @@ from src.schemas import ScheduledIntentCreate, TriggerSchedule, TriggerCondition
 from src.services.intent_validation import (
     IntentValidationService,
     ValidationResult,
-    MAX_TRIGGERS_PER_USER,
-    CRON_MIN_INTERVAL_SECONDS,
-    CRON_MAX_FIRES_PER_DAY,
-    INTERVAL_MIN_MINUTES,
 )
 
 

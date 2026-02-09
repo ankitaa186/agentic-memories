@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from src.dependencies.chroma import get_chroma_client
 from src.services.embedding_utils import generate_embedding
 

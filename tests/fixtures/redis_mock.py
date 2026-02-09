@@ -1,6 +1,5 @@
 """Redis mock fixtures for testing."""
 from typing import Any, Dict, Optional, Union
-from unittest.mock import MagicMock
 
 
 class MockRedisClient:

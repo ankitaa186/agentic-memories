@@ -12,8 +12,7 @@ Tests cover:
 - Response format with storage status per backend
 - Error handling (best-effort for typed tables)
 """
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 
@@ -616,7 +615,6 @@ def test_store_episodic_success():
     """Test _store_episodic helper function success case"""
     from src.routers.memories import _store_episodic
     from src.schemas import DirectMemoryRequest
-    from datetime import datetime, timezone
 
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor)
@@ -645,7 +643,6 @@ def test_store_episodic_connection_unavailable():
     """Test _store_episodic returns False when connection unavailable"""
     from src.routers.memories import _store_episodic
     from src.schemas import DirectMemoryRequest
-    from datetime import datetime, timezone
 
     body = DirectMemoryRequest(
         user_id="test-user",
@@ -751,7 +748,6 @@ def test_store_episodic_database_error_rollback():
     """Test _store_episodic rollback on database error"""
     from src.routers.memories import _store_episodic
     from src.schemas import DirectMemoryRequest
-    from datetime import datetime, timezone
 
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor, should_fail=True)

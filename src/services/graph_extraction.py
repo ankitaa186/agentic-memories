@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-import json
 
-from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
 from src.services.prompts_v3 import WORTHINESS_PROMPT_V3, EXTRACTION_PROMPT_V3

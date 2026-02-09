@@ -7,7 +7,6 @@ Covers:
 - AC 10.6.3: Performance tests (store < 3s, delete < 1s)
 """
 import time
-from datetime import datetime, timezone
 from typing import Generator
 from unittest.mock import MagicMock, patch
 

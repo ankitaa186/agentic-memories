@@ -3,8 +3,7 @@ Unit tests for Profile CRUD API endpoints
 Tests all profile endpoints: GET, PUT, DELETE, and completeness
 """
 import pytest
-from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
+from unittest.mock import patch
 
 
 # Mock ProfileStorageService for testing

@@ -8,7 +8,7 @@ and filling gaps using an LLM. Uses hybrid retrieval for context.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.services.hybrid_retrieval import (

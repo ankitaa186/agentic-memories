@@ -1,5 +1,4 @@
 """ChromaDB mock fixtures for testing."""
-from unittest.mock import MagicMock
 from typing import Any, Dict, List, Optional
 
 

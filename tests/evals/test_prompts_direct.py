@@ -33,8 +33,7 @@ if not os.getenv("OPENAI_API_KEY"):
     sys.exit(1)
 
 from src.services.extract_utils import _call_llm_json
-from src.services.memory_context import format_memories_for_llm_context
-from tests.evals.metrics import score_predictions, format_metrics_report, evaluate_extraction_comprehensive, count_tokens
+from tests.evals.metrics import format_metrics_report, evaluate_extraction_comprehensive, count_tokens
 
 # Check if we should use V2 prompt (set by run_evals.sh)
 if os.getenv("USE_PROMPT_V2"):

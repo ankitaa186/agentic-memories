@@ -9,7 +9,7 @@ Tests AC3.5: Pending query includes in_cooldown flag
 Tests AC3.6: Claim endpoint prevents duplicate processing
 """
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest

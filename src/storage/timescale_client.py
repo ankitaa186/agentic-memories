@@ -1,13 +1,11 @@
 """TimescaleDB client for episodic and emotional memories."""
 
 import os
-import json
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-from uuid import UUID, uuid4
+from typing import List, Dict, Any, Optional
+from uuid import uuid4
 import logging
 
-import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from psycopg2.pool import SimpleConnectionPool
 

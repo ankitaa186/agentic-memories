@@ -4,8 +4,7 @@ Tests GET /v1/portfolio, POST /v1/portfolio/holding, PUT /v1/portfolio/holding/{
 DELETE /v1/portfolio/holding/{ticker}, DELETE /v1/portfolio (clear all)
 Schema: id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
 """
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 

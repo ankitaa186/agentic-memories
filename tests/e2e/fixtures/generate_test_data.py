@@ -4,7 +4,7 @@
 import json
 import random
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 class E2ETestDataGenerator:

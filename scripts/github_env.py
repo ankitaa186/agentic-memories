@@ -15,7 +15,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # ANSI colors
 RED = "\033[91m"
@@ -770,7 +770,7 @@ def interactive_menu(repo: str, env_name: str, env_file: Path) -> None:
 
         print_menu(options)
 
-        choice = input(f"Select option: ").strip().lower()
+        choice = input("Select option: ").strip().lower()
 
         if choice == "1":
             cmd_read(repo, env_name, env_file)
@@ -805,7 +805,7 @@ def prompt_initial_environment() -> str:
     print(f"  {YELLOW}[4]{RESET} Enter custom name")
 
     while True:
-        response = input(f"\nChoice [1]: ").strip()
+        response = input("\nChoice [1]: ").strip()
 
         if response == "" or response == "1":
             return "dev"
