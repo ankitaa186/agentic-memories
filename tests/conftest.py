@@ -20,8 +20,8 @@ warnings.filterwarnings(
     module=r"pydantic\\.v1\\.typing",
 )
 
-import pytest
-from fastapi.testclient import TestClient
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 class _RedisStub:
@@ -81,6 +81,7 @@ def _prepare_app(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub):
     monkeypatch.setattr("src.config.is_langfuse_enabled", lambda: False)
 
     import src.app as app_module
+
     reload(app_module)
 
     monkeypatch.setattr(app_module, "_start_scheduler", lambda: None)
@@ -89,9 +90,13 @@ def _prepare_app(monkeypatch: pytest.MonkeyPatch, redis_stub: _RedisStub):
     collection_name = "unit_test_collection"
     chroma_client = MagicMock()
     chroma_client.health_check.return_value = True
-    chroma_client.list_collections.return_value = [SimpleNamespace(name=collection_name)]
+    chroma_client.list_collections.return_value = [
+        SimpleNamespace(name=collection_name)
+    ]
     monkeypatch.setattr(app_module, "get_chroma_client", lambda: chroma_client)
-    monkeypatch.setattr(app_module, "_standard_collection_name", lambda: collection_name)
+    monkeypatch.setattr(
+        app_module, "_standard_collection_name", lambda: collection_name
+    )
 
     monkeypatch.setattr(app_module, "ping_timescale", lambda: (True, None))
     monkeypatch.setattr(app_module, "get_redis_client", lambda: redis_stub)

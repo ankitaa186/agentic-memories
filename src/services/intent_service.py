@@ -4,6 +4,7 @@ Intent Service for Scheduled Intents API (Story 5.4)
 Provides business logic for CRUD operations on scheduled intents.
 Handles next_check calculation, validation integration, and database operations.
 """
+
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
@@ -39,6 +40,7 @@ class IntentServiceResult:
         intent: The intent data if successful
         errors: List of error messages if failed
     """
+
     success: bool
     intent: Optional[ScheduledIntentResponse] = None
     intents: Optional[List[ScheduledIntentResponse]] = None
@@ -54,6 +56,7 @@ class IntentFireResult:
         response: The fire response with updated state
         errors: List of error messages if failed
     """
+
     success: bool
     response: Optional[IntentFireResponse] = None
     errors: Optional[List[str]] = None
@@ -68,6 +71,7 @@ class IntentHistoryResult:
         executions: List of execution records
         errors: List of error messages if failed
     """
+
     success: bool
     executions: Optional[List[IntentExecutionResponse]] = None
     errors: Optional[List[str]] = None
@@ -83,6 +87,7 @@ class IntentClaimResult:
         conflict: True if intent was already claimed by another worker
         errors: List of error messages if failed
     """
+
     success: bool
     response: Optional[IntentClaimResponse] = None
     conflict: bool = False
@@ -138,7 +143,8 @@ class IntentService:
         if not validation_result.is_valid:
             logger.warning(
                 "[intent.service.create] user_id=%s validation_failed errors=%d",
-                intent.user_id, len(validation_result.errors)
+                intent.user_id,
+                len(validation_result.errors),
             )
             return IntentServiceResult(success=False, errors=validation_result.errors)
 
@@ -152,13 +158,15 @@ class IntentService:
                 # Override default of 5 with portfolio default of 15
                 # (only if not explicitly set - 5 is the model default)
                 trigger_schedule = TriggerSchedule(
-                    **{**trigger_schedule.model_dump(exclude_none=True), 'check_interval_minutes': 15}
+                    **{
+                        **trigger_schedule.model_dump(exclude_none=True),
+                        "check_interval_minutes": 15,
+                    }
                 )
 
         # Calculate initial next_check
         next_check = self._calculate_initial_next_check(
-            intent.trigger_type,
-            trigger_schedule
+            intent.trigger_type, trigger_schedule
         )
 
         try:
@@ -167,13 +175,23 @@ class IntentService:
                 # Use mode='json' to properly serialize datetime objects
                 trigger_schedule_json = None
                 if trigger_schedule:
-                    trigger_schedule_json = json.dumps(trigger_schedule.model_dump(mode='json', exclude_none=True))
+                    trigger_schedule_json = json.dumps(
+                        trigger_schedule.model_dump(mode="json", exclude_none=True)
+                    )
 
                 trigger_condition_json = None
                 if intent.trigger_condition:
-                    trigger_condition_json = json.dumps(intent.trigger_condition.model_dump(mode='json', exclude_none=True))
+                    trigger_condition_json = json.dumps(
+                        intent.trigger_condition.model_dump(
+                            mode="json", exclude_none=True
+                        )
+                    )
 
-                metadata_json = json.dumps(intent.metadata, default=str) if intent.metadata else '{}'
+                metadata_json = (
+                    json.dumps(intent.metadata, default=str)
+                    if intent.metadata
+                    else "{}"
+                )
 
                 cur.execute(
                     """
@@ -206,7 +224,7 @@ class IntentService:
                         intent.max_executions,
                         intent.user_id,  # created_by = user_id
                         metadata_json,
-                    )
+                    ),
                 )
 
                 row = cur.fetchone()
@@ -216,15 +234,22 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.create] user_id=%s intent_id=%s trigger_type=%s next_check=%s",
-                    intent.user_id, response.id, intent.trigger_type, next_check
+                    intent.user_id,
+                    response.id,
+                    intent.trigger_type,
+                    next_check,
                 )
 
                 return IntentServiceResult(success=True, intent=response)
 
         except Exception as e:
-            logger.error("[intent.service.create] user_id=%s error=%s", intent.user_id, e)
+            logger.error(
+                "[intent.service.create] user_id=%s error=%s", intent.user_id, e
+            )
             self._conn.rollback()
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def list_intents(
         self,
@@ -232,7 +257,7 @@ class IntentService:
         trigger_type: Optional[str] = None,
         enabled: Optional[bool] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> IntentServiceResult:
         """List intents for a user with optional filters.
 
@@ -273,14 +298,19 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.list] user_id=%s count=%d trigger_type=%s enabled=%s",
-                    user_id, len(intents), trigger_type, enabled
+                    user_id,
+                    len(intents),
+                    trigger_type,
+                    enabled,
                 )
 
                 return IntentServiceResult(success=True, intents=intents)
 
         except Exception as e:
             logger.error("[intent.service.list] user_id=%s error=%s", user_id, e)
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def get_intent(self, intent_id: UUID) -> IntentServiceResult:
         """Get a single intent by ID.
@@ -294,14 +324,17 @@ class IntentService:
         try:
             with self._conn.cursor() as cur:
                 cur.execute(
-                    "SELECT * FROM scheduled_intents WHERE id = %s",
-                    (str(intent_id),)
+                    "SELECT * FROM scheduled_intents WHERE id = %s", (str(intent_id),)
                 )
                 row = cur.fetchone()
 
                 if row is None:
-                    logger.info("[intent.service.get] intent_id=%s not_found", intent_id)
-                    return IntentServiceResult(success=False, errors=["Intent not found"])
+                    logger.info(
+                        "[intent.service.get] intent_id=%s not_found", intent_id
+                    )
+                    return IntentServiceResult(
+                        success=False, errors=["Intent not found"]
+                    )
 
                 response = self._row_to_response(row)
 
@@ -311,9 +344,13 @@ class IntentService:
 
         except Exception as e:
             logger.error("[intent.service.get] intent_id=%s error=%s", intent_id, e)
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
-    def update_intent(self, intent_id: UUID, update: ScheduledIntentUpdate) -> IntentServiceResult:
+    def update_intent(
+        self, intent_id: UUID, update: ScheduledIntentUpdate
+    ) -> IntentServiceResult:
         """Update an existing intent.
 
         If trigger_schedule or trigger_type changes, recalculates next_check.
@@ -329,14 +366,17 @@ class IntentService:
             with self._conn.cursor() as cur:
                 # First get the existing intent
                 cur.execute(
-                    "SELECT * FROM scheduled_intents WHERE id = %s",
-                    (str(intent_id),)
+                    "SELECT * FROM scheduled_intents WHERE id = %s", (str(intent_id),)
                 )
                 existing = cur.fetchone()
 
                 if existing is None:
-                    logger.info("[intent.service.update] intent_id=%s not_found", intent_id)
-                    return IntentServiceResult(success=False, errors=["Intent not found"])
+                    logger.info(
+                        "[intent.service.update] intent_id=%s not_found", intent_id
+                    )
+                    return IntentServiceResult(
+                        success=False, errors=["Intent not found"]
+                    )
 
                 # Build merged state for validation
                 new_trigger_type = update.trigger_type or existing["trigger_type"]
@@ -347,28 +387,41 @@ class IntentService:
                 if update.trigger_schedule is not None:
                     new_trigger_schedule = update.trigger_schedule
                 elif existing["trigger_schedule"]:
-                    new_trigger_schedule = TriggerSchedule(**existing["trigger_schedule"])
+                    new_trigger_schedule = TriggerSchedule(
+                        **existing["trigger_schedule"]
+                    )
 
                 # Merge trigger_condition
                 if update.trigger_condition is not None:
                     new_trigger_condition = update.trigger_condition
                 elif existing["trigger_condition"]:
-                    new_trigger_condition = TriggerCondition(**existing["trigger_condition"])
+                    new_trigger_condition = TriggerCondition(
+                        **existing["trigger_condition"]
+                    )
 
                 # Build merged ScheduledIntentCreate for full validation
                 merged_intent = ScheduledIntentCreate(
                     user_id=existing["user_id"],
                     intent_name=update.intent_name or existing["intent_name"],
-                    description=update.description if update.description is not None else existing.get("description"),
+                    description=update.description
+                    if update.description is not None
+                    else existing.get("description"),
                     trigger_type=new_trigger_type,
                     trigger_schedule=new_trigger_schedule,
                     trigger_condition=new_trigger_condition,
                     action_type=update.action_type or existing["action_type"],
                     action_context=update.action_context or existing["action_context"],
-                    action_priority=update.action_priority or existing["action_priority"],
-                    expires_at=update.expires_at if update.expires_at is not None else existing.get("expires_at"),
-                    max_executions=update.max_executions if update.max_executions is not None else existing.get("max_executions"),
-                    metadata=update.metadata if update.metadata is not None else existing.get("metadata"),
+                    action_priority=update.action_priority
+                    or existing["action_priority"],
+                    expires_at=update.expires_at
+                    if update.expires_at is not None
+                    else existing.get("expires_at"),
+                    max_executions=update.max_executions
+                    if update.max_executions is not None
+                    else existing.get("max_executions"),
+                    metadata=update.metadata
+                    if update.metadata is not None
+                    else existing.get("metadata"),
                 )
 
                 # Run full validation on merged state
@@ -379,13 +432,19 @@ class IntentService:
                 if not validation_result.is_valid:
                     logger.warning(
                         "[intent.service.update] intent_id=%s validation_failed errors=%d",
-                        intent_id, len(validation_result.errors)
+                        intent_id,
+                        len(validation_result.errors),
                     )
-                    return IntentServiceResult(success=False, errors=validation_result.errors)
+                    return IntentServiceResult(
+                        success=False, errors=validation_result.errors
+                    )
 
                 # Determine if schedule changed (need to recalculate next_check)
                 schedule_changed = False
-                if update.trigger_type and update.trigger_type != existing["trigger_type"]:
+                if (
+                    update.trigger_type
+                    and update.trigger_type != existing["trigger_type"]
+                ):
                     schedule_changed = True
                 if update.trigger_schedule is not None:
                     schedule_changed = True
@@ -394,8 +453,7 @@ class IntentService:
                 new_next_check = None
                 if schedule_changed and new_trigger_schedule:
                     new_next_check = self._calculate_initial_next_check(
-                        new_trigger_type,
-                        new_trigger_schedule
+                        new_trigger_type, new_trigger_schedule
                     )
 
                 # Build dynamic UPDATE query
@@ -416,11 +474,23 @@ class IntentService:
 
                 if update.trigger_schedule is not None:
                     set_clauses.append("trigger_schedule = %s")
-                    params.append(json.dumps(update.trigger_schedule.model_dump(mode='json', exclude_none=True)))
+                    params.append(
+                        json.dumps(
+                            update.trigger_schedule.model_dump(
+                                mode="json", exclude_none=True
+                            )
+                        )
+                    )
 
                 if update.trigger_condition is not None:
                     set_clauses.append("trigger_condition = %s")
-                    params.append(json.dumps(update.trigger_condition.model_dump(mode='json', exclude_none=True)))
+                    params.append(
+                        json.dumps(
+                            update.trigger_condition.model_dump(
+                                mode="json", exclude_none=True
+                            )
+                        )
+                    )
 
                 if update.action_type is not None:
                     set_clauses.append("action_type = %s")
@@ -459,7 +529,7 @@ class IntentService:
 
                 query = f"""
                     UPDATE scheduled_intents
-                    SET {', '.join(set_clauses)}
+                    SET {", ".join(set_clauses)}
                     WHERE id = %s
                     RETURNING *
                 """
@@ -472,7 +542,9 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.update] intent_id=%s schedule_changed=%s next_check=%s",
-                    intent_id, schedule_changed, response.next_check
+                    intent_id,
+                    schedule_changed,
+                    response.next_check,
                 )
 
                 return IntentServiceResult(success=True, intent=response)
@@ -480,7 +552,9 @@ class IntentService:
         except Exception as e:
             logger.error("[intent.service.update] intent_id=%s error=%s", intent_id, e)
             self._conn.rollback()
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def delete_intent(self, intent_id: UUID) -> IntentServiceResult:
         """Delete an intent by ID.
@@ -497,13 +571,17 @@ class IntentService:
             with self._conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM scheduled_intents WHERE id = %s RETURNING id",
-                    (str(intent_id),)
+                    (str(intent_id),),
                 )
                 row = cur.fetchone()
 
                 if row is None:
-                    logger.info("[intent.service.delete] intent_id=%s not_found", intent_id)
-                    return IntentServiceResult(success=False, errors=["Intent not found"])
+                    logger.info(
+                        "[intent.service.delete] intent_id=%s not_found", intent_id
+                    )
+                    return IntentServiceResult(
+                        success=False, errors=["Intent not found"]
+                    )
 
                 self._conn.commit()
 
@@ -514,12 +592,12 @@ class IntentService:
         except Exception as e:
             logger.error("[intent.service.delete] intent_id=%s error=%s", intent_id, e)
             self._conn.rollback()
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def get_pending_intents(
-        self,
-        user_id: Optional[str] = None,
-        limit: Optional[int] = None
+        self, user_id: Optional[str] = None, limit: Optional[int] = None
     ) -> IntentServiceResult:
         """Get pending intents that are due for execution (Story 5.5).
 
@@ -590,10 +668,7 @@ class IntentService:
                     last_condition_fire = row.get("last_condition_fire")
 
                     is_in_cooldown, _ = self._check_cooldown(
-                        intent.trigger_type,
-                        last_condition_fire,
-                        cooldown_hours,
-                        now
+                        intent.trigger_type, last_condition_fire, cooldown_hours, now
                     )
 
                     # Add in_cooldown to metadata for Annie's flexibility
@@ -605,7 +680,8 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.pending] user_id=%s count=%d",
-                    user_id, len(intents)
+                    user_id,
+                    len(intents),
                 )
 
                 return IntentServiceResult(success=True, intents=intents)
@@ -613,7 +689,9 @@ class IntentService:
         except Exception as e:
             logger.error("[intent.service.pending] user_id=%s error=%s", user_id, e)
             self._conn.rollback()
-            return IntentServiceResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentServiceResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def claim_intent(self, intent_id: UUID) -> IntentClaimResult:
         """Claim an intent for exclusive processing (Story 6.3, AC3.6).
@@ -638,7 +716,7 @@ class IntentService:
                     WHERE id = %s
                     FOR UPDATE SKIP LOCKED
                     """,
-                    (str(intent_id),)
+                    (str(intent_id),),
                 )
                 row = cur.fetchone()
 
@@ -647,17 +725,24 @@ class IntentService:
                     # Check if intent exists at all
                     cur.execute(
                         "SELECT id FROM scheduled_intents WHERE id = %s",
-                        (str(intent_id),)
+                        (str(intent_id),),
                     )
                     if cur.fetchone() is None:
-                        logger.info("[intent.service.claim] intent_id=%s not_found", intent_id)
-                        return IntentClaimResult(success=False, errors=["Intent not found"])
+                        logger.info(
+                            "[intent.service.claim] intent_id=%s not_found", intent_id
+                        )
+                        return IntentClaimResult(
+                            success=False, errors=["Intent not found"]
+                        )
                     else:
-                        logger.info("[intent.service.claim] intent_id=%s locked_by_another", intent_id)
+                        logger.info(
+                            "[intent.service.claim] intent_id=%s locked_by_another",
+                            intent_id,
+                        )
                         return IntentClaimResult(
                             success=False,
                             conflict=True,
-                            errors=["Intent is locked by another worker"]
+                            errors=["Intent is locked by another worker"],
                         )
 
                 # Check if already claimed (within timeout)
@@ -667,12 +752,13 @@ class IntentService:
                     if claimed_at > claim_expiry:
                         logger.info(
                             "[intent.service.claim] intent_id=%s already_claimed claimed_at=%s",
-                            intent_id, claimed_at
+                            intent_id,
+                            claimed_at,
                         )
                         return IntentClaimResult(
                             success=False,
                             conflict=True,
-                            errors=["Intent already claimed by another worker"]
+                            errors=["Intent already claimed by another worker"],
                         )
 
                 # Claim the intent
@@ -683,7 +769,7 @@ class IntentService:
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (now, str(intent_id))
+                    (now, str(intent_id)),
                 )
                 updated_row = cur.fetchone()
                 self._conn.commit()
@@ -691,29 +777,29 @@ class IntentService:
                 intent_response = self._row_to_response(updated_row)
 
                 logger.info(
-                    "[intent.service.claim] intent_id=%s claimed_at=%s",
-                    intent_id, now
+                    "[intent.service.claim] intent_id=%s claimed_at=%s", intent_id, now
                 )
 
                 return IntentClaimResult(
                     success=True,
                     response=IntentClaimResponse(
-                        intent=intent_response,
-                        claimed_at=now
-                    )
+                        intent=intent_response, claimed_at=now
+                    ),
                 )
 
         except Exception as e:
             logger.error("[intent.service.claim] intent_id=%s error=%s", intent_id, e)
             self._conn.rollback()
-            return IntentClaimResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentClaimResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def _check_cooldown(
         self,
         trigger_type: str,
         last_condition_fire: Optional[datetime],
         cooldown_hours: int,
-        now: datetime
+        now: datetime,
     ) -> tuple[bool, Optional[float]]:
         """Check if a condition-based trigger is in cooldown period (Story 6.3).
 
@@ -744,9 +830,7 @@ class IntentService:
         return False, None
 
     def fire_intent(
-        self,
-        intent_id: UUID,
-        request: IntentFireRequest
+        self, intent_id: UUID, request: IntentFireRequest
     ) -> IntentFireResult:
         """Report execution result and update intent state (Story 5.6).
 
@@ -764,13 +848,14 @@ class IntentService:
             with self._conn.cursor() as cur:
                 # Get existing intent
                 cur.execute(
-                    "SELECT * FROM scheduled_intents WHERE id = %s",
-                    (str(intent_id),)
+                    "SELECT * FROM scheduled_intents WHERE id = %s", (str(intent_id),)
                 )
                 row = cur.fetchone()
 
                 if row is None:
-                    logger.info("[intent.service.fire] intent_id=%s not_found", intent_id)
+                    logger.info(
+                        "[intent.service.fire] intent_id=%s not_found", intent_id
+                    )
                     return IntentFireResult(success=False, errors=["Intent not found"])
 
                 intent = self._row_to_response(row)
@@ -782,17 +867,15 @@ class IntentService:
                 last_condition_fire = row.get("last_condition_fire")
 
                 is_in_cooldown, remaining_hours = self._check_cooldown(
-                    intent.trigger_type,
-                    last_condition_fire,
-                    cooldown_hours,
-                    now
+                    intent.trigger_type, last_condition_fire, cooldown_hours, now
                 )
 
                 if is_in_cooldown:
                     # Return early with cooldown info - don't log to executions
                     logger.info(
                         "[intent.service.fire] intent_id=%s cooldown_active=true remaining_hours=%.2f",
-                        intent_id, remaining_hours
+                        intent_id,
+                        remaining_hours,
                     )
                     return IntentFireResult(
                         success=True,
@@ -805,7 +888,7 @@ class IntentService:
                             cooldown_active=True,
                             cooldown_remaining_hours=remaining_hours,
                             last_condition_fire=last_condition_fire,
-                        )
+                        ),
                     )
 
                 # Always update last_checked (AC2)
@@ -839,10 +922,7 @@ class IntentService:
                         trigger_schedule = intent.trigger_schedule
 
                 new_next_check = self._calculate_next_check_after_fire(
-                    intent.trigger_type,
-                    trigger_schedule,
-                    request.status,
-                    now
+                    intent.trigger_type, trigger_schedule, request.status, now
                 )
 
                 # Check auto-disable conditions (AC5)
@@ -856,9 +936,14 @@ class IntentService:
                     was_disabled_reason = "one-time trigger executed"
 
                 # Disable if max_executions reached
-                if intent.max_executions is not None and new_execution_count >= intent.max_executions:
+                if (
+                    intent.max_executions is not None
+                    and new_execution_count >= intent.max_executions
+                ):
                     new_enabled = False
-                    was_disabled_reason = f"max_executions ({intent.max_executions}) reached"
+                    was_disabled_reason = (
+                        f"max_executions ({intent.max_executions}) reached"
+                    )
 
                 # Disable if expires_at passed
                 if intent.expires_at is not None and now >= intent.expires_at:
@@ -875,8 +960,7 @@ class IntentService:
                     new_next_check = None
                     was_disabled_reason = "fire_mode_once"
                     logger.info(
-                        "[intents.fire] fire_mode_once disabled intent_id=%s",
-                        intent_id
+                        "[intents.fire] fire_mode_once disabled intent_id=%s", intent_id
                     )
 
                 # Update intent record in database (AC2, AC3, AC4, AC5, Story 6.3, Story 6.4)
@@ -907,12 +991,16 @@ class IntentService:
                         new_enabled,
                         new_last_condition_fire,
                         str(intent_id),
-                    )
+                    ),
                 )
 
                 # Log execution to intent_executions table (AC6)
-                trigger_data_json = json.dumps(request.trigger_data) if request.trigger_data else None
-                gate_result_json = json.dumps(request.gate_result) if request.gate_result else None
+                trigger_data_json = (
+                    json.dumps(request.trigger_data) if request.trigger_data else None
+                )
+                gate_result_json = (
+                    json.dumps(request.gate_result) if request.gate_result else None
+                )
 
                 cur.execute(
                     """
@@ -940,7 +1028,7 @@ class IntentService:
                         request.generation_ms,
                         request.delivery_ms,
                         request.error_message,
-                    )
+                    ),
                 )
 
                 self._conn.commit()
@@ -960,7 +1048,12 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.fire] intent_id=%s status=%s next_check=%s enabled=%s exec_count=%d disabled_reason=%s",
-                    intent_id, request.status, new_next_check, new_enabled, new_execution_count, was_disabled_reason
+                    intent_id,
+                    request.status,
+                    new_next_check,
+                    new_enabled,
+                    new_execution_count,
+                    was_disabled_reason,
                 )
 
                 return IntentFireResult(success=True, response=response)
@@ -971,10 +1064,7 @@ class IntentService:
             return IntentFireResult(success=False, errors=[f"Database error: {str(e)}"])
 
     def get_intent_history(
-        self,
-        intent_id: UUID,
-        limit: int = 50,
-        offset: int = 0
+        self, intent_id: UUID, limit: int = 50, offset: int = 0
     ) -> IntentHistoryResult:
         """Get execution history for an intent (Story 5.7).
 
@@ -996,12 +1086,15 @@ class IntentService:
             with self._conn.cursor() as cur:
                 # First verify intent exists (AC5)
                 cur.execute(
-                    "SELECT id FROM scheduled_intents WHERE id = %s",
-                    (str(intent_id),)
+                    "SELECT id FROM scheduled_intents WHERE id = %s", (str(intent_id),)
                 )
                 if cur.fetchone() is None:
-                    logger.info("[intent.service.history] intent_id=%s not_found", intent_id)
-                    return IntentHistoryResult(success=False, errors=["Intent not found"])
+                    logger.info(
+                        "[intent.service.history] intent_id=%s not_found", intent_id
+                    )
+                    return IntentHistoryResult(
+                        success=False, errors=["Intent not found"]
+                    )
 
                 # Query execution history (AC1, AC2, AC3, AC4)
                 cur.execute(
@@ -1015,7 +1108,7 @@ class IntentService:
                     ORDER BY executed_at DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (str(intent_id), limit, offset)
+                    (str(intent_id), limit, offset),
                 )
                 rows = cur.fetchall()
 
@@ -1023,21 +1116,26 @@ class IntentService:
 
                 logger.info(
                     "[intent.service.history] intent_id=%s count=%d limit=%d offset=%d",
-                    intent_id, len(executions), limit, offset
+                    intent_id,
+                    len(executions),
+                    limit,
+                    offset,
                 )
 
                 return IntentHistoryResult(success=True, executions=executions)
 
         except Exception as e:
             logger.error("[intent.service.history] intent_id=%s error=%s", intent_id, e)
-            return IntentHistoryResult(success=False, errors=[f"Database error: {str(e)}"])
+            return IntentHistoryResult(
+                success=False, errors=[f"Database error: {str(e)}"]
+            )
 
     def _calculate_next_check_after_fire(
         self,
         trigger_type: str,
         trigger_schedule: Optional[TriggerSchedule],
         status: str,
-        now: datetime
+        now: datetime,
     ) -> Optional[datetime]:
         """Calculate next_check after firing based on trigger type and result (Story 5.6, Epic 6: timezone-aware).
 
@@ -1073,10 +1171,18 @@ class IntentService:
                     # Convert to UTC for storage
                     return next_local.astimezone(timezone.utc)
                 except Exception as e:
-                    logger.warning("[intent.service.next_check_fire] cron_error=%s tz=%s", e, tz_str)
+                    logger.warning(
+                        "[intent.service.next_check_fire] cron_error=%s tz=%s",
+                        e,
+                        tz_str,
+                    )
                     return now + timedelta(minutes=5)
 
-            elif trigger_type == "interval" and trigger_schedule and trigger_schedule.interval_minutes:
+            elif (
+                trigger_type == "interval"
+                and trigger_schedule
+                and trigger_schedule.interval_minutes
+            ):
                 return now + timedelta(minutes=trigger_schedule.interval_minutes)
 
             elif trigger_type == "once":
@@ -1094,9 +1200,7 @@ class IntentService:
         return now + timedelta(minutes=5)
 
     def _validate_trigger_type_schedule_compatibility(
-        self,
-        trigger_type: str,
-        trigger_schedule: TriggerSchedule
+        self, trigger_type: str, trigger_schedule: TriggerSchedule
     ) -> List[str]:
         """Validate that trigger_type and trigger_schedule are compatible.
 
@@ -1136,9 +1240,7 @@ class IntentService:
         return errors
 
     def _calculate_initial_next_check(
-        self,
-        trigger_type: str,
-        trigger_schedule: Optional[TriggerSchedule]
+        self, trigger_type: str, trigger_schedule: Optional[TriggerSchedule]
     ) -> Optional[datetime]:
         """Calculate initial next_check based on trigger type (Epic 6: timezone-aware).
 
@@ -1166,13 +1268,21 @@ class IntentService:
                 # Convert to UTC for storage
                 return next_local.astimezone(timezone.utc)
             except Exception as e:
-                logger.warning("[intent.service.next_check] cron_error=%s tz=%s", e, tz_str)
+                logger.warning(
+                    "[intent.service.next_check] cron_error=%s tz=%s", e, tz_str
+                )
                 return now_utc
 
-        elif trigger_type == "interval" and trigger_schedule and trigger_schedule.interval_minutes:
+        elif (
+            trigger_type == "interval"
+            and trigger_schedule
+            and trigger_schedule.interval_minutes
+        ):
             return now_utc + timedelta(minutes=trigger_schedule.interval_minutes)
 
-        elif trigger_type == "once" and trigger_schedule and trigger_schedule.trigger_at:
+        elif (
+            trigger_type == "once" and trigger_schedule and trigger_schedule.trigger_at
+        ):
             # trigger_at is assumed to be in the user's timezone if naive, else use as-is
             trigger_at = trigger_schedule.trigger_at
             if trigger_at.tzinfo is None:
@@ -1228,7 +1338,9 @@ class IntentService:
             metadata=row.get("metadata"),
         )
 
-    def _execution_row_to_response(self, row: Dict[str, Any]) -> IntentExecutionResponse:
+    def _execution_row_to_response(
+        self, row: Dict[str, Any]
+    ) -> IntentExecutionResponse:
         """Convert an intent_executions database row to IntentExecutionResponse.
 
         Note: Connection pool is configured with dict_row factory, so rows

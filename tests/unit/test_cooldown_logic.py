@@ -8,6 +8,7 @@ Tests AC3.4: Updates last_condition_fire on successful fires
 Tests AC3.5: Pending query includes in_cooldown flag
 Tests AC3.6: Claim endpoint prevents duplicate processing
 """
+
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -91,7 +92,7 @@ class TestCooldownCheck:
             trigger_type="cron",
             last_condition_fire=last_fire,
             cooldown_hours=24,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is False
@@ -106,7 +107,7 @@ class TestCooldownCheck:
             trigger_type="interval",
             last_condition_fire=last_fire,
             cooldown_hours=24,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is False
@@ -121,7 +122,7 @@ class TestCooldownCheck:
             trigger_type="once",
             last_condition_fire=last_fire,
             cooldown_hours=24,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is False
@@ -138,7 +139,7 @@ class TestCooldownCheck:
             trigger_type=trigger_type,
             last_condition_fire=last_fire,
             cooldown_hours=cooldown_hours,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is True
@@ -156,7 +157,7 @@ class TestCooldownCheck:
             trigger_type=trigger_type,
             last_condition_fire=last_fire,
             cooldown_hours=cooldown_hours,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is False
@@ -171,7 +172,7 @@ class TestCooldownCheck:
             trigger_type=trigger_type,
             last_condition_fire=None,  # Never fired
             cooldown_hours=24,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is False
@@ -187,7 +188,7 @@ class TestCooldownCheck:
             trigger_type="price",
             last_condition_fire=last_fire,
             cooldown_hours=cooldown_hours,
-            now=now
+            now=now,
         )
 
         assert is_in_cooldown is True
@@ -210,30 +211,21 @@ class TestIntentFireResponseCooldownFields:
     def test_cooldown_active_default_false(self):
         """cooldown_active defaults to False."""
         response = IntentFireResponse(
-            intent_id=uuid4(),
-            status="success",
-            enabled=True,
-            execution_count=1
+            intent_id=uuid4(), status="success", enabled=True, execution_count=1
         )
         assert response.cooldown_active is False
 
     def test_cooldown_remaining_hours_default_none(self):
         """cooldown_remaining_hours defaults to None."""
         response = IntentFireResponse(
-            intent_id=uuid4(),
-            status="success",
-            enabled=True,
-            execution_count=1
+            intent_id=uuid4(), status="success", enabled=True, execution_count=1
         )
         assert response.cooldown_remaining_hours is None
 
     def test_last_condition_fire_default_none(self):
         """last_condition_fire defaults to None."""
         response = IntentFireResponse(
-            intent_id=uuid4(),
-            status="success",
-            enabled=True,
-            execution_count=1
+            intent_id=uuid4(), status="success", enabled=True, execution_count=1
         )
         assert response.last_condition_fire is None
 
@@ -249,7 +241,7 @@ class TestIntentFireResponseCooldownFields:
             execution_count=1,
             cooldown_active=True,
             cooldown_remaining_hours=23.0,
-            last_condition_fire=last_fire
+            last_condition_fire=last_fire,
         )
 
         assert response.cooldown_active is True
@@ -266,7 +258,7 @@ class TestIntentFireResponseCooldownFields:
             enabled=True,
             execution_count=2,
             cooldown_active=False,
-            last_condition_fire=now
+            last_condition_fire=now,
         )
 
         assert response.status == "success"
@@ -297,13 +289,10 @@ class TestIntentClaimResponse:
             execution_count=0,
             enabled=True,
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
-        response = IntentClaimResponse(
-            intent=intent,
-            claimed_at=now
-        )
+        response = IntentClaimResponse(intent=intent, claimed_at=now)
 
         assert response.intent.id == intent.id
         assert response.claimed_at == now
@@ -345,7 +334,7 @@ class TestTriggerConditionWithCooldown:
             value=130.0,
             expression="NVDA < 130",
             condition_type="price",
-            cooldown_hours=12
+            cooldown_hours=12,
         )
 
         assert condition.ticker == "NVDA"

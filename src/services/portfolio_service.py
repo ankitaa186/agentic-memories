@@ -20,7 +20,7 @@ from src.dependencies.timescale import get_timescale_conn, release_timescale_con
 logger = logging.getLogger(__name__)
 
 # Ticker validation: 1-10 uppercase alphanumeric + dots (for BRK.B style)
-TICKER_PATTERN = re.compile(r'^[A-Z0-9\.]{1,10}$')
+TICKER_PATTERN = re.compile(r"^[A-Z0-9\.]{1,10}$")
 
 
 def normalize_ticker(ticker: Optional[str]) -> Optional[str]:
@@ -40,7 +40,9 @@ def normalize_ticker(ticker: Optional[str]) -> Optional[str]:
     return normalized
 
 
-def validate_positive_float(value: Any, field_name: str, allow_zero: bool = False) -> Optional[float]:
+def validate_positive_float(
+    value: Any, field_name: str, allow_zero: bool = False
+) -> Optional[float]:
     """Validate and convert numeric field to positive float."""
     if value is None:
         return None
@@ -63,6 +65,7 @@ def validate_positive_float(value: Any, field_name: str, allow_zero: bool = Fals
 @dataclass
 class PortfolioHolding:
     """Simplified portfolio holding model (Story 3.3)"""
+
     user_id: str
     ticker: str
     asset_name: Optional[str] = None
@@ -77,7 +80,9 @@ class PortfolioService:
     def __init__(self):
         pass
 
-    def upsert_holding_from_memory(self, user_id: str, portfolio_metadata: Dict[str, Any], memory_id: str) -> Optional[str]:
+    def upsert_holding_from_memory(
+        self, user_id: str, portfolio_metadata: Dict[str, Any], memory_id: str
+    ) -> Optional[str]:
         """
         Upsert portfolio holding from memory metadata (simplified schema - Story 3.3)
 
@@ -91,8 +96,14 @@ class PortfolioService:
         """
         from src.services.tracing import start_span, end_span
 
-        span = start_span("portfolio_upsert",
-                         input={"ticker": portfolio_metadata.get("ticker") if portfolio_metadata else None})
+        _span = start_span(
+            "portfolio_upsert",
+            input={
+                "ticker": portfolio_metadata.get("ticker")
+                if portfolio_metadata
+                else None
+            },
+        )
 
         if not portfolio_metadata or not isinstance(portfolio_metadata, dict):
             end_span(output={"success": False, "reason": "invalid_metadata"})
@@ -105,42 +116,50 @@ class PortfolioService:
 
         try:
             # Check if this is a holdings array (portfolio snapshot)
-            holdings_array = portfolio_metadata.get('holdings')
+            holdings_array = portfolio_metadata.get("holdings")
             if holdings_array and isinstance(holdings_array, list):
                 # Process each holding in the snapshot
                 for holding_data in holdings_array:
                     self._upsert_single_holding(conn, user_id, holding_data, memory_id)
-                end_span(output={"holding_id": None, "success": True, "processed_multiple": True})
+                end_span(
+                    output={
+                        "holding_id": None,
+                        "success": True,
+                        "processed_multiple": True,
+                    }
+                )
                 return None  # Multiple holdings processed
 
             # Extract and validate ticker (required for simplified schema)
-            ticker = normalize_ticker(portfolio_metadata.get('ticker'))
+            ticker = normalize_ticker(portfolio_metadata.get("ticker"))
             if not ticker:
                 logger.warning("Portfolio holding rejected: missing or invalid ticker")
                 end_span(output={"success": False, "reason": "missing_ticker"})
                 return None
 
             # Extract asset_name (optional)
-            asset_name = portfolio_metadata.get('name') or portfolio_metadata.get('asset_name')
+            asset_name = portfolio_metadata.get("name") or portfolio_metadata.get(
+                "asset_name"
+            )
             if asset_name:
                 asset_name = str(asset_name).strip() or None
 
             # Validate numeric fields (handle alternate field names from extraction)
             shares = validate_positive_float(
-                portfolio_metadata.get('shares') or portfolio_metadata.get('quantity'),
-                'shares'
+                portfolio_metadata.get("shares") or portfolio_metadata.get("quantity"),
+                "shares",
             )
             avg_price = validate_positive_float(
-                portfolio_metadata.get('avg_price') or portfolio_metadata.get('price'),
-                'avg_price'
+                portfolio_metadata.get("avg_price") or portfolio_metadata.get("price"),
+                "avg_price",
             )
 
             # Build holding data
             holding_data = {
-                'ticker': ticker,
-                'asset_name': asset_name,
-                'shares': shares,
-                'avg_price': avg_price
+                "ticker": ticker,
+                "asset_name": asset_name,
+                "shares": shares,
+                "avg_price": avg_price,
             }
 
             result = self._upsert_single_holding(conn, user_id, holding_data, memory_id)
@@ -154,37 +173,44 @@ class PortfolioService:
         finally:
             release_timescale_conn(conn)
 
-    def _upsert_single_holding(self, conn: Connection, user_id: str, holding_data: Dict[str, Any], memory_id: str) -> Optional[str]:
+    def _upsert_single_holding(
+        self,
+        conn: Connection,
+        user_id: str,
+        holding_data: Dict[str, Any],
+        memory_id: str,
+    ) -> Optional[str]:
         """Insert or update a single holding (simplified schema - Story 3.3)"""
         if not conn:
             return None
 
         try:
             # Validate and normalize ticker (required)
-            ticker = normalize_ticker(holding_data.get('ticker'))
+            ticker = normalize_ticker(holding_data.get("ticker"))
             if not ticker:
-                logger.warning("Holding rejected in _upsert_single_holding: missing ticker")
+                logger.warning(
+                    "Holding rejected in _upsert_single_holding: missing ticker"
+                )
                 return None
 
             # Extract asset_name (optional)
-            asset_name = holding_data.get('asset_name') or holding_data.get('name')
+            asset_name = holding_data.get("asset_name") or holding_data.get("name")
             if asset_name:
                 asset_name = str(asset_name).strip() or None
 
             # Validate numeric fields
             shares = validate_positive_float(
-                holding_data.get('shares') or holding_data.get('quantity'),
-                'shares'
+                holding_data.get("shares") or holding_data.get("quantity"), "shares"
             )
             avg_price = validate_positive_float(
-                holding_data.get('avg_price') or holding_data.get('price'),
-                'avg_price'
+                holding_data.get("avg_price") or holding_data.get("price"), "avg_price"
             )
 
             with conn.cursor() as cur:
                 # Use ON CONFLICT for upsert (unique constraint on user_id, ticker)
                 holding_id = str(uuid.uuid4())
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO portfolio_holdings (
                         id, user_id, ticker, asset_name, shares, avg_price,
                         first_acquired, last_updated
@@ -198,14 +224,19 @@ class PortfolioService:
                         avg_price = COALESCE(EXCLUDED.avg_price, portfolio_holdings.avg_price),
                         last_updated = NOW()
                     RETURNING id
-                """, (
-                    holding_id, user_id, ticker, asset_name, shares, avg_price
-                ))
+                """,
+                    (holding_id, user_id, ticker, asset_name, shares, avg_price),
+                )
 
                 result = cur.fetchone()
                 if result:
-                    holding_id = result['id'] if isinstance(result, dict) else result[0]
-                    logger.debug("Upserted holding %s for user %s ticker=%s", holding_id, user_id, ticker)
+                    holding_id = result["id"] if isinstance(result, dict) else result[0]
+                    logger.debug(
+                        "Upserted holding %s for user %s ticker=%s",
+                        holding_id,
+                        user_id,
+                        ticker,
+                    )
 
                 # Commit the transaction
                 conn.commit()
@@ -235,12 +266,15 @@ class PortfolioService:
 
         try:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
                     FROM portfolio_holdings
                     WHERE user_id = %s
                     ORDER BY ticker ASC
-                """, (user_id,))
+                """,
+                    (user_id,),
+                )
 
                 rows = cur.fetchall()
                 conn.commit()
@@ -277,20 +311,26 @@ class PortfolioService:
             # With simplified schema, we don't have current_value
             # Calculate estimated value if shares and avg_price are available
             estimated_value = sum(
-                (h.get('shares', 0) or 0) * (h.get('avg_price', 0) or 0)
+                (h.get("shares", 0) or 0) * (h.get("avg_price", 0) or 0)
                 for h in holdings
             )
 
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO portfolio_snapshots (
                         user_id, snapshot_timestamp, total_value,
                         cash_value, equity_value, holdings_snapshot
                     ) VALUES (%s, NOW(), %s, %s, %s, %s)
-                """, (
-                    user_id, estimated_value, 0.0, estimated_value,
-                    holdings  # Store full holdings JSON
-                ))
+                """,
+                    (
+                        user_id,
+                        estimated_value,
+                        0.0,
+                        estimated_value,
+                        holdings,  # Store full holdings JSON
+                    ),
+                )
 
             conn.commit()
             return True
@@ -302,4 +342,3 @@ class PortfolioService:
             return False
         finally:
             release_timescale_conn(conn)
-

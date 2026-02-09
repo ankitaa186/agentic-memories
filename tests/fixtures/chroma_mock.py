@@ -1,10 +1,11 @@
 """ChromaDB mock fixtures for testing."""
+
 from typing import Any, Dict, List, Optional
 
 
 class MockV2Collection:
     """Mock V2Collection for testing."""
-    
+
     def __init__(self, client, name: str, collection_id: str):
         self.client = client
         self.name = name
@@ -14,7 +15,7 @@ class MockV2Collection:
         self._embeddings: List[List[float]] = []
         self._metadatas: List[Dict[str, Any]] = []
         self._documents: List[str] = []
-    
+
     def add(
         self,
         ids: List[str],
@@ -30,7 +31,7 @@ class MockV2Collection:
             self._metadatas.extend(metadatas)
         if documents:
             self._documents.extend(documents)
-    
+
     def upsert(
         self,
         ids: List[str],
@@ -50,10 +51,10 @@ class MockV2Collection:
                     self._metadatas.pop(idx)
                 if self._documents and idx < len(self._documents):
                     self._documents.pop(idx)
-        
+
         # Add new data
         self.add(ids, embeddings, metadatas, documents)
-    
+
     def query(
         self,
         query_embeddings: Optional[List[List[float]]] = None,
@@ -67,12 +68,17 @@ class MockV2Collection:
         mock_results = {
             "ids": [["mem_1", "mem_2"]],
             "embeddings": [[[0.1] * 16, [0.2] * 16]],
-            "metadatas": [[{"user_id": "test_user", "layer": "semantic"}, {"user_id": "test_user", "layer": "short-term"}]],
+            "metadatas": [
+                [
+                    {"user_id": "test_user", "layer": "semantic"},
+                    {"user_id": "test_user", "layer": "short-term"},
+                ]
+            ],
             "documents": [["User loves sci-fi books.", "User is planning a vacation."]],
             "distances": [[0.1, 0.2]],
         }
         return mock_results
-    
+
     def get(
         self,
         ids: Optional[List[str]] = None,
@@ -86,7 +92,7 @@ class MockV2Collection:
             "metadatas": self._metadatas,
             "documents": self._documents,
         }
-    
+
     def update(
         self,
         ids: List[str],
@@ -104,7 +110,7 @@ class MockV2Collection:
                     self._metadatas[idx] = metadatas[i]
                 if documents and i < len(documents):
                     self._documents[idx] = documents[i]
-    
+
     def delete(self, ids: List[str]) -> None:
         """Mock delete method."""
         for id_to_delete in ids:
@@ -121,7 +127,7 @@ class MockV2Collection:
 
 class MockChromaCollection:
     """Mock ChromaDB collection for testing."""
-    
+
     def __init__(self, name: str = "memories_3072"):
         self.name = name
         self._data: Dict[str, Any] = {}
@@ -129,7 +135,7 @@ class MockChromaCollection:
         self._embeddings: List[List[float]] = []
         self._metadatas: List[Dict[str, Any]] = []
         self._documents: List[str] = []
-    
+
     def add(
         self,
         ids: List[str],
@@ -145,7 +151,7 @@ class MockChromaCollection:
             self._metadatas.extend(metadatas)
         if documents:
             self._documents.extend(documents)
-    
+
     def upsert(
         self,
         ids: List[str],
@@ -165,10 +171,10 @@ class MockChromaCollection:
                     self._metadatas.pop(idx)
                 if self._documents and idx < len(self._documents):
                     self._documents.pop(idx)
-        
+
         # Add new data
         self.add(ids, embeddings, metadatas, documents)
-    
+
     def query(
         self,
         query_embeddings: Optional[List[List[float]]] = None,
@@ -182,12 +188,17 @@ class MockChromaCollection:
         mock_results = {
             "ids": [["mem_1", "mem_2"]],
             "embeddings": [[[0.1] * 16, [0.2] * 16]],
-            "metadatas": [[{"user_id": "test_user", "layer": "semantic"}, {"user_id": "test_user", "layer": "short-term"}]],
+            "metadatas": [
+                [
+                    {"user_id": "test_user", "layer": "semantic"},
+                    {"user_id": "test_user", "layer": "short-term"},
+                ]
+            ],
             "documents": [["User loves sci-fi books.", "User is planning a vacation."]],
             "distances": [[0.1, 0.2]],
         }
         return mock_results
-    
+
     def get(
         self,
         ids: Optional[List[str]] = None,
@@ -201,7 +212,7 @@ class MockChromaCollection:
             "metadatas": self._metadatas,
             "documents": self._documents,
         }
-    
+
     def update(
         self,
         ids: List[str],
@@ -219,7 +230,7 @@ class MockChromaCollection:
                     self._metadatas[idx] = metadatas[i]
                 if documents and i < len(documents):
                     self._documents[idx] = documents[i]
-    
+
     def delete(self, ids: List[str]) -> None:
         """Mock delete method."""
         for id_to_delete in ids:
@@ -236,73 +247,89 @@ class MockChromaCollection:
 
 class MockV2ChromaClient:
     """Mock V2ChromaClient for testing."""
-    
-    def __init__(self, host: str = "localhost", port: int = 8000, tenant: str = "agentic-memories", database: str = "memories"):
+
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 8000,
+        tenant: str = "agentic-memories",
+        database: str = "memories",
+    ):
         self.host = host
         self.port = port
         self.tenant = tenant
         self.database = database
         self._collections: Dict[str, MockV2Collection] = {}
-    
+
     def heartbeat(self) -> Dict[str, Any]:
         """Mock heartbeat method."""
         return {"status": "ok"}
-    
-    def _make_request(self, method: str, endpoint: str, json_data: Optional[Dict] = None) -> Any:
+
+    def _make_request(
+        self, method: str, endpoint: str, json_data: Optional[Dict] = None
+    ) -> Any:
         """Mock _make_request method to avoid HTTP calls."""
         if endpoint == "/heartbeat":
             return {"status": "ok"}
-        elif endpoint == f"/tenants/{self.tenant}/databases/{self.database}/collections":
+        elif (
+            endpoint == f"/tenants/{self.tenant}/databases/{self.database}/collections"
+        ):
             if method.upper() == "GET":
-                return [{"name": name, "id": col.collection_id} for name, col in self._collections.items()]
+                return [
+                    {"name": name, "id": col.collection_id}
+                    for name, col in self._collections.items()
+                ]
             elif method.upper() == "POST" and json_data:
                 name = json_data.get("name")
                 if name:
                     collection_id = f"col_{name}_{len(self._collections)}"
-                    self._collections[name] = MockV2Collection(self, name, collection_id)
+                    self._collections[name] = MockV2Collection(
+                        self, name, collection_id
+                    )
                     return {"id": collection_id}
         return {}
-    
+
     def get_or_create_collection(self, name: str) -> MockV2Collection:
         """Mock get_or_create_collection method."""
         if name not in self._collections:
             collection_id = f"col_{name}_{len(self._collections)}"
             self._collections[name] = MockV2Collection(self, name, collection_id)
         return self._collections[name]
-    
+
     def get_collection(self, name: str) -> MockV2Collection:
         """Mock get_collection method."""
         if name not in self._collections:
             raise ValueError(f"Collection {name} not found")
         return self._collections[name]
-    
+
     def list_collections(self) -> List[Dict[str, Any]]:
         """Mock list_collections method."""
-        return [{"name": name, "id": col.collection_id} for name, col in self._collections.items()]
+        return [
+            {"name": name, "id": col.collection_id}
+            for name, col in self._collections.items()
+        ]
 
 
 class MockChromaClient:
     """Mock ChromaDB client for testing."""
-    
+
     def __init__(self):
         self._collections: Dict[str, MockChromaCollection] = {}
-    
+
     def get_or_create_collection(
-        self, 
-        name: str, 
-        metadata: Optional[Dict[str, Any]] = None
+        self, name: str, metadata: Optional[Dict[str, Any]] = None
     ) -> MockChromaCollection:
         """Mock get_or_create_collection method."""
         if name not in self._collections:
             self._collections[name] = MockChromaCollection(name)
         return self._collections[name]
-    
+
     def get_collection(self, name: str) -> MockChromaCollection:
         """Mock get_collection method."""
         if name not in self._collections:
             raise ValueError(f"Collection {name} not found")
         return self._collections[name]
-    
+
     def list_collections(self) -> List[Dict[str, Any]]:
         """Mock list_collections method."""
         return [{"name": name} for name in self._collections.keys()]

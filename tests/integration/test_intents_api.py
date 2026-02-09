@@ -8,6 +8,7 @@ Tests CRUD operations on /v1/intents endpoints:
 - AC5: DELETE removes intent
 - AC6: Langfuse tracing (verified via decorator presence)
 """
+
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -21,6 +22,7 @@ from src.app import app
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def client():
@@ -74,24 +76,30 @@ def sample_intent_row():
 # AC1: POST /v1/intents - Create Intent
 # =============================================================================
 
+
 class TestCreateIntent:
     """Tests for POST /v1/intents (AC1)."""
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_success(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_create_intent_success(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """POST creates intent with 201 status."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = sample_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Daily Check-in",
-            "trigger_type": "cron",
-            "trigger_schedule": {"cron": "0 9 * * *"},
-            "action_context": "Good morning check-in",
-        })
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Daily Check-in",
+                "trigger_type": "cron",
+                "trigger_schedule": {"cron": "0 9 * * *"},
+                "action_context": "Good morning check-in",
+            },
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -103,20 +111,25 @@ class TestCreateIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_validation_fails(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_validation_fails(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for validation failure."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         # Return count > 25 to trigger validation failure
         cursor.fetchone.return_value = {"count": 26}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Daily Check-in",
-            "trigger_type": "cron",
-            "trigger_schedule": {"cron": "0 9 * * *"},
-            "action_context": "Good morning check-in",
-        })
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Daily Check-in",
+                "trigger_type": "cron",
+                "trigger_schedule": {"cron": "0 9 * * *"},
+                "action_context": "Good morning check-in",
+            },
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -125,19 +138,24 @@ class TestCreateIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_missing_required_field(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_missing_required_field(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for missing required schedule field."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Daily Check-in",
-            "trigger_type": "cron",
-            # Missing trigger_schedule.cron
-            "action_context": "Good morning check-in",
-        })
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Daily Check-in",
+                "trigger_type": "cron",
+                # Missing trigger_schedule.cron
+                "action_context": "Good morning check-in",
+            },
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -146,7 +164,9 @@ class TestCreateIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_interval_intent_with_next_check(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_create_interval_intent_with_next_check(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """POST interval intent has correct next_check calculation."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -156,13 +176,16 @@ class TestCreateIntent:
         sample_intent_row["trigger_schedule"] = {"interval_minutes": 30}
         cursor.fetchone.return_value = sample_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Periodic Check",
-            "trigger_type": "interval",
-            "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "Check status",
-        })
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Periodic Check",
+                "trigger_type": "interval",
+                "trigger_schedule": {"interval_minutes": 30},
+                "action_context": "Check status",
+            },
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -173,12 +196,15 @@ class TestCreateIntent:
 # AC2: GET /v1/intents - List Intents
 # =============================================================================
 
+
 class TestListIntents:
     """Tests for GET /v1/intents (AC2)."""
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_success(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_list_intents_success(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """GET list returns intents for user."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -193,7 +219,9 @@ class TestListIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_with_trigger_type_filter(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_list_intents_with_trigger_type_filter(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """GET list filters by trigger_type."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -208,7 +236,9 @@ class TestListIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_with_enabled_filter(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_list_intents_with_enabled_filter(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """GET list filters by enabled status."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -223,7 +253,9 @@ class TestListIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_with_pagination(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_list_intents_with_pagination(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """GET list supports limit and offset."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -248,12 +280,15 @@ class TestListIntents:
 # AC3: GET /v1/intents/{id} - Get Single Intent
 # =============================================================================
 
+
 class TestGetIntent:
     """Tests for GET /v1/intents/{id} (AC3)."""
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_get_intent_success(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_get_intent_success(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """GET single returns intent with all fields."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -272,7 +307,9 @@ class TestGetIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_get_intent_not_found(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_get_intent_not_found(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET single returns 404 for non-existent intent."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -294,12 +331,15 @@ class TestGetIntent:
 # AC4: PUT /v1/intents/{id} - Update Intent
 # =============================================================================
 
+
 class TestUpdateIntent:
     """Tests for PUT /v1/intents/{id} (AC4)."""
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_update_intent_success(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_update_intent_success(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """PUT updates intent and returns updated data."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -307,9 +347,12 @@ class TestUpdateIntent:
         cursor.fetchone.side_effect = [sample_intent_row, sample_intent_row]
 
         intent_id = str(sample_intent_row["id"])
-        response = client.put(f"/v1/intents/{intent_id}", json={
-            "intent_name": "Updated Intent Name",
-        })
+        response = client.put(
+            f"/v1/intents/{intent_id}",
+            json={
+                "intent_name": "Updated Intent Name",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -317,30 +360,40 @@ class TestUpdateIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_update_intent_not_found(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_update_intent_not_found(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """PUT returns 404 for non-existent intent."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = None
 
-        response = client.put(f"/v1/intents/{uuid4()}", json={
-            "intent_name": "Updated Name",
-        })
+        response = client.put(
+            f"/v1/intents/{uuid4()}",
+            json={
+                "intent_name": "Updated Name",
+            },
+        )
 
         assert response.status_code == 404
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_update_schedule_recalculates_next_check(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_update_schedule_recalculates_next_check(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """PUT recalculates next_check when schedule changes."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.side_effect = [sample_intent_row, sample_intent_row]
 
         intent_id = str(sample_intent_row["id"])
-        response = client.put(f"/v1/intents/{intent_id}", json={
-            "trigger_schedule": {"cron": "0 10 * * *"},  # Changed schedule
-        })
+        response = client.put(
+            f"/v1/intents/{intent_id}",
+            json={
+                "trigger_schedule": {"cron": "0 10 * * *"},  # Changed schedule
+            },
+        )
 
         assert response.status_code == 200
         # Verify UPDATE query includes next_check
@@ -352,12 +405,15 @@ class TestUpdateIntent:
 # AC5: DELETE /v1/intents/{id} - Delete Intent
 # =============================================================================
 
+
 class TestDeleteIntent:
     """Tests for DELETE /v1/intents/{id} (AC5)."""
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_delete_intent_success(self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row):
+    def test_delete_intent_success(
+        self, mock_release, mock_get_conn, client, mock_db_connection, sample_intent_row
+    ):
         """DELETE returns 204 on success."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -370,7 +426,9 @@ class TestDeleteIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_delete_intent_not_found(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_delete_intent_not_found(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """DELETE returns 404 for non-existent intent."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -384,6 +442,7 @@ class TestDeleteIntent:
 # =============================================================================
 # Story 5.5: GET /v1/intents/pending - Pending Intents
 # =============================================================================
+
 
 class TestPendingIntents:
     """Tests for GET /v1/intents/pending (Story 5.5)."""
@@ -421,7 +480,14 @@ class TestPendingIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_pending_returns_due_intents(self, mock_release, mock_get_conn, client, mock_db_connection, pending_intent_row):
+    def test_pending_returns_due_intents(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        pending_intent_row,
+    ):
         """GET /pending returns intents with next_check <= NOW."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -437,7 +503,14 @@ class TestPendingIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_pending_with_user_id_filter(self, mock_release, mock_get_conn, client, mock_db_connection, pending_intent_row):
+    def test_pending_with_user_id_filter(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        pending_intent_row,
+    ):
         """GET /pending filters by user_id when provided."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -453,7 +526,9 @@ class TestPendingIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_pending_returns_empty_when_none_due(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_pending_returns_empty_when_none_due(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET /pending returns empty array when no intents are due."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -466,7 +541,14 @@ class TestPendingIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_pending_ordered_by_next_check_asc(self, mock_release, mock_get_conn, client, mock_db_connection, pending_intent_row):
+    def test_pending_ordered_by_next_check_asc(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        pending_intent_row,
+    ):
         """GET /pending orders results by next_check ASC (oldest first)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -481,7 +563,14 @@ class TestPendingIntents:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_pending_query_uses_correct_conditions(self, mock_release, mock_get_conn, client, mock_db_connection, pending_intent_row):
+    def test_pending_query_uses_correct_conditions(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        pending_intent_row,
+    ):
         """GET /pending uses enabled = true AND next_check <= NOW() conditions."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -512,6 +601,7 @@ class TestPendingIntents:
 # AC6: Langfuse Tracing
 # =============================================================================
 
+
 class TestLangfuseTracing:
     """Tests for Langfuse tracing (AC6)."""
 
@@ -528,7 +618,14 @@ class TestLangfuseTracing:
 
         # Check that functions have been wrapped by observe decorator
         # The decorator adds metadata to the function
-        endpoints = [create_intent, list_intents, get_intent, get_pending_intents, update_intent, delete_intent]
+        endpoints = [
+            create_intent,
+            list_intents,
+            get_intent,
+            get_pending_intents,
+            update_intent,
+            delete_intent,
+        ]
 
         for endpoint in endpoints:
             # The observe decorator wraps the function
@@ -543,6 +640,7 @@ class TestLangfuseTracing:
 # =============================================================================
 # Edge Cases
 # =============================================================================
+
 
 class TestEdgeCases:
     """Additional edge case tests."""
@@ -559,7 +657,9 @@ class TestEdgeCases:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_empty(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_list_intents_empty(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET list returns empty array for user with no intents."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -574,6 +674,7 @@ class TestEdgeCases:
 # =============================================================================
 # Story 5.6: POST /v1/intents/{id}/fire - Fire Intent
 # =============================================================================
+
 
 class TestFireIntent:
     """Tests for POST /v1/intents/{id}/fire (Story 5.6)."""
@@ -673,20 +774,30 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_returns_updated_state(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_returns_updated_state(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire returns IntentFireResponse with updated state (AC1)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-123",
-            "evaluation_ms": 50,
-            "generation_ms": 100,
-            "delivery_ms": 25,
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-123",
+                "evaluation_ms": 50,
+                "generation_ms": 100,
+                "delivery_ms": 25,
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -698,16 +809,26 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_updates_last_checked(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_updates_last_checked(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire always updates last_checked (AC2)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "condition_not_met",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "condition_not_met",
+            },
+        )
 
         assert response.status_code == 200
         # Verify UPDATE query includes last_checked
@@ -717,17 +838,27 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_increments_execution_count_on_success(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_increments_execution_count_on_success(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire increments execution_count on success (AC3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-456",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-456",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -735,17 +866,27 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_does_not_increment_on_failure(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_does_not_increment_on_failure(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire does not increment execution_count on failure (AC3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "failed",
-            "error_message": "Connection timeout",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "failed",
+                "error_message": "Connection timeout",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -753,16 +894,26 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_calculates_next_check_for_interval(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_calculates_next_check_for_interval(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire calculates next_check for interval trigger (AC4)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -770,17 +921,27 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_backoff_on_failure(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_backoff_on_failure(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire applies 15-minute backoff on failure (AC4)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "failed",
-            "error_message": "API error",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "failed",
+                "error_message": "API error",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -788,17 +949,22 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_disables_one_time_trigger(self, mock_release, mock_get_conn, client, mock_db_connection, once_intent_row):
+    def test_fire_disables_one_time_trigger(
+        self, mock_release, mock_get_conn, client, mock_db_connection, once_intent_row
+    ):
         """POST /fire disables one-time trigger after success (AC5)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = once_intent_row
 
         intent_id = str(once_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-once",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-once",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -808,17 +974,27 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_disables_at_max_executions(self, mock_release, mock_get_conn, client, mock_db_connection, max_exec_intent_row):
+    def test_fire_disables_at_max_executions(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        max_exec_intent_row,
+    ):
         """POST /fire disables when max_executions reached (AC5)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = max_exec_intent_row
 
         intent_id = str(max_exec_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-final",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-final",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -828,39 +1004,58 @@ class TestFireIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_logs_to_intent_executions(self, mock_release, mock_get_conn, client, mock_db_connection, interval_intent_row):
+    def test_fire_logs_to_intent_executions(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        interval_intent_row,
+    ):
         """POST /fire logs execution to intent_executions table (AC6)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = interval_intent_row
 
         intent_id = str(interval_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-logged",
-            "trigger_data": {"price": 150.00},
-            "gate_result": {"passed": True},
-            "evaluation_ms": 45,
-            "generation_ms": 120,
-            "delivery_ms": 30,
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-logged",
+                "trigger_data": {"price": 150.00},
+                "gate_result": {"passed": True},
+                "evaluation_ms": 45,
+                "generation_ms": 120,
+                "delivery_ms": 30,
+            },
+        )
 
         assert response.status_code == 200
         # Verify INSERT into intent_executions
-        insert_calls = [c for c in cursor.execute.call_args_list if "INSERT INTO intent_executions" in c[0][0]]
+        insert_calls = [
+            c
+            for c in cursor.execute.call_args_list
+            if "INSERT INTO intent_executions" in c[0][0]
+        ]
         assert len(insert_calls) == 1
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_returns_404_for_nonexistent(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_fire_returns_404_for_nonexistent(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST /fire returns 404 for non-existent intent (AC7)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = None
 
-        response = client.post(f"/v1/intents/{uuid4()}/fire", json={
-            "status": "success",
-        })
+        response = client.post(
+            f"/v1/intents/{uuid4()}/fire",
+            json={
+                "status": "success",
+            },
+        )
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
@@ -870,9 +1065,12 @@ class TestFireIntent:
         """POST /fire returns 500 when database unavailable."""
         mock_get_conn.return_value = None
 
-        response = client.post(f"/v1/intents/{uuid4()}/fire", json={
-            "status": "success",
-        })
+        response = client.post(
+            f"/v1/intents/{uuid4()}/fire",
+            json={
+                "status": "success",
+            },
+        )
 
         assert response.status_code == 500
         assert "database" in response.json()["detail"].lower()
@@ -888,6 +1086,7 @@ class TestFireIntent:
 # =============================================================================
 # Story 5.7: Execution History Endpoint Tests
 # =============================================================================
+
 
 class TestHistoryIntent:
     """Tests for GET /v1/intents/{id}/history endpoint (Story 5.7)."""
@@ -930,7 +1129,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_returns_execution_records(self, mock_release, mock_get_conn, client, mock_db_connection, execution_row):
+    def test_history_returns_execution_records(
+        self, mock_release, mock_get_conn, client, mock_db_connection, execution_row
+    ):
         """GET /history returns execution records (AC1)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -951,7 +1152,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_with_pagination(self, mock_release, mock_get_conn, client, mock_db_connection, execution_rows):
+    def test_history_with_pagination(
+        self, mock_release, mock_get_conn, client, mock_db_connection, execution_rows
+    ):
         """GET /history supports limit and offset (AC2)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -968,7 +1171,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_empty_array_when_no_executions(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_history_empty_array_when_no_executions(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET /history returns empty array when no executions exist (AC1)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -986,7 +1191,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_ordered_by_executed_at_desc(self, mock_release, mock_get_conn, client, mock_db_connection, execution_rows):
+    def test_history_ordered_by_executed_at_desc(
+        self, mock_release, mock_get_conn, client, mock_db_connection, execution_rows
+    ):
         """GET /history orders by executed_at DESC (AC3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1006,7 +1213,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_includes_all_execution_fields(self, mock_release, mock_get_conn, client, mock_db_connection, execution_row):
+    def test_history_includes_all_execution_fields(
+        self, mock_release, mock_get_conn, client, mock_db_connection, execution_row
+    ):
         """GET /history includes all execution details (AC4)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1035,7 +1244,9 @@ class TestHistoryIntent:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_history_returns_404_for_nonexistent_intent(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_history_returns_404_for_nonexistent_intent(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET /history returns 404 for non-existent intent (AC5)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1067,6 +1278,7 @@ class TestHistoryIntent:
 # =============================================================================
 # Epic 6 Story 6.1: Timezone Support Integration Tests
 # =============================================================================
+
 
 class TestTimezoneSupport:
     """Integration tests for timezone support in Scheduled Intents API (Story 6.1)."""
@@ -1104,22 +1316,29 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_with_timezone(self, mock_release, mock_get_conn, client, mock_db_connection, timezone_intent_row):
+    def test_create_intent_with_timezone(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        timezone_intent_row,
+    ):
         """POST creates intent with timezone in trigger_schedule (AC1.1)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = timezone_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Tokyo Morning Briefing",
-            "trigger_type": "cron",
-            "trigger_schedule": {
-                "cron": "0 9 * * *",
-                "timezone": "Asia/Tokyo"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Tokyo Morning Briefing",
+                "trigger_type": "cron",
+                "trigger_schedule": {"cron": "0 9 * * *", "timezone": "Asia/Tokyo"},
+                "action_context": "Good morning briefing",
             },
-            "action_context": "Good morning briefing",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1127,7 +1346,9 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_default_timezone(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_default_timezone(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST uses default timezone America/Los_Angeles when not specified (AC1.2)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1140,7 +1361,10 @@ class TestTimezoneSupport:
             "intent_name": "Default TZ Intent",
             "description": None,
             "trigger_type": "cron",
-            "trigger_schedule": {"cron": "0 9 * * *", "timezone": "America/Los_Angeles"},
+            "trigger_schedule": {
+                "cron": "0 9 * * *",
+                "timezone": "America/Los_Angeles",
+            },
             "trigger_condition": None,
             "action_type": "notify",
             "action_context": "Test",
@@ -1162,13 +1386,16 @@ class TestTimezoneSupport:
         }
         cursor.fetchone.return_value = intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Default TZ Intent",
-            "trigger_type": "cron",
-            "trigger_schedule": {"cron": "0 9 * * *"},  # No timezone specified
-            "action_context": "Test",
-        })
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Default TZ Intent",
+                "trigger_type": "cron",
+                "trigger_schedule": {"cron": "0 9 * * *"},  # No timezone specified
+                "action_context": "Test",
+            },
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1177,22 +1404,27 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_invalid_timezone_fails(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_invalid_timezone_fails(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for invalid timezone (AC1.3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Invalid TZ Intent",
-            "trigger_type": "cron",
-            "trigger_schedule": {
-                "cron": "0 9 * * *",
-                "timezone": "Invalid/Timezone"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Invalid TZ Intent",
+                "trigger_type": "cron",
+                "trigger_schedule": {
+                    "cron": "0 9 * * *",
+                    "timezone": "Invalid/Timezone",
+                },
+                "action_context": "Test",
             },
-            "action_context": "Test",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -1202,22 +1434,27 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_abbreviation_timezone_fails(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_abbreviation_timezone_fails(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for timezone abbreviation like PST (AC1.3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Abbrev TZ Intent",
-            "trigger_type": "cron",
-            "trigger_schedule": {
-                "cron": "0 9 * * *",
-                "timezone": "PST"  # Should fail - need full IANA name
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Abbrev TZ Intent",
+                "trigger_type": "cron",
+                "trigger_schedule": {
+                    "cron": "0 9 * * *",
+                    "timezone": "PST",  # Should fail - need full IANA name
+                },
+                "action_context": "Test",
             },
-            "action_context": "Test",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -1226,7 +1463,14 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_get_intent_includes_timezone(self, mock_release, mock_get_conn, client, mock_db_connection, timezone_intent_row):
+    def test_get_intent_includes_timezone(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        timezone_intent_row,
+    ):
         """GET single returns intent with timezone in trigger_schedule."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1241,23 +1485,33 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_update_intent_timezone(self, mock_release, mock_get_conn, client, mock_db_connection, timezone_intent_row):
+    def test_update_intent_timezone(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        timezone_intent_row,
+    ):
         """PUT updates timezone and recalculates next_check."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
 
         # First call returns existing, second returns updated
         updated_row = timezone_intent_row.copy()
-        updated_row["trigger_schedule"] = {"cron": "0 9 * * *", "timezone": "Europe/London"}
+        updated_row["trigger_schedule"] = {
+            "cron": "0 9 * * *",
+            "timezone": "Europe/London",
+        }
         cursor.fetchone.side_effect = [timezone_intent_row, updated_row]
 
         intent_id = str(timezone_intent_row["id"])
-        response = client.put(f"/v1/intents/{intent_id}", json={
-            "trigger_schedule": {
-                "cron": "0 9 * * *",
-                "timezone": "Europe/London"
+        response = client.put(
+            f"/v1/intents/{intent_id}",
+            json={
+                "trigger_schedule": {"cron": "0 9 * * *", "timezone": "Europe/London"},
             },
-        })
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -1266,17 +1520,27 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_fire_intent_with_timezone(self, mock_release, mock_get_conn, client, mock_db_connection, timezone_intent_row):
+    def test_fire_intent_with_timezone(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        timezone_intent_row,
+    ):
         """POST /fire calculates next_check using timezone."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = timezone_intent_row
 
         intent_id = str(timezone_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-tz-123",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-tz-123",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -1285,7 +1549,9 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_with_various_timezones(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_list_intents_with_various_timezones(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """GET list returns intents with different timezones."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1297,7 +1563,10 @@ class TestTimezoneSupport:
             "intent_name": "LA Intent",
             "description": None,
             "trigger_type": "cron",
-            "trigger_schedule": {"cron": "0 9 * * *", "timezone": "America/Los_Angeles"},
+            "trigger_schedule": {
+                "cron": "0 9 * * *",
+                "timezone": "America/Los_Angeles",
+            },
             "trigger_condition": None,
             "action_type": "notify",
             "action_context": "LA morning",
@@ -1336,7 +1605,9 @@ class TestTimezoneSupport:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_interval_trigger_ignores_timezone(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_interval_trigger_ignores_timezone(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """Interval triggers don't use timezone for next_check calculation."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1370,16 +1641,16 @@ class TestTimezoneSupport:
         }
         cursor.fetchone.return_value = interval_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Interval with TZ",
-            "trigger_type": "interval",
-            "trigger_schedule": {
-                "interval_minutes": 30,
-                "timezone": "Asia/Tokyo"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Interval with TZ",
+                "trigger_type": "interval",
+                "trigger_schedule": {"interval_minutes": 30, "timezone": "Asia/Tokyo"},
+                "action_context": "Check every 30 min",
             },
-            "action_context": "Check every 30 min",
-        })
+        )
 
         assert response.status_code == 201
         # Timezone is stored but doesn't affect interval calculation
@@ -1388,6 +1659,7 @@ class TestTimezoneSupport:
 # =============================================================================
 # Epic 6 Story 6.2: Condition Expression Integration Tests
 # =============================================================================
+
 
 class TestConditionExpression:
     """Integration tests for condition expression support (Story 6.2)."""
@@ -1405,7 +1677,7 @@ class TestConditionExpression:
             "trigger_schedule": {"check_interval_minutes": 15},
             "trigger_condition": {
                 "expression": "NVDA < 130",
-                "condition_type": "price"
+                "condition_type": "price",
             },
             "action_type": "notify",
             "action_context": "NVDA price alert triggered",
@@ -1439,7 +1711,7 @@ class TestConditionExpression:
             "trigger_schedule": {"check_interval_minutes": 30},
             "trigger_condition": {
                 "expression": "any_holding_change > 5%",
-                "condition_type": "portfolio"
+                "condition_type": "portfolio",
             },
             "action_type": "notify",
             "action_context": "Portfolio change detected",
@@ -1462,23 +1734,33 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_with_price_expression(self, mock_release, mock_get_conn, client, mock_db_connection, price_expression_intent_row):
+    def test_create_intent_with_price_expression(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_expression_intent_row,
+    ):
         """POST creates intent with price expression (AC2.3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = price_expression_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "NVDA Price Alert",
-            "trigger_type": "price",
-            "trigger_schedule": {"check_interval_minutes": 15},
-            "trigger_condition": {
-                "expression": "NVDA < 130",
-                "condition_type": "price"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "NVDA Price Alert",
+                "trigger_type": "price",
+                "trigger_schedule": {"check_interval_minutes": 15},
+                "trigger_condition": {
+                    "expression": "NVDA < 130",
+                    "condition_type": "price",
+                },
+                "action_context": "NVDA price alert triggered",
             },
-            "action_context": "NVDA price alert triggered",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1487,23 +1769,33 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_with_portfolio_expression(self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_expression_intent_row):
+    def test_create_intent_with_portfolio_expression(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_expression_intent_row,
+    ):
         """POST creates intent with portfolio expression (AC2.4)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = portfolio_expression_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Portfolio Change Alert",
-            "trigger_type": "portfolio",
-            "trigger_schedule": {"check_interval_minutes": 30},
-            "trigger_condition": {
-                "expression": "any_holding_change > 5%",
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Portfolio Change Alert",
+                "trigger_type": "portfolio",
+                "trigger_schedule": {"check_interval_minutes": 30},
+                "trigger_condition": {
+                    "expression": "any_holding_change > 5%",
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Portfolio change detected",
             },
-            "action_context": "Portfolio change detected",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1512,7 +1804,9 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_with_silence_expression(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_with_silence_expression(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST creates intent with silence expression."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1527,7 +1821,7 @@ class TestConditionExpression:
             "trigger_schedule": {"check_interval_minutes": 60},
             "trigger_condition": {
                 "expression": "inactive_hours > 48",
-                "condition_type": "silence"
+                "condition_type": "silence",
             },
             "action_type": "notify",
             "action_context": "You've been inactive",
@@ -1549,17 +1843,20 @@ class TestConditionExpression:
         }
         cursor.fetchone.return_value = silence_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Inactivity Check",
-            "trigger_type": "silence",
-            "trigger_schedule": {"check_interval_minutes": 60},
-            "trigger_condition": {
-                "expression": "inactive_hours > 48",
-                "condition_type": "silence"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Inactivity Check",
+                "trigger_type": "silence",
+                "trigger_schedule": {"check_interval_minutes": 60},
+                "trigger_condition": {
+                    "expression": "inactive_hours > 48",
+                    "condition_type": "silence",
+                },
+                "action_context": "You've been inactive",
             },
-            "action_context": "You've been inactive",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1568,23 +1865,28 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_invalid_price_expression(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_invalid_price_expression(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for invalid price expression (AC2.3)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Invalid Expression",
-            "trigger_type": "price",
-            "trigger_schedule": {"check_interval_minutes": 15},
-            "trigger_condition": {
-                "expression": "nvda < 130",  # Lowercase ticker - invalid
-                "condition_type": "price"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Invalid Expression",
+                "trigger_type": "price",
+                "trigger_schedule": {"check_interval_minutes": 15},
+                "trigger_condition": {
+                    "expression": "nvda < 130",  # Lowercase ticker - invalid
+                    "condition_type": "price",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -1594,23 +1896,28 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_invalid_portfolio_expression(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_invalid_portfolio_expression(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for invalid portfolio expression (AC2.4)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Invalid Portfolio Expression",
-            "trigger_type": "portfolio",
-            "trigger_schedule": {"check_interval_minutes": 30},
-            "trigger_condition": {
-                "expression": "unknown_metric > 5%",  # Unknown keyword
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Invalid Portfolio Expression",
+                "trigger_type": "portfolio",
+                "trigger_schedule": {"check_interval_minutes": 30},
+                "trigger_condition": {
+                    "expression": "unknown_metric > 5%",  # Unknown keyword
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -1620,23 +1927,28 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_invalid_silence_expression(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_invalid_silence_expression(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST returns 400 for invalid silence expression."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Invalid Silence Expression",
-            "trigger_type": "silence",
-            "trigger_schedule": {"check_interval_minutes": 60},
-            "trigger_condition": {
-                "expression": "silence > 48",  # Wrong format
-                "condition_type": "silence"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Invalid Silence Expression",
+                "trigger_type": "silence",
+                "trigger_schedule": {"check_interval_minutes": 60},
+                "trigger_condition": {
+                    "expression": "silence > 48",  # Wrong format
+                    "condition_type": "silence",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -1646,7 +1958,9 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_create_intent_structured_fields_backward_compatible(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_create_intent_structured_fields_backward_compatible(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """POST with structured fields still works (AC2.5)."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1659,11 +1973,7 @@ class TestConditionExpression:
             "description": "Using structured fields",
             "trigger_type": "price",
             "trigger_schedule": {"check_interval_minutes": 15},
-            "trigger_condition": {
-                "ticker": "NVDA",
-                "operator": "<",
-                "value": 130.0
-            },
+            "trigger_condition": {"ticker": "NVDA", "operator": "<", "value": 130.0},
             "action_type": "notify",
             "action_context": "Price alert",
             "action_priority": "normal",
@@ -1684,18 +1994,21 @@ class TestConditionExpression:
         }
         cursor.fetchone.return_value = structured_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Structured Price Alert",
-            "trigger_type": "price",
-            "trigger_schedule": {"check_interval_minutes": 15},
-            "trigger_condition": {
-                "ticker": "NVDA",
-                "operator": "<",
-                "value": 130.0
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Structured Price Alert",
+                "trigger_type": "price",
+                "trigger_schedule": {"check_interval_minutes": 15},
+                "trigger_condition": {
+                    "ticker": "NVDA",
+                    "operator": "<",
+                    "value": 130.0,
+                },
+                "action_context": "Price alert",
             },
-            "action_context": "Price alert",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1705,7 +2018,14 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_get_intent_includes_expression_fields(self, mock_release, mock_get_conn, client, mock_db_connection, price_expression_intent_row):
+    def test_get_intent_includes_expression_fields(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_expression_intent_row,
+    ):
         """GET single returns intent with expression and condition_type."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1721,7 +2041,14 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_update_intent_expression(self, mock_release, mock_get_conn, client, mock_db_connection, price_expression_intent_row):
+    def test_update_intent_expression(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_expression_intent_row,
+    ):
         """PUT updates expression field."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1729,17 +2056,20 @@ class TestConditionExpression:
         updated_row = price_expression_intent_row.copy()
         updated_row["trigger_condition"] = {
             "expression": "NVDA < 120",  # Updated threshold
-            "condition_type": "price"
+            "condition_type": "price",
         }
         cursor.fetchone.side_effect = [price_expression_intent_row, updated_row]
 
         intent_id = str(price_expression_intent_row["id"])
-        response = client.put(f"/v1/intents/{intent_id}", json={
-            "trigger_condition": {
-                "expression": "NVDA < 120",
-                "condition_type": "price"
+        response = client.put(
+            f"/v1/intents/{intent_id}",
+            json={
+                "trigger_condition": {
+                    "expression": "NVDA < 120",
+                    "condition_type": "price",
+                },
             },
-        })
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -1747,11 +2077,22 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_list_intents_includes_expression_fields(self, mock_release, mock_get_conn, client, mock_db_connection, price_expression_intent_row, portfolio_expression_intent_row):
+    def test_list_intents_includes_expression_fields(
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_expression_intent_row,
+        portfolio_expression_intent_row,
+    ):
         """GET list returns intents with expression fields."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
-        cursor.fetchall.return_value = [price_expression_intent_row, portfolio_expression_intent_row]
+        cursor.fetchall.return_value = [
+            price_expression_intent_row,
+            portfolio_expression_intent_row,
+        ]
 
         response = client.get("/v1/intents?user_id=test-user")
 
@@ -1765,7 +2106,9 @@ class TestConditionExpression:
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
-    def test_expression_inferred_from_trigger_type(self, mock_release, mock_get_conn, client, mock_db_connection):
+    def test_expression_inferred_from_trigger_type(
+        self, mock_release, mock_get_conn, client, mock_db_connection
+    ):
         """Expression validation uses trigger_type when condition_type is None."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
@@ -1801,16 +2144,19 @@ class TestConditionExpression:
         }
         cursor.fetchone.return_value = inferred_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Inferred Type Intent",
-            "trigger_type": "price",
-            "trigger_schedule": {"check_interval_minutes": 15},
-            "trigger_condition": {
-                "expression": "AAPL >= 200"  # No condition_type - should infer from trigger_type
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Inferred Type Intent",
+                "trigger_type": "price",
+                "trigger_schedule": {"check_interval_minutes": 15},
+                "trigger_condition": {
+                    "expression": "AAPL >= 200"  # No condition_type - should infer from trigger_type
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1839,7 +2185,7 @@ class TestCooldownLogic:
             "trigger_condition": {
                 "expression": "NVDA < 130",
                 "condition_type": "price",
-                "cooldown_hours": 24
+                "cooldown_hours": 24,
             },
             "action_type": "notify",
             "action_context": "Price alert",
@@ -1877,7 +2223,7 @@ class TestCooldownLogic:
             "trigger_condition": {
                 "expression": "NVDA < 130",
                 "condition_type": "price",
-                "cooldown_hours": 24
+                "cooldown_hours": 24,
             },
             "action_type": "notify",
             "action_context": "Price alert",
@@ -1903,7 +2249,12 @@ class TestCooldownLogic:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_updates_last_condition_fire_on_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, price_intent_with_cooldown
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_intent_with_cooldown,
     ):
         """POST /fire updates last_condition_fire for price trigger on success."""
         conn, cursor = mock_db_connection
@@ -1911,10 +2262,13 @@ class TestCooldownLogic:
         cursor.fetchone.return_value = price_intent_with_cooldown
 
         intent_id = str(price_intent_with_cooldown["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-456",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-456",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -1928,7 +2282,12 @@ class TestCooldownLogic:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_returns_cooldown_active_when_in_cooldown(
-        self, mock_release, mock_get_conn, client, mock_db_connection, price_intent_in_cooldown
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_intent_in_cooldown,
     ):
         """POST /fire returns cooldown_active=True when within cooldown period."""
         conn, cursor = mock_db_connection
@@ -1936,9 +2295,12 @@ class TestCooldownLogic:
         cursor.fetchone.return_value = price_intent_in_cooldown
 
         intent_id = str(price_intent_in_cooldown["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -1947,24 +2309,38 @@ class TestCooldownLogic:
         assert data["cooldown_remaining_hours"] is not None
         assert data["cooldown_remaining_hours"] > 22.0  # About 23 hours remaining
         # Should NOT log to intent_executions when in cooldown
-        insert_calls = [c for c in cursor.execute.call_args_list if "INSERT INTO intent_executions" in c[0][0]]
+        insert_calls = [
+            c
+            for c in cursor.execute.call_args_list
+            if "INSERT INTO intent_executions" in c[0][0]
+        ]
         assert len(insert_calls) == 0
 
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_clears_claimed_at(
-        self, mock_release, mock_get_conn, client, mock_db_connection, price_intent_with_cooldown
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        price_intent_with_cooldown,
     ):
         """POST /fire clears claimed_at after processing."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
-        price_intent_with_cooldown["claimed_at"] = datetime.now(timezone.utc)  # Was claimed
+        price_intent_with_cooldown["claimed_at"] = datetime.now(
+            timezone.utc
+        )  # Was claimed
         cursor.fetchone.return_value = price_intent_with_cooldown
 
         intent_id = str(price_intent_with_cooldown["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+            },
+        )
 
         assert response.status_code == 200
         # Verify UPDATE query includes claimed_at = NULL
@@ -2046,7 +2422,12 @@ class TestClaimIntent:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_claim_intent_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, unclaimed_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        unclaimed_intent_row,
     ):
         """POST /claim successfully claims an unclaimed intent."""
         conn, cursor = mock_db_connection
@@ -2066,7 +2447,12 @@ class TestClaimIntent:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_claim_intent_returns_409_when_already_claimed(
-        self, mock_release, mock_get_conn, client, mock_db_connection, recently_claimed_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        recently_claimed_intent_row,
     ):
         """POST /claim returns 409 Conflict when intent is already claimed."""
         conn, cursor = mock_db_connection
@@ -2147,7 +2533,12 @@ class TestPendingIntentsWithCooldown:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_pending_returns_in_cooldown_flag(
-        self, mock_release, mock_get_conn, client, mock_db_connection, pending_intent_with_cooldown_data
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        pending_intent_with_cooldown_data,
     ):
         """GET /pending returns intents with in_cooldown flag in metadata."""
         conn, cursor = mock_db_connection
@@ -2205,7 +2596,7 @@ class TestFireMode:
                 "expression": "NVDA < 130",
                 "condition_type": "price",
                 "cooldown_hours": 24,
-                "fire_mode": "once"
+                "fire_mode": "once",
             },
             "action_type": "notify",
             "action_context": "One-time price alert",
@@ -2243,7 +2634,7 @@ class TestFireMode:
                 "expression": "NVDA < 130",
                 "condition_type": "price",
                 "cooldown_hours": 24,
-                "fire_mode": "recurring"
+                "fire_mode": "recurring",
             },
             "action_type": "notify",
             "action_context": "Recurring price alert",
@@ -2269,7 +2660,12 @@ class TestFireMode:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_mode_once_disables_on_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, fire_mode_once_intent
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        fire_mode_once_intent,
     ):
         """POST /fire with fire_mode='once' disables intent on success."""
         conn, cursor = mock_db_connection
@@ -2277,10 +2673,13 @@ class TestFireMode:
         cursor.fetchone.return_value = fire_mode_once_intent
 
         intent_id = str(fire_mode_once_intent["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-once-123",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-once-123",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2291,7 +2690,12 @@ class TestFireMode:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_mode_recurring_stays_enabled_on_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, fire_mode_recurring_intent
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        fire_mode_recurring_intent,
     ):
         """POST /fire with fire_mode='recurring' keeps intent enabled on success."""
         conn, cursor = mock_db_connection
@@ -2299,10 +2703,13 @@ class TestFireMode:
         cursor.fetchone.return_value = fire_mode_recurring_intent
 
         intent_id = str(fire_mode_recurring_intent["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-recurring-123",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-recurring-123",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2313,7 +2720,12 @@ class TestFireMode:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_mode_once_not_disabled_on_failure(
-        self, mock_release, mock_get_conn, client, mock_db_connection, fire_mode_once_intent
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        fire_mode_once_intent,
     ):
         """POST /fire with fire_mode='once' does NOT disable on failed status."""
         conn, cursor = mock_db_connection
@@ -2321,10 +2733,13 @@ class TestFireMode:
         cursor.fetchone.return_value = fire_mode_once_intent
 
         intent_id = str(fire_mode_once_intent["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "failed",
-            "error_message": "API error",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "failed",
+                "error_message": "API error",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2334,7 +2749,12 @@ class TestFireMode:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_mode_once_not_disabled_on_condition_not_met(
-        self, mock_release, mock_get_conn, client, mock_db_connection, fire_mode_once_intent
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        fire_mode_once_intent,
     ):
         """POST /fire with fire_mode='once' does NOT disable on condition_not_met."""
         conn, cursor = mock_db_connection
@@ -2342,9 +2762,12 @@ class TestFireMode:
         cursor.fetchone.return_value = fire_mode_once_intent
 
         intent_id = str(fire_mode_once_intent["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "condition_not_met",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "condition_not_met",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2375,7 +2798,7 @@ class TestPortfolioTrigger:
                 "expression": "any_holding_change > 5%",
                 "condition_type": "portfolio",
                 "cooldown_hours": 24,
-                "fire_mode": "recurring"
+                "fire_mode": "recurring",
             },
             "action_type": "notify",
             "action_context": "Portfolio change alert",
@@ -2401,23 +2824,31 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_create_portfolio_intent_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """POST creates portfolio intent with valid expression."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = portfolio_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Portfolio Change Alert",
-            "trigger_type": "portfolio",
-            "trigger_condition": {
-                "expression": "any_holding_change > 5%",
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Portfolio Change Alert",
+                "trigger_type": "portfolio",
+                "trigger_condition": {
+                    "expression": "any_holding_change > 5%",
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Portfolio change alert",
             },
-            "action_context": "Portfolio change alert",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -2443,7 +2874,7 @@ class TestPortfolioTrigger:
             "trigger_schedule": {"check_interval_minutes": 15},
             "trigger_condition": {
                 "expression": "total_value >= 100000",
-                "condition_type": "portfolio"
+                "condition_type": "portfolio",
             },
             "action_type": "notify",
             "action_context": "Alert",
@@ -2467,16 +2898,19 @@ class TestPortfolioTrigger:
         }
         cursor.fetchone.return_value = total_value_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Portfolio Value Alert",
-            "trigger_type": "portfolio",
-            "trigger_condition": {
-                "expression": "total_value >= 100000",
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Portfolio Value Alert",
+                "trigger_type": "portfolio",
+                "trigger_condition": {
+                    "expression": "total_value >= 100000",
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -2492,16 +2926,19 @@ class TestPortfolioTrigger:
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = {"count": 0}
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Invalid Portfolio Alert",
-            "trigger_type": "portfolio",
-            "trigger_condition": {
-                "expression": "unknown_metric > 5%",
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Invalid Portfolio Alert",
+                "trigger_type": "portfolio",
+                "trigger_condition": {
+                    "expression": "unknown_metric > 5%",
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 400
         data = response.json()
@@ -2511,23 +2948,31 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_portfolio_default_check_interval_15(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """POST portfolio intent defaults check_interval_minutes to 15."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         cursor.fetchone.return_value = portfolio_intent_row
 
-        response = client.post("/v1/intents", json={
-            "user_id": "test-user",
-            "intent_name": "Portfolio Alert",
-            "trigger_type": "portfolio",
-            "trigger_condition": {
-                "expression": "any_holding_change > 5%",
-                "condition_type": "portfolio"
+        response = client.post(
+            "/v1/intents",
+            json={
+                "user_id": "test-user",
+                "intent_name": "Portfolio Alert",
+                "trigger_type": "portfolio",
+                "trigger_condition": {
+                    "expression": "any_holding_change > 5%",
+                    "condition_type": "portfolio",
+                },
+                "action_context": "Alert",
             },
-            "action_context": "Alert",
-        })
+        )
 
         assert response.status_code == 201
         # The response should show check_interval_minutes=15
@@ -2537,13 +2982,20 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_portfolio_in_pending_query(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """GET /pending returns portfolio intents."""
         conn, cursor = mock_db_connection
         mock_get_conn.return_value = conn
         # Make next_check in past so it appears in pending
-        portfolio_intent_row["next_check"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+        portfolio_intent_row["next_check"] = datetime.now(timezone.utc) - timedelta(
+            minutes=1
+        )
         cursor.fetchall.return_value = [portfolio_intent_row]
 
         response = client.get("/v1/intents/pending")
@@ -2556,7 +3008,12 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_fire_portfolio_intent_success(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """POST /fire processes portfolio intent like other condition triggers."""
         conn, cursor = mock_db_connection
@@ -2564,10 +3021,13 @@ class TestPortfolioTrigger:
         cursor.fetchone.return_value = portfolio_intent_row
 
         intent_id = str(portfolio_intent_row["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-portfolio-123",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-portfolio-123",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2597,7 +3057,7 @@ class TestPortfolioTrigger:
                 "expression": "any_holding_change > 10%",
                 "condition_type": "portfolio",
                 "cooldown_hours": 24,
-                "fire_mode": "once"
+                "fire_mode": "once",
             },
             "action_type": "notify",
             "action_context": "One-time portfolio alert",
@@ -2622,10 +3082,13 @@ class TestPortfolioTrigger:
         cursor.fetchone.return_value = fire_once_portfolio
 
         intent_id = str(fire_once_portfolio["id"])
-        response = client.post(f"/v1/intents/{intent_id}/fire", json={
-            "status": "success",
-            "message_id": "msg-once-portfolio",
-        })
+        response = client.post(
+            f"/v1/intents/{intent_id}/fire",
+            json={
+                "status": "success",
+                "message_id": "msg-once-portfolio",
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -2635,7 +3098,12 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_get_portfolio_intent(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """GET /intents/{id} returns portfolio intent with all fields."""
         conn, cursor = mock_db_connection
@@ -2654,7 +3122,12 @@ class TestPortfolioTrigger:
     @patch("src.routers.intents.get_timescale_conn")
     @patch("src.routers.intents.release_timescale_conn")
     def test_list_portfolio_intents(
-        self, mock_release, mock_get_conn, client, mock_db_connection, portfolio_intent_row
+        self,
+        mock_release,
+        mock_get_conn,
+        client,
+        mock_db_connection,
+        portfolio_intent_row,
     ):
         """GET /intents returns portfolio intents in list."""
         conn, cursor = mock_db_connection

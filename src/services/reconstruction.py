@@ -45,14 +45,17 @@ class ReconstructionService:
         persona: Optional[str] = None,
     ) -> Narrative:
         from src.services.tracing import start_span, end_span
-        
-        span = start_span("narrative_generation", input={
-            "user_id": user_id,
-            "query": query[:100] if query else None,
-            "has_time_range": time_range is not None,
-            "limit": limit
-        })
-        
+
+        _span = start_span(
+            "narrative_generation",
+            input={
+                "user_id": user_id,
+                "query": query[:100] if query else None,
+                "has_time_range": time_range is not None,
+                "limit": limit,
+            },
+        )
+
         try:
             payload_memories: List[Dict[str, Any]] = []
             memory_index: Dict[str, Dict[str, Any]] = {}
@@ -65,9 +68,15 @@ class ReconstructionService:
                     mem_id = item.get("id")
                     if not mem_id:
                         continue
-                    meta = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+                    meta = (
+                        item.get("metadata", {})
+                        if isinstance(item.get("metadata"), dict)
+                        else {}
+                    )
                     relevance = float(item.get("score", 0.0) or 0.0)
-                    importance = meta.get("importance", item.get("importance", 0.5) or 0.5)
+                    importance = meta.get(
+                        "importance", item.get("importance", 0.5) or 0.5
+                    )
                     try:
                         importance_val = float(importance)
                     except Exception:
@@ -78,7 +87,11 @@ class ReconstructionService:
                             "type": meta.get("type", "semantic"),
                             "content": item.get("content", ""),
                             "relevance": relevance,
-                            "recency": float(meta.get("recency", 0.5) if isinstance(meta.get("recency"), (int, float)) else 0.5),
+                            "recency": float(
+                                meta.get("recency", 0.5)
+                                if isinstance(meta.get("recency"), (int, float))
+                                else 0.5
+                            ),
                             "importance": importance_val,
                             "meta": meta,
                         }
@@ -121,7 +134,9 @@ class ReconstructionService:
             payload = {
                 "user_id": user_id,
                 "query": query or "",
-                "time_range": [r.isoformat() for r in time_range] if time_range else None,
+                "time_range": [r.isoformat() for r in time_range]
+                if time_range
+                else None,
                 "persona": persona,
                 "summaries": summaries or [],
                 "memories": payload_memories,
@@ -132,7 +147,7 @@ class ReconstructionService:
                 "Goals: (1) weave relevant events and states into a short story; (2) maintain timeline; "
                 "(3) preserve important factual details; (4) avoid speculation beyond the provided memories; "
                 "(5) include finance-related highlights if present. Return STRICT JSON: {\n"
-                "  \"narrative\": string,\n  \"summary\": string | null,\n  \"source_ids\": string[]\n}"
+                '  "narrative": string,\n  "summary": string | null,\n  "source_ids": string[]\n}'
             )
 
             resp = _call_llm_json(SYSTEM_PROMPT, payload)
@@ -145,25 +160,29 @@ class ReconstructionService:
             narrative = Narrative(
                 user_id=user_id,
                 text=str(resp.get("narrative") or "").strip(),
-                summary=(resp.get("summary") if isinstance(resp.get("summary"), str) else None),
+                summary=(
+                    resp.get("summary")
+                    if isinstance(resp.get("summary"), str)
+                    else None
+                ),
                 sources=sources,
             )
-            
-            end_span(output={
-                "sources_count": len(sources),
-                "narrative_length": len(narrative.text),
-                "memories_retrieved": len(payload_memories)
-            })
-            
+
+            end_span(
+                output={
+                    "sources_count": len(sources),
+                    "narrative_length": len(narrative.text),
+                    "memories_retrieved": len(payload_memories),
+                }
+            )
+
             return narrative
-            
+
         except Exception as e:
             end_span(output={"error": str(e)}, level="ERROR")
             from src.services.tracing import trace_error
-            trace_error(e, metadata={
-                "user_id": user_id,
-                "context": "narrative_generation"
-            })
+
+            trace_error(
+                e, metadata={"user_id": user_id, "context": "narrative_generation"}
+            )
             raise
-
-

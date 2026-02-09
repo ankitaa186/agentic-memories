@@ -18,6 +18,8 @@ def test_health_full_reports_failures(api_client, monkeypatch):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["status"] == "unhealthy"  # timescale is critical, so failure = unhealthy
+    assert (
+        data["status"] == "unhealthy"
+    )  # timescale is critical, so failure = unhealthy
     assert data["checks"]["timescale"] == {"ok": False, "error": "down"}
     assert data["checks"]["redis"]["ok"] is False

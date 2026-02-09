@@ -146,4 +146,3 @@ class MemoryOrchestratorClient(Protocol):
 
     async def shutdown(self) -> None:
         """Release resources allocated by the orchestrator implementation."""
-

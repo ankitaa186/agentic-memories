@@ -39,4 +39,3 @@ class RetrievalPolicy:
 
     lookback_messages: int = 4
     """How many prior turns we keep when crafting retrieval queries."""
-

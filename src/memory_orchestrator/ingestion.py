@@ -31,7 +31,7 @@ class IngestionBatch:
         # Fallback to raw storage if LLM not configured
         if not is_llm_configured():
             return [self._to_raw_memory()]
-        
+
         # Convert MessageEvent list to Message list for TranscriptRequest
         history: List[Message] = []
         for event in self.events:
@@ -40,53 +40,61 @@ class IngestionBatch:
             if role_str == "tool":
                 # Skip tool messages or convert to assistant - tool role not in Message schema
                 role_str = "assistant"
-            
+
             # Only include supported roles with non-empty content
-            if role_str in ("user", "assistant", "system") and event.content and event.content.strip():
+            if (
+                role_str in ("user", "assistant", "system")
+                and event.content
+                and event.content.strip()
+            ):
                 history.append(Message(role=role_str, content=event.content))
-        
+
         if not history:
             # No valid messages to process
             return []
-        
+
         # Build metadata preserving orchestrator context
         metadata = {
             "conversation_id": self.conversation_id,
-            "message_ids": [event.message_id for event in self.events if event.message_id],
+            "message_ids": [
+                event.message_id for event in self.events if event.message_id
+            ],
             "message_roles": [event.role.value for event in self.events],
             "batch_size": len(self.events),
             "source": "orchestrator",
         }
         if self.aggregated:
             metadata["aggregation"] = "batched_transcript"
-        
+
         # Create TranscriptRequest
         request = TranscriptRequest(
             user_id=self.user_id,
             history=history,
             metadata=metadata,
         )
-        
+
         # Run unified ingestion graph
         try:
             from src.services.unified_ingestion_graph import run_unified_ingestion
-            
+
             final_state = run_unified_ingestion(request)
             memories = final_state.get("memories", [])
-            
+
             # Enrich memories with orchestrator metadata
             for memory in memories:
                 if memory.metadata:
-                    memory.metadata.update({
-                        "conversation_id": self.conversation_id,
-                        "orchestrator_batch": True,
-                    })
+                    memory.metadata.update(
+                        {
+                            "conversation_id": self.conversation_id,
+                            "orchestrator_batch": True,
+                        }
+                    )
                 else:
                     memory.metadata = {
                         "conversation_id": self.conversation_id,
                         "orchestrator_batch": True,
                     }
-            
+
             return memories
         except Exception as e:
             # Log error and fallback to raw storage
@@ -97,7 +105,7 @@ class IngestionBatch:
                 exc_info=True,
             )
             return [self._to_raw_memory()]
-    
+
     def _to_raw_memory(self) -> Memory:
         """Fallback: Convert the batch into a raw Memory instance (legacy behavior)."""
         transcript_lines = [
@@ -107,7 +115,9 @@ class IngestionBatch:
 
         metadata = {
             "conversation_id": self.conversation_id,
-            "message_ids": [event.message_id for event in self.events if event.message_id],
+            "message_ids": [
+                event.message_id for event in self.events if event.message_id
+            ],
             "message_roles": [event.role.value for event in self.events],
             "batch_size": len(self.events),
             "source": "orchestrator_raw",
@@ -213,4 +223,3 @@ class IngestionController:
         if state.total_messages <= self._policy.high_volume_cutoff:
             return self._policy.medium_volume_batch_size
         return self._policy.high_volume_batch_size
-

@@ -9,6 +9,7 @@ Tests validation rules for scheduled intent creation:
 - AC6: Required fields by trigger type
 - AC7: All errors returned in single response
 """
+
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock
 
@@ -24,6 +25,7 @@ from src.services.intent_validation import (
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def mock_conn():
@@ -52,7 +54,7 @@ def make_intent(
     trigger_type: str = "cron",
     trigger_schedule: TriggerSchedule = None,
     trigger_condition: TriggerCondition = None,
-    user_id: str = "test-user"
+    user_id: str = "test-user",
 ) -> ScheduledIntentCreate:
     """Helper to create a ScheduledIntentCreate with defaults."""
     return ScheduledIntentCreate(
@@ -61,13 +63,14 @@ def make_intent(
         trigger_type=trigger_type,
         trigger_schedule=trigger_schedule,
         trigger_condition=trigger_condition,
-        action_context="Test action context"
+        action_context="Test action context",
     )
 
 
 # =============================================================================
 # AC1: Trigger Count Validation (max 25 per user)
 # =============================================================================
+
 
 class TestTriggerCountValidation:
     """Tests for AC1: Max 25 active triggers per user."""
@@ -79,8 +82,7 @@ class TestTriggerCountValidation:
 
         service = IntentValidationService(conn=conn)
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 9 * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 9 * * *")
         )
 
         result = service.validate(intent)
@@ -95,8 +97,7 @@ class TestTriggerCountValidation:
 
         service = IntentValidationService(conn=conn)
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 9 * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 9 * * *")
         )
 
         result = service.validate(intent)
@@ -113,7 +114,7 @@ class TestTriggerCountValidation:
         service = IntentValidationService(conn=conn)
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=10)
+            trigger_schedule=TriggerSchedule(interval_minutes=10),
         )
 
         result = service.validate(intent)
@@ -129,7 +130,7 @@ class TestTriggerCountValidation:
         service = IntentValidationService(conn=conn)
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=10)
+            trigger_schedule=TriggerSchedule(interval_minutes=10),
         )
 
         # Should not raise and should be valid if other checks pass
@@ -142,14 +143,14 @@ class TestTriggerCountValidation:
 # AC2: Cron Minimum Interval (60 seconds)
 # =============================================================================
 
+
 class TestCronFrequencyValidation:
     """Tests for AC2: Cron minimum interval 60 seconds."""
 
     def test_cron_every_minute_fails(self, service_no_db):
         """'* * * * *' (every minute) rejects - passes frequency (60s = limit) but fails daily count (1440/day > 96)."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="* * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="* * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -164,7 +165,7 @@ class TestCronFrequencyValidation:
         # Note: Standard cron doesn't have seconds, but croniter supports it
         intent = make_intent(
             trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/30 * * * * *")  # Every 30 seconds
+            trigger_schedule=TriggerSchedule(cron="*/30 * * * * *"),  # Every 30 seconds
         )
 
         result = service_no_db.validate(intent)
@@ -175,8 +176,7 @@ class TestCronFrequencyValidation:
     def test_cron_every_2_minutes_fails_daily_count(self, service_no_db):
         """'*/2 * * * *' (every 2 minutes) passes frequency but fails daily count (720/day > 96)."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/2 * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="*/2 * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -188,8 +188,7 @@ class TestCronFrequencyValidation:
     def test_cron_hourly_ok(self, service_no_db):
         """'0 * * * *' (hourly) passes frequency check."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -199,8 +198,7 @@ class TestCronFrequencyValidation:
     def test_cron_daily_ok(self, service_no_db):
         """'0 9 * * *' (daily at 9am) passes frequency check."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 9 * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 9 * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -212,14 +210,14 @@ class TestCronFrequencyValidation:
 # AC3: Cron Max Fires Per Day (96)
 # =============================================================================
 
+
 class TestCronDailyCountValidation:
     """Tests for AC3: Cron max 96 fires per day."""
 
     def test_cron_every_minute_exceeds_daily_limit(self, service_no_db):
         """Every minute = 1440/day exceeds 96 limit."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="* * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="* * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -232,8 +230,7 @@ class TestCronDailyCountValidation:
     def test_cron_every_15_minutes_at_limit(self, service_no_db):
         """Every 15 min = 96/day at limit."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/15 * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="*/15 * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -244,8 +241,7 @@ class TestCronDailyCountValidation:
     def test_cron_every_10_minutes_exceeds_limit(self, service_no_db):
         """Every 10 min = 144/day exceeds 96 limit."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/10 * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="*/10 * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -256,8 +252,7 @@ class TestCronDailyCountValidation:
     def test_cron_hourly_well_under_limit(self, service_no_db):
         """Hourly = 24/day well under 96 limit."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -269,6 +264,7 @@ class TestCronDailyCountValidation:
 # AC4: Interval Minimum (5 minutes)
 # =============================================================================
 
+
 class TestIntervalValidation:
     """Tests for AC4: Interval minimum 5 minutes."""
 
@@ -276,7 +272,7 @@ class TestIntervalValidation:
         """interval_minutes=4 rejects with minimum error."""
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=4)
+            trigger_schedule=TriggerSchedule(interval_minutes=4),
         )
 
         result = service_no_db.validate(intent)
@@ -289,7 +285,7 @@ class TestIntervalValidation:
         """interval_minutes=5 passes minimum check."""
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=5)
+            trigger_schedule=TriggerSchedule(interval_minutes=5),
         )
 
         result = service_no_db.validate(intent)
@@ -300,7 +296,7 @@ class TestIntervalValidation:
         """interval_minutes=30 passes minimum check."""
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=30)
+            trigger_schedule=TriggerSchedule(interval_minutes=30),
         )
 
         result = service_no_db.validate(intent)
@@ -311,7 +307,7 @@ class TestIntervalValidation:
         """interval_minutes=1 rejects with minimum error."""
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=1)
+            trigger_schedule=TriggerSchedule(interval_minutes=1),
         )
 
         result = service_no_db.validate(intent)
@@ -324,6 +320,7 @@ class TestIntervalValidation:
 # AC5: One-Time Trigger Future Validation
 # =============================================================================
 
+
 class TestOnceTriggerValidation:
     """Tests for AC5: One-time triggers must be in future."""
 
@@ -331,8 +328,7 @@ class TestOnceTriggerValidation:
         """trigger_at in past rejects with error."""
         past_time = datetime.now(timezone.utc) - timedelta(hours=1)
         intent = make_intent(
-            trigger_type="once",
-            trigger_schedule=TriggerSchedule(trigger_at=past_time)
+            trigger_type="once", trigger_schedule=TriggerSchedule(trigger_at=past_time)
         )
 
         result = service_no_db.validate(intent)
@@ -345,7 +341,7 @@ class TestOnceTriggerValidation:
         future_time = datetime.now(timezone.utc) + timedelta(hours=1)
         intent = make_intent(
             trigger_type="once",
-            trigger_schedule=TriggerSchedule(trigger_at=future_time)
+            trigger_schedule=TriggerSchedule(trigger_at=future_time),
         )
 
         result = service_no_db.validate(intent)
@@ -357,8 +353,7 @@ class TestOnceTriggerValidation:
         # Use a time slightly in the past to ensure it fails
         now = datetime.now(timezone.utc) - timedelta(seconds=1)
         intent = make_intent(
-            trigger_type="once",
-            trigger_schedule=TriggerSchedule(trigger_at=now)
+            trigger_type="once", trigger_schedule=TriggerSchedule(trigger_at=now)
         )
 
         result = service_no_db.validate(intent)
@@ -370,8 +365,7 @@ class TestOnceTriggerValidation:
         # Naive datetime in the past
         past_naive = datetime.now() - timedelta(hours=1)
         intent = make_intent(
-            trigger_type="once",
-            trigger_schedule=TriggerSchedule(trigger_at=past_naive)
+            trigger_type="once", trigger_schedule=TriggerSchedule(trigger_at=past_naive)
         )
 
         result = service_no_db.validate(intent)
@@ -384,15 +378,13 @@ class TestOnceTriggerValidation:
 # AC6: Required Fields by Trigger Type
 # =============================================================================
 
+
 class TestRequiredFieldsValidation:
     """Tests for AC6: Required fields by trigger type."""
 
     def test_cron_missing_schedule_fails(self, service_no_db):
         """Cron type without cron field rejects."""
-        intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=None
-        )
+        intent = make_intent(trigger_type="cron", trigger_schedule=None)
 
         result = service_no_db.validate(intent)
 
@@ -403,7 +395,7 @@ class TestRequiredFieldsValidation:
         """Cron type with empty schedule rejects."""
         intent = make_intent(
             trigger_type="cron",
-            trigger_schedule=TriggerSchedule()  # No cron field set
+            trigger_schedule=TriggerSchedule(),  # No cron field set
         )
 
         result = service_no_db.validate(intent)
@@ -415,25 +407,29 @@ class TestRequiredFieldsValidation:
         """Interval type without interval_minutes rejects."""
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule()  # No interval_minutes
+            trigger_schedule=TriggerSchedule(),  # No interval_minutes
         )
 
         result = service_no_db.validate(intent)
 
         assert result.is_valid is False
-        assert any("trigger_schedule.interval_minutes required" in err for err in result.errors)
+        assert any(
+            "trigger_schedule.interval_minutes required" in err for err in result.errors
+        )
 
     def test_once_missing_trigger_at_fails(self, service_no_db):
         """Once type without trigger_at rejects."""
         intent = make_intent(
             trigger_type="once",
-            trigger_schedule=TriggerSchedule()  # No trigger_at
+            trigger_schedule=TriggerSchedule(),  # No trigger_at
         )
 
         result = service_no_db.validate(intent)
 
         assert result.is_valid is False
-        assert any("trigger_schedule.trigger_at required" in err for err in result.errors)
+        assert any(
+            "trigger_schedule.trigger_at required" in err for err in result.errors
+        )
 
     def test_price_partial_structured_fields_ok(self, service_no_db):
         """Price type with partial structured fields passes (Story 6.2: expression alternative)."""
@@ -442,7 +438,9 @@ class TestRequiredFieldsValidation:
         # (actual evaluation is done by Annie, not validation service)
         intent = make_intent(
             trigger_type="price",
-            trigger_condition=TriggerCondition(operator=">", value=100.0)  # Missing ticker
+            trigger_condition=TriggerCondition(
+                operator=">", value=100.0
+            ),  # Missing ticker
         )
 
         result = service_no_db.validate(intent)
@@ -454,7 +452,9 @@ class TestRequiredFieldsValidation:
         """Price type with expression instead of structured fields passes (Story 6.2)."""
         intent = make_intent(
             trigger_type="price",
-            trigger_condition=TriggerCondition(expression="AAPL > 200", condition_type="price")
+            trigger_condition=TriggerCondition(
+                expression="AAPL > 200", condition_type="price"
+            ),
         )
 
         result = service_no_db.validate(intent)
@@ -466,7 +466,7 @@ class TestRequiredFieldsValidation:
         # Story 6.2: Price triggers accept either structured fields or expression
         intent = make_intent(
             trigger_type="price",
-            trigger_condition=TriggerCondition()  # Empty - no structured fields, no expression
+            trigger_condition=TriggerCondition(),  # Empty - no structured fields, no expression
         )
 
         result = service_no_db.validate(intent)
@@ -478,7 +478,9 @@ class TestRequiredFieldsValidation:
         """Price type with all required fields passes."""
         intent = make_intent(
             trigger_type="price",
-            trigger_condition=TriggerCondition(ticker="AAPL", operator=">", value=200.0)
+            trigger_condition=TriggerCondition(
+                ticker="AAPL", operator=">", value=200.0
+            ),
         )
 
         result = service_no_db.validate(intent)
@@ -490,7 +492,7 @@ class TestRequiredFieldsValidation:
         # Story 6.2: Silence triggers can use EITHER threshold_hours OR expression
         intent = make_intent(
             trigger_type="silence",
-            trigger_condition=TriggerCondition()  # No threshold_hours, no expression
+            trigger_condition=TriggerCondition(),  # No threshold_hours, no expression
         )
 
         result = service_no_db.validate(intent)
@@ -502,7 +504,9 @@ class TestRequiredFieldsValidation:
         """Silence type with expression instead of threshold_hours passes (Story 6.2)."""
         intent = make_intent(
             trigger_type="silence",
-            trigger_condition=TriggerCondition(expression="inactive_hours > 48", condition_type="silence")
+            trigger_condition=TriggerCondition(
+                expression="inactive_hours > 48", condition_type="silence"
+            ),
         )
 
         result = service_no_db.validate(intent)
@@ -513,7 +517,7 @@ class TestRequiredFieldsValidation:
         """Silence type with threshold_hours passes."""
         intent = make_intent(
             trigger_type="silence",
-            trigger_condition=TriggerCondition(threshold_hours=24)
+            trigger_condition=TriggerCondition(threshold_hours=24),
         )
 
         result = service_no_db.validate(intent)
@@ -523,8 +527,7 @@ class TestRequiredFieldsValidation:
     def test_portfolio_no_required_condition_fields_ok(self, service_no_db):
         """Portfolio type with empty condition passes (expression field added in Epic 6)."""
         intent = make_intent(
-            trigger_type="portfolio",
-            trigger_condition=TriggerCondition()
+            trigger_type="portfolio", trigger_condition=TriggerCondition()
         )
 
         result = service_no_db.validate(intent)
@@ -537,6 +540,7 @@ class TestRequiredFieldsValidation:
 # AC7: Multiple Errors Returned (No Short-Circuit)
 # =============================================================================
 
+
 class TestMultipleErrorsValidation:
     """Tests for AC7: All errors returned in single response."""
 
@@ -545,8 +549,7 @@ class TestMultipleErrorsValidation:
         # Cron type with too frequent schedule (violates both frequency and daily count)
         # Every 30 seconds = 2880/day > 96 limit, and 30s < 60s minimum interval
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/30 * * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="*/30 * * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -554,16 +557,16 @@ class TestMultipleErrorsValidation:
         assert result.is_valid is False
         # Should have at least 2 errors: frequency too high and daily count exceeded
         assert len(result.errors) >= 2
-        assert any("frequent" in err.lower() or "second" in err.lower() for err in result.errors)
+        assert any(
+            "frequent" in err.lower() or "second" in err.lower()
+            for err in result.errors
+        )
         assert any("day" in err.lower() or "96" in err for err in result.errors)
 
     def test_no_short_circuit_cron_and_required(self, service_no_db):
         """All validations run even if required fields fail."""
         # Cron type with no schedule at all
-        intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=None
-        )
+        intent = make_intent(trigger_type="cron", trigger_schedule=None)
 
         result = service_no_db.validate(intent)
 
@@ -575,8 +578,7 @@ class TestMultipleErrorsValidation:
         """Cron with both frequency and daily count violations returns both errors."""
         # Every 30 seconds (6-field cron) - fires too frequently AND exceeds daily limit
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="*/30 * * * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="*/30 * * * * *")
         )
 
         result = service_no_db.validate(intent)
@@ -595,7 +597,7 @@ class TestMultipleErrorsValidation:
         service = IntentValidationService(conn=conn)
         intent = make_intent(
             trigger_type="interval",
-            trigger_schedule=TriggerSchedule(interval_minutes=3)  # Too short
+            trigger_schedule=TriggerSchedule(interval_minutes=3),  # Too short
         )
 
         result = service.validate(intent)
@@ -610,14 +612,14 @@ class TestMultipleErrorsValidation:
 # Edge Cases and Additional Tests
 # =============================================================================
 
+
 class TestEdgeCases:
     """Additional edge case tests."""
 
     def test_invalid_cron_expression(self, service_no_db):
         """Invalid cron expression returns error."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="invalid cron")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="invalid cron")
         )
 
         result = service_no_db.validate(intent)
@@ -638,8 +640,7 @@ class TestEdgeCases:
     def test_service_without_db_skips_count_check(self, service_no_db):
         """Service without DB connection skips trigger count validation."""
         intent = make_intent(
-            trigger_type="cron",
-            trigger_schedule=TriggerSchedule(cron="0 9 * * *")
+            trigger_type="cron", trigger_schedule=TriggerSchedule(cron="0 9 * * *")
         )
 
         result = service_no_db.validate(intent)

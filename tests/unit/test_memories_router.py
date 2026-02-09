@@ -12,6 +12,7 @@ Tests cover:
 - Response format with storage status per backend
 - Error handling (best-effort for typed tables)
 """
+
 from unittest.mock import patch
 from datetime import datetime, timezone
 
@@ -69,17 +70,23 @@ class _MockConnection:
 # Story 10.1: Direct Memory Store Tests (ChromaDB)
 # =============================================================================
 
+
 def test_direct_store_success_basic(api_client, monkeypatch):
     """Test successful direct memory storage (AC1)"""
     # Mock embedding generation
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user-123",
-                "content": "User enjoys hiking in the mountains"
-            })
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={
+                    "user_id": "test-user-123",
+                    "content": "User enjoys hiking in the mountains",
+                },
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -96,17 +103,22 @@ def test_direct_store_with_all_fields(api_client, monkeypatch):
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user-123",
-                "content": "User prefers Python over JavaScript",
-                "layer": "long-term",
-                "type": "explicit",
-                "importance": 0.9,
-                "confidence": 0.95,
-                "persona_tags": ["developer", "tech"],
-                "metadata": {"source": "conversation"}
-            })
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={
+                    "user_id": "test-user-123",
+                    "content": "User prefers Python over JavaScript",
+                    "layer": "long-term",
+                    "type": "explicit",
+                    "importance": 0.9,
+                    "confidence": 0.95,
+                    "persona_tags": ["developer", "tech"],
+                    "metadata": {"source": "conversation"},
+                },
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -115,11 +127,13 @@ def test_direct_store_with_all_fields(api_client, monkeypatch):
 
 def test_direct_store_embedding_failure(api_client, monkeypatch):
     """Test error handling when embedding generation fails (AC3)"""
-    with patch("src.routers.memories.generate_embedding", side_effect=Exception("OpenAI error")):
-        response = api_client.post("/v1/memories/direct", json={
-            "user_id": "test-user-123",
-            "content": "Test content"
-        })
+    with patch(
+        "src.routers.memories.generate_embedding", side_effect=Exception("OpenAI error")
+    ):
+        response = api_client.post(
+            "/v1/memories/direct",
+            json={"user_id": "test-user-123", "content": "Test content"},
+        )
 
     assert response.status_code == 200
     data = response.json()
@@ -131,10 +145,10 @@ def test_direct_store_embedding_failure(api_client, monkeypatch):
 def test_direct_store_embedding_returns_none(api_client, monkeypatch):
     """Test error handling when embedding returns None (AC3)"""
     with patch("src.routers.memories.generate_embedding", return_value=None):
-        response = api_client.post("/v1/memories/direct", json={
-            "user_id": "test-user-123",
-            "content": "Test content"
-        })
+        response = api_client.post(
+            "/v1/memories/direct",
+            json={"user_id": "test-user-123", "content": "Test content"},
+        )
 
     assert response.status_code == 200
     data = response.json()
@@ -147,11 +161,14 @@ def test_direct_store_chromadb_failure(api_client, monkeypatch):
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", side_effect=Exception("ChromaDB error")):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user-123",
-                "content": "Test content"
-            })
+        with patch(
+            "src.routers.memories.upsert_memories",
+            side_effect=Exception("ChromaDB error"),
+        ):
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={"user_id": "test-user-123", "content": "Test content"},
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -165,10 +182,10 @@ def test_direct_store_chromadb_returns_empty(api_client, monkeypatch):
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
         with patch("src.routers.memories.upsert_memories", return_value=[]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user-123",
-                "content": "Test content"
-            })
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={"user_id": "test-user-123", "content": "Test content"},
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -178,18 +195,14 @@ def test_direct_store_chromadb_returns_empty(api_client, monkeypatch):
 
 def test_direct_store_missing_user_id(api_client):
     """Test validation error for missing user_id"""
-    response = api_client.post("/v1/memories/direct", json={
-        "content": "Test content"
-    })
+    response = api_client.post("/v1/memories/direct", json={"content": "Test content"})
 
     assert response.status_code == 422
 
 
 def test_direct_store_missing_content(api_client):
     """Test validation error for missing content"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user-123"
-    })
+    response = api_client.post("/v1/memories/direct", json={"user_id": "test-user-123"})
 
     assert response.status_code == 422
 
@@ -198,6 +211,7 @@ def test_direct_store_missing_content(api_client):
 # Story 10.2: Typed Table Storage Tests
 # =============================================================================
 
+
 def test_episodic_storage_when_event_timestamp_provided(api_client, monkeypatch):
     """Test episodic table storage when event_timestamp is provided (AC #2)"""
     mock_embedding = [0.1] * 1536
@@ -205,17 +219,24 @@ def test_episodic_storage_when_event_timestamp_provided(api_client, monkeypatch)
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "User attended daughter's graduation at Stanford",
-                        "event_timestamp": "2025-06-15T14:00:00Z",
-                        "location": "Stanford University, CA",
-                        "participants": ["daughter Sarah", "wife Maria"],
-                        "event_type": "family_milestone"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "User attended daughter's graduation at Stanford",
+                            "event_timestamp": "2025-06-15T14:00:00Z",
+                            "location": "Stanford University, CA",
+                            "participants": ["daughter Sarah", "wife Maria"],
+                            "event_type": "family_milestone",
+                        },
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -235,17 +256,24 @@ def test_emotional_storage_when_emotional_state_provided(api_client, monkeypatch
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "User expressed frustration about job search",
-                        "emotional_state": "frustrated",
-                        "valence": -0.6,
-                        "arousal": 0.7,
-                        "trigger_event": "Another job rejection email"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "User expressed frustration about job search",
+                            "emotional_state": "frustrated",
+                            "valence": -0.6,
+                            "arousal": 0.7,
+                            "trigger_event": "Another job rejection email",
+                        },
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -264,15 +292,22 @@ def test_procedural_storage_when_skill_name_provided(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "User demonstrated advanced Python skills",
-                        "skill_name": "python_programming",
-                        "proficiency_level": "advanced"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "User demonstrated advanced Python skills",
+                            "skill_name": "python_programming",
+                            "proficiency_level": "advanced",
+                        },
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -291,23 +326,30 @@ def test_multiple_typed_tables_simultaneously(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "User excitedly completed Python certification",
-                        # Episodic fields
-                        "event_timestamp": "2025-12-01T10:00:00Z",
-                        "event_type": "achievement",
-                        # Emotional fields
-                        "emotional_state": "excited",
-                        "valence": 0.9,
-                        "arousal": 0.8,
-                        # Procedural fields
-                        "skill_name": "python_certification",
-                        "proficiency_level": "expert"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "User excitedly completed Python certification",
+                            # Episodic fields
+                            "event_timestamp": "2025-12-01T10:00:00Z",
+                            "event_type": "achievement",
+                            # Emotional fields
+                            "emotional_state": "excited",
+                            "valence": 0.9,
+                            "arousal": 0.8,
+                            # Procedural fields
+                            "skill_name": "python_certification",
+                            "proficiency_level": "expert",
+                        },
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -334,13 +376,18 @@ def test_chromadb_always_stored_regardless_of_typed_fields(api_client, monkeypat
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
         with patch("src.routers.memories.upsert_memories", side_effect=mock_upsert):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "Test with typed field",
-                        "event_timestamp": "2025-01-01T00:00:00Z"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "Test with typed field",
+                            "event_timestamp": "2025-01-01T00:00:00Z",
+                        },
+                    )
 
     assert response.status_code == 200
     assert len(chromadb_called) == 1  # ChromaDB was called
@@ -352,13 +399,18 @@ def test_typed_table_failure_logs_and_continues(api_client, monkeypatch):
 
     # Mock that returns None for timescale connection (simulates connection failure)
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
             with patch("src.routers.memories.get_timescale_conn", return_value=None):
-                response = api_client.post("/v1/memories/direct", json={
-                    "user_id": "test-user-123",
-                    "content": "Test with typed field that will fail",
-                    "event_timestamp": "2025-01-01T00:00:00Z"
-                })
+                response = api_client.post(
+                    "/v1/memories/direct",
+                    json={
+                        "user_id": "test-user-123",
+                        "content": "Test with typed field that will fail",
+                        "event_timestamp": "2025-01-01T00:00:00Z",
+                    },
+                )
 
     assert response.status_code == 200
     data = response.json()
@@ -385,14 +437,19 @@ def test_metadata_flags_stored_in_chromadb(api_client, monkeypatch):
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
         with patch("src.routers.memories.upsert_memories", side_effect=mock_upsert):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user-123",
-                        "content": "Test content",
-                        "event_timestamp": "2025-01-01T00:00:00Z",
-                        "emotional_state": "happy"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user-123",
+                            "content": "Test content",
+                            "event_timestamp": "2025-01-01T00:00:00Z",
+                            "emotional_state": "happy",
+                        },
+                    )
 
     assert response.status_code == 200
     assert len(captured_memories) == 1
@@ -412,12 +469,17 @@ def test_response_only_includes_attempted_typed_tables(api_client, monkeypatch):
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
             # No typed fields - should only have chromadb in storage
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user-123",
-                "content": "Simple memory without typed fields"
-            })
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={
+                    "user_id": "test-user-123",
+                    "content": "Simple memory without typed fields",
+                },
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -433,6 +495,7 @@ def test_response_only_includes_attempted_typed_tables(api_client, monkeypatch):
 # Schema Validation Tests (AC #1)
 # =============================================================================
 
+
 def test_schema_accepts_episodic_fields(api_client, monkeypatch):
     """Test schema accepts all episodic fields (AC #1)"""
     mock_embedding = [0.1] * 1536
@@ -440,17 +503,24 @@ def test_schema_accepts_episodic_fields(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "event_timestamp": "2025-06-15T14:00:00Z",
-                        "location": "San Francisco",
-                        "participants": ["Alice", "Bob"],
-                        "event_type": "meeting"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "event_timestamp": "2025-06-15T14:00:00Z",
+                            "location": "San Francisco",
+                            "participants": ["Alice", "Bob"],
+                            "event_type": "meeting",
+                        },
+                    )
 
     assert response.status_code == 200
 
@@ -462,17 +532,24 @@ def test_schema_accepts_emotional_fields(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "happy",
-                        "valence": 0.8,
-                        "arousal": 0.6,
-                        "trigger_event": "Good news"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "happy",
+                            "valence": 0.8,
+                            "arousal": 0.6,
+                            "trigger_event": "Good news",
+                        },
+                    )
 
     assert response.status_code == 200
 
@@ -484,63 +561,82 @@ def test_schema_accepts_procedural_fields(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "skill_name": "coding",
-                        "proficiency_level": "expert"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "skill_name": "coding",
+                            "proficiency_level": "expert",
+                        },
+                    )
 
     assert response.status_code == 200
 
 
 def test_valence_constraint_min(api_client):
     """Test valence must be >= -1.0 (AC #1)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "emotional_state": "test",
-        "valence": -1.5  # Below minimum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "emotional_state": "test",
+            "valence": -1.5,  # Below minimum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_valence_constraint_max(api_client):
     """Test valence must be <= 1.0 (AC #1)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "emotional_state": "test",
-        "valence": 1.5  # Above maximum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "emotional_state": "test",
+            "valence": 1.5,  # Above maximum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_arousal_constraint_min(api_client):
     """Test arousal must be >= 0.0 (AC #1)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "emotional_state": "test",
-        "arousal": -0.5  # Below minimum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "emotional_state": "test",
+            "arousal": -0.5,  # Below minimum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_arousal_constraint_max(api_client):
     """Test arousal must be <= 1.0 (AC #1)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "emotional_state": "test",
-        "arousal": 1.5  # Above maximum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "emotional_state": "test",
+            "arousal": 1.5,  # Above maximum
+        },
+    )
 
     assert response.status_code == 422
 
@@ -552,15 +648,22 @@ def test_default_valence_when_not_provided(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "neutral"
-                        # No valence - should default to 0.0
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "neutral",
+                            # No valence - should default to 0.0
+                        },
+                    )
 
     assert response.status_code == 200
     # Check that INSERT was called - valence should be 0.0
@@ -574,15 +677,22 @@ def test_default_arousal_when_not_provided(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "neutral"
-                        # No arousal - should default to 0.5
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "neutral",
+                            # No arousal - should default to 0.5
+                        },
+                    )
 
     assert response.status_code == 200
 
@@ -594,15 +704,22 @@ def test_default_proficiency_level_when_not_provided(api_client, monkeypatch):
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "skill_name": "cooking"
-                        # No proficiency_level - should default to "beginner"
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "skill_name": "cooking",
+                            # No proficiency_level - should default to "beginner"
+                        },
+                    )
 
     assert response.status_code == 200
 
@@ -610,6 +727,7 @@ def test_default_proficiency_level_when_not_provided(api_client, monkeypatch):
 # =============================================================================
 # Helper Function Unit Tests
 # =============================================================================
+
 
 def test_store_episodic_success():
     """Test _store_episodic helper function success case"""
@@ -625,7 +743,7 @@ def test_store_episodic_success():
         event_timestamp=datetime.now(timezone.utc),
         event_type="test",
         location="Test location",
-        participants=["Alice"]
+        participants=["Alice"],
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
@@ -645,9 +763,7 @@ def test_store_episodic_connection_unavailable():
     from src.schemas import DirectMemoryRequest
 
     body = DirectMemoryRequest(
-        user_id="test-user",
-        content="Test",
-        event_timestamp=datetime.now(timezone.utc)
+        user_id="test-user", content="Test", event_timestamp=datetime.now(timezone.utc)
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=None):
@@ -669,7 +785,7 @@ def test_store_emotional_success():
         content="Test emotional memory",
         emotional_state="happy",
         valence=0.8,
-        arousal=0.6
+        arousal=0.6,
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
@@ -689,9 +805,7 @@ def test_store_emotional_connection_unavailable():
     from src.schemas import DirectMemoryRequest
 
     body = DirectMemoryRequest(
-        user_id="test-user",
-        content="Test",
-        emotional_state="happy"
+        user_id="test-user", content="Test", emotional_state="happy"
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=None):
@@ -712,7 +826,7 @@ def test_store_procedural_success():
         user_id="test-user",
         content="Test procedural memory",
         skill_name="python",
-        proficiency_level="advanced"
+        proficiency_level="advanced",
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
@@ -732,11 +846,7 @@ def test_store_procedural_connection_unavailable():
     from src.routers.memories import _store_procedural
     from src.schemas import DirectMemoryRequest
 
-    body = DirectMemoryRequest(
-        user_id="test-user",
-        content="Test",
-        skill_name="python"
-    )
+    body = DirectMemoryRequest(user_id="test-user", content="Test", skill_name="python")
 
     with patch("src.routers.memories.get_timescale_conn", return_value=None):
         result = _store_procedural("mem_test123456", body)
@@ -753,9 +863,7 @@ def test_store_episodic_database_error_rollback():
     mock_conn = _MockConnection(cursor=mock_cursor, should_fail=True)
 
     body = DirectMemoryRequest(
-        user_id="test-user",
-        content="Test",
-        event_timestamp=datetime.now(timezone.utc)
+        user_id="test-user", content="Test", event_timestamp=datetime.now(timezone.utc)
     )
 
     with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
@@ -769,6 +877,7 @@ def test_store_episodic_database_error_rollback():
 # =============================================================================
 # Story 10.3: Delete Memory Tests (AC #2)
 # =============================================================================
+
 
 class _MockChromaCollection:
     """Mock ChromaDB collection for delete tests"""
@@ -786,9 +895,7 @@ class _MockChromaCollection:
         # Return only matching ids
         result_ids = [id for id in ids if id in self._ids]
         result_metadatas = [
-            self._metadatas[self._ids.index(id)]
-            for id in result_ids
-            if id in self._ids
+            self._metadatas[self._ids.index(id)] for id in result_ids if id in self._ids
         ]
         return {"ids": result_ids, "metadatas": result_metadatas}
 
@@ -815,13 +922,18 @@ def test_delete_memory_success(api_client, monkeypatch):
     """Test successful memory deletion (AC #2 - successful deletion)"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{"user_id": "test-user-123", "stored_in_episodic": False}]
+        metadatas=[{"user_id": "test-user-123", "stored_in_episodic": False}],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -839,8 +951,13 @@ def test_delete_memory_not_found(api_client, monkeypatch):
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_nonexistent?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_nonexistent?user_id=test-user-123"
+            )
 
     assert response.status_code == 200  # Returns error in response body
     data = response.json()
@@ -855,13 +972,18 @@ def test_delete_memory_unauthorized(api_client, monkeypatch):
     """Test unauthorized deletion returns 403 (AC #2 - unauthorized)"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{"user_id": "other-user-456"}]  # Different user owns this memory
+        metadatas=[{"user_id": "other-user-456"}],  # Different user owns this memory
     )
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     assert response.status_code == 403
     data = response.json()
@@ -872,23 +994,32 @@ def test_delete_memory_cross_storage_episodic(api_client, monkeypatch):
     """Test cross-storage deletion includes episodic table (AC #2 - cross-storage)"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{
-            "user_id": "test-user-123",
-            "typed_table_id": "test-uuid-1234",
-            "stored_in_episodic": True,
-            "stored_in_emotional": False,
-            "stored_in_procedural": False
-        }]
+        metadatas=[
+            {
+                "user_id": "test-user-123",
+                "typed_table_id": "test-uuid-1234",
+                "stored_in_episodic": True,
+                "stored_in_emotional": False,
+                "stored_in_procedural": False,
+            }
+        ],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+                    response = api_client.delete(
+                        "/v1/memories/mem_test123456?user_id=test-user-123"
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -905,23 +1036,32 @@ def test_delete_memory_cross_storage_emotional(api_client, monkeypatch):
     """Test cross-storage deletion includes emotional table"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{
-            "user_id": "test-user-123",
-            "typed_table_id": "test-uuid-1234",
-            "stored_in_episodic": False,
-            "stored_in_emotional": True,
-            "stored_in_procedural": False
-        }]
+        metadatas=[
+            {
+                "user_id": "test-user-123",
+                "typed_table_id": "test-uuid-1234",
+                "stored_in_episodic": False,
+                "stored_in_emotional": True,
+                "stored_in_procedural": False,
+            }
+        ],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+                    response = api_client.delete(
+                        "/v1/memories/mem_test123456?user_id=test-user-123"
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -934,23 +1074,32 @@ def test_delete_memory_cross_storage_procedural(api_client, monkeypatch):
     """Test cross-storage deletion includes procedural table"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{
-            "user_id": "test-user-123",
-            "typed_table_id": "test-uuid-1234",
-            "stored_in_episodic": False,
-            "stored_in_emotional": False,
-            "stored_in_procedural": True
-        }]
+        metadatas=[
+            {
+                "user_id": "test-user-123",
+                "typed_table_id": "test-uuid-1234",
+                "stored_in_episodic": False,
+                "stored_in_emotional": False,
+                "stored_in_procedural": True,
+            }
+        ],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+                    response = api_client.delete(
+                        "/v1/memories/mem_test123456?user_id=test-user-123"
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -963,23 +1112,32 @@ def test_delete_memory_cross_storage_all_tables(api_client, monkeypatch):
     """Test cross-storage deletion from all typed tables simultaneously"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{
-            "user_id": "test-user-123",
-            "typed_table_id": "test-uuid-1234",
-            "stored_in_episodic": True,
-            "stored_in_emotional": True,
-            "stored_in_procedural": True
-        }]
+        metadatas=[
+            {
+                "user_id": "test-user-123",
+                "typed_table_id": "test-uuid-1234",
+                "stored_in_episodic": True,
+                "stored_in_emotional": True,
+                "stored_in_procedural": True,
+            }
+        ],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
     mock_cursor = _MockCursor()
     mock_conn = _MockConnection(cursor=mock_cursor)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+                    response = api_client.delete(
+                        "/v1/memories/mem_test123456?user_id=test-user-123"
+                    )
 
     assert response.status_code == 200
     data = response.json()
@@ -994,7 +1152,9 @@ def test_delete_memory_cross_storage_all_tables(api_client, monkeypatch):
 def test_delete_memory_chromadb_client_unavailable(api_client, monkeypatch):
     """Test error handling when ChromaDB client is unavailable"""
     with patch("src.routers.memories.get_chroma_client", return_value=None):
-        response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        response = api_client.delete(
+            "/v1/memories/mem_test123456?user_id=test-user-123"
+        )
 
     assert response.status_code == 200
     data = response.json()
@@ -1009,8 +1169,13 @@ def test_delete_memory_collection_error(api_client, monkeypatch):
     mock_client = _MockChromaClient(get_collection_raises=True)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -1026,8 +1191,13 @@ def test_delete_memory_get_metadata_error(api_client, monkeypatch):
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -1042,13 +1212,18 @@ def test_delete_memory_chromadb_delete_error(api_client, monkeypatch):
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
         metadatas=[{"user_id": "test-user-123"}],
-        delete_raises=True
+        delete_raises=True,
     )
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -1062,21 +1237,28 @@ def test_delete_memory_typed_table_failure_continues(api_client, monkeypatch):
     """Test typed table deletion failure doesn't fail overall deletion (best-effort)"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{
-            "user_id": "test-user-123",
-            "typed_table_id": "test-uuid-1234",
-            "stored_in_episodic": True,
-            "stored_in_emotional": False,
-            "stored_in_procedural": False
-        }]
+        metadatas=[
+            {
+                "user_id": "test-user-123",
+                "typed_table_id": "test-uuid-1234",
+                "stored_in_episodic": True,
+                "stored_in_emotional": False,
+                "stored_in_procedural": False,
+            }
+        ],
     )
     mock_client = _MockChromaClient(collection=mock_collection)
 
     # Return None for timescale connection (simulates connection failure)
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
             with patch("src.routers.memories.get_timescale_conn", return_value=None):
-                response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+                response = api_client.delete(
+                    "/v1/memories/mem_test123456?user_id=test-user-123"
+                )
 
     assert response.status_code == 200
     data = response.json()
@@ -1100,13 +1282,18 @@ def test_delete_memory_no_user_id_in_metadata(api_client, monkeypatch):
     """Test deletion succeeds when metadata has no user_id (legacy memory)"""
     mock_collection = _MockChromaCollection(
         ids=["mem_test123456"],
-        metadatas=[{"stored_in_episodic": False}]  # No user_id in metadata
+        metadatas=[{"stored_in_episodic": False}],  # No user_id in metadata
     )
     mock_client = _MockChromaClient(collection=mock_collection)
 
     with patch("src.routers.memories.get_chroma_client", return_value=mock_client):
-        with patch("src.routers.memories._standard_collection_name", return_value="test_collection"):
-            response = api_client.delete("/v1/memories/mem_test123456?user_id=test-user-123")
+        with patch(
+            "src.routers.memories._standard_collection_name",
+            return_value="test_collection",
+        ):
+            response = api_client.delete(
+                "/v1/memories/mem_test123456?user_id=test-user-123"
+            )
 
     # Should succeed since no user_id means no auth check
     assert response.status_code == 200
@@ -1117,6 +1304,7 @@ def test_delete_memory_no_user_id_in_metadata(api_client, monkeypatch):
 # =============================================================================
 # Delete Helper Function Tests
 # =============================================================================
+
 
 def test_delete_from_episodic_success():
     """Test _delete_from_episodic helper function success case"""
@@ -1222,46 +1410,59 @@ def test_delete_from_episodic_database_error_rollback():
 # Story 10.5: Additional Validation Tests (AC #3)
 # =============================================================================
 
+
 def test_validation_importance_below_min(api_client):
     """Test importance must be >= 0.0 (AC #3)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "importance": -0.1  # Below minimum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "importance": -0.1,  # Below minimum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_validation_importance_above_max(api_client):
     """Test importance must be <= 1.0 (AC #3)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "importance": 1.5  # Above maximum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "importance": 1.5,  # Above maximum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_validation_confidence_below_min(api_client):
     """Test confidence must be >= 0.0 (AC #3)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "confidence": -0.1  # Below minimum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "confidence": -0.1,  # Below minimum
+        },
+    )
 
     assert response.status_code == 422
 
 
 def test_validation_confidence_above_max(api_client):
     """Test confidence must be <= 1.0 (AC #3)"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "confidence": 1.5  # Above maximum
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={
+            "user_id": "test-user",
+            "content": "Test",
+            "confidence": 1.5,  # Above maximum
+        },
+    )
 
     assert response.status_code == 422
 
@@ -1271,10 +1472,9 @@ def test_validation_content_max_length(api_client):
     # Create content with more than 5000 characters
     long_content = "x" * 5001
 
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": long_content
-    })
+    response = api_client.post(
+        "/v1/memories/direct", json={"user_id": "test-user", "content": long_content}
+    )
 
     assert response.status_code == 422
 
@@ -1287,11 +1487,13 @@ def test_validation_content_at_max_length(api_client, monkeypatch):
     max_content = "x" * 5000
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user",
-                "content": max_content
-            })
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            response = api_client.post(
+                "/v1/memories/direct",
+                json={"user_id": "test-user", "content": max_content},
+            )
 
     assert response.status_code == 200
 
@@ -1303,11 +1505,12 @@ def test_validation_empty_content(api_client, monkeypatch):
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "test-user",
-                "content": ""
-            })
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            response = api_client.post(
+                "/v1/memories/direct", json={"user_id": "test-user", "content": ""}
+            )
 
     # Schema accepts empty string (no min_length constraint)
     assert response.status_code == 200
@@ -1319,11 +1522,12 @@ def test_validation_empty_user_id(api_client, monkeypatch):
     mock_embedding = [0.1] * 1536
 
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            response = api_client.post("/v1/memories/direct", json={
-                "user_id": "",
-                "content": "Test content"
-            })
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            response = api_client.post(
+                "/v1/memories/direct", json={"user_id": "", "content": "Test content"}
+            )
 
     # Schema accepts empty string (no min_length constraint)
     assert response.status_code == 200
@@ -1331,22 +1535,20 @@ def test_validation_empty_user_id(api_client, monkeypatch):
 
 def test_validation_invalid_layer(api_client):
     """Test invalid layer value is rejected"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "layer": "invalid-layer"
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={"user_id": "test-user", "content": "Test", "layer": "invalid-layer"},
+    )
 
     assert response.status_code == 422
 
 
 def test_validation_invalid_type(api_client):
     """Test invalid type value is rejected"""
-    response = api_client.post("/v1/memories/direct", json={
-        "user_id": "test-user",
-        "content": "Test",
-        "type": "invalid-type"
-    })
+    response = api_client.post(
+        "/v1/memories/direct",
+        json={"user_id": "test-user", "content": "Test", "type": "invalid-type"},
+    )
 
     assert response.status_code == 422
 
@@ -1359,29 +1561,43 @@ def test_validation_valence_at_boundaries(api_client, monkeypatch):
 
     # Test at -1.0 (min)
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "sad",
-                        "valence": -1.0
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "sad",
+                            "valence": -1.0,
+                        },
+                    )
 
     assert response.status_code == 200
 
     # Test at 1.0 (max)
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "happy",
-                        "valence": 1.0
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "happy",
+                            "valence": 1.0,
+                        },
+                    )
 
     assert response.status_code == 200
 
@@ -1394,28 +1610,42 @@ def test_validation_arousal_at_boundaries(api_client, monkeypatch):
 
     # Test at 0.0 (min)
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "calm",
-                        "arousal": 0.0
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "calm",
+                            "arousal": 0.0,
+                        },
+                    )
 
     assert response.status_code == 200
 
     # Test at 1.0 (max)
     with patch("src.routers.memories.generate_embedding", return_value=mock_embedding):
-        with patch("src.routers.memories.upsert_memories", return_value=["mem_test123456"]):
-            with patch("src.routers.memories.get_timescale_conn", return_value=mock_conn):
+        with patch(
+            "src.routers.memories.upsert_memories", return_value=["mem_test123456"]
+        ):
+            with patch(
+                "src.routers.memories.get_timescale_conn", return_value=mock_conn
+            ):
                 with patch("src.routers.memories.release_timescale_conn"):
-                    response = api_client.post("/v1/memories/direct", json={
-                        "user_id": "test-user",
-                        "content": "Test",
-                        "emotional_state": "excited",
-                        "arousal": 1.0
-                    })
+                    response = api_client.post(
+                        "/v1/memories/direct",
+                        json={
+                            "user_id": "test-user",
+                            "content": "Test",
+                            "emotional_state": "excited",
+                            "arousal": 1.0,
+                        },
+                    )
 
     assert response.status_code == 200

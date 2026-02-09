@@ -8,6 +8,7 @@ Usage:
     python scripts/github_env.py              # Interactive mode
     python scripts/github_env.py --env dev    # Start with specific environment
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,8 +31,7 @@ DIM = "\033[2m"
 
 
 def parse_env_file_with_sections(
-    path: Path,
-    include_placeholders: bool = False
+    path: Path, include_placeholders: bool = False
 ) -> Tuple[Dict[str, str], Dict[str, str], Optional[Dict[str, str]]]:
     """Parse a .env file and separate into secrets and variables based on section headers.
 
@@ -147,7 +147,9 @@ def run_gh(args: List[str], capture: bool = True) -> Tuple[int, str, str]:
 
 def get_repo() -> str:
     """Get the current repository in owner/repo format."""
-    code, stdout, _ = run_gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    code, stdout, _ = run_gh(
+        ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
+    )
     if code != 0:
         print(f"{RED}Error: Not in a GitHub repository or not authenticated.{RESET}")
         print("Run: gh auth login")
@@ -157,10 +159,14 @@ def get_repo() -> str:
 
 def get_github_variables(repo: str, env_name: str) -> Dict[str, str]:
     """Get all variables from GitHub environment."""
-    code, stdout, stderr = run_gh([
-        "api", f"repos/{repo}/environments/{env_name}/variables?per_page=100",
-        "--jq", ".variables // []"
-    ])
+    code, stdout, stderr = run_gh(
+        [
+            "api",
+            f"repos/{repo}/environments/{env_name}/variables?per_page=100",
+            "--jq",
+            ".variables // []",
+        ]
+    )
 
     if code != 0:
         if "Not Found" in stderr:
@@ -176,10 +182,14 @@ def get_github_variables(repo: str, env_name: str) -> Dict[str, str]:
 
 def get_github_secrets(repo: str, env_name: str) -> List[str]:
     """Get list of secret names from GitHub environment (values are not accessible)."""
-    code, stdout, stderr = run_gh([
-        "api", f"repos/{repo}/environments/{env_name}/secrets?per_page=100",
-        "--jq", ".secrets // []"
-    ])
+    code, stdout, stderr = run_gh(
+        [
+            "api",
+            f"repos/{repo}/environments/{env_name}/secrets?per_page=100",
+            "--jq",
+            ".secrets // []",
+        ]
+    )
 
     if code != 0:
         if "Not Found" in stderr:
@@ -199,10 +209,9 @@ def ensure_environment_exists(repo: str, env_name: str) -> bool:
 
     if code != 0:
         print(f"{YELLOW}Environment '{env_name}' does not exist. Creating...{RESET}")
-        code, _, stderr = run_gh([
-            "api", f"repos/{repo}/environments/{env_name}",
-            "-X", "PUT"
-        ])
+        code, _, stderr = run_gh(
+            ["api", f"repos/{repo}/environments/{env_name}", "-X", "PUT"]
+        )
         if code != 0:
             print(f"{RED}Failed to create environment: {stderr}{RESET}")
             return False
@@ -213,47 +222,59 @@ def ensure_environment_exists(repo: str, env_name: str) -> bool:
 
 def set_secret(repo: str, env_name: str, name: str, value: str) -> bool:
     """Set a secret in GitHub environment."""
-    code, _, stderr = run_gh([
-        "secret", "set", name,
-        "--env", env_name,
-        "--body", value
-    ])
+    code, _, stderr = run_gh(
+        ["secret", "set", name, "--env", env_name, "--body", value]
+    )
     return code == 0
 
 
-def set_variable(repo: str, env_name: str, name: str, value: str, exists: bool = False) -> Tuple[bool, str]:
+def set_variable(
+    repo: str, env_name: str, name: str, value: str, exists: bool = False
+) -> Tuple[bool, str]:
     """Set a variable in GitHub environment. Returns (success, error_message)."""
     if exists:
-        code, _, stderr = run_gh([
-            "api", f"repos/{repo}/environments/{env_name}/variables/{name}",
-            "-X", "PATCH",
-            "-f", f"value={value}"
-        ])
+        code, _, stderr = run_gh(
+            [
+                "api",
+                f"repos/{repo}/environments/{env_name}/variables/{name}",
+                "-X",
+                "PATCH",
+                "-f",
+                f"value={value}",
+            ]
+        )
     else:
-        code, _, stderr = run_gh([
-            "api", f"repos/{repo}/environments/{env_name}/variables",
-            "-X", "POST",
-            "-f", f"name={name}",
-            "-f", f"value={value}"
-        ])
+        code, _, stderr = run_gh(
+            [
+                "api",
+                f"repos/{repo}/environments/{env_name}/variables",
+                "-X",
+                "POST",
+                "-f",
+                f"name={name}",
+                "-f",
+                f"value={value}",
+            ]
+        )
     return code == 0, stderr.strip() if stderr else ""
 
 
 def delete_variable(repo: str, env_name: str, name: str) -> Tuple[bool, str]:
     """Delete a variable from GitHub environment. Returns (success, error_message)."""
-    code, _, stderr = run_gh([
-        "api", f"repos/{repo}/environments/{env_name}/variables/{name}",
-        "-X", "DELETE"
-    ])
+    code, _, stderr = run_gh(
+        [
+            "api",
+            f"repos/{repo}/environments/{env_name}/variables/{name}",
+            "-X",
+            "DELETE",
+        ]
+    )
     return code == 0, stderr.strip() if stderr else ""
 
 
 def delete_secret(repo: str, env_name: str, name: str) -> Tuple[bool, str]:
     """Delete a secret from GitHub environment. Returns (success, error_message)."""
-    code, _, stderr = run_gh([
-        "secret", "delete", name,
-        "--env", env_name
-    ])
+    code, _, stderr = run_gh(["secret", "delete", name, "--env", env_name])
     return code == 0, stderr.strip() if stderr else ""
 
 
@@ -346,12 +367,18 @@ def cmd_read(repo: str, env_name: str, env_file: Path = None) -> None:
     local_secrets, local_variables, _ = parse_env_file_with_sections(env_file)
 
     # Show comparison counts
-    print(f"{BOLD}Local .env:{RESET}  {len(local_secrets)} secrets, {len(local_variables)} variables")
-    print(f"{BOLD}GitHub:    {RESET}  {len(secrets)} secrets, {len(variables)} variables")
+    print(
+        f"{BOLD}Local .env:{RESET}  {len(local_secrets)} secrets, {len(local_variables)} variables"
+    )
+    print(
+        f"{BOLD}GitHub:    {RESET}  {len(secrets)} secrets, {len(variables)} variables"
+    )
     print()
 
     if not variables and not secrets:
-        print(f"{YELLOW}No variables or secrets found in environment '{env_name}'.{RESET}")
+        print(
+            f"{YELLOW}No variables or secrets found in environment '{env_name}'.{RESET}"
+        )
         print(f"{DIM}Use 'Write to GitHub' to set up the environment.{RESET}")
         return
 
@@ -383,8 +410,12 @@ def cmd_diff(repo: str, env_name: str, env_file: Path) -> Dict[str, any]:
     gh_secrets = get_github_secrets(repo, env_name)
 
     # Show counts
-    print(f"{BOLD}Local .env:{RESET}  {len(local_secrets)} secrets, {len(local_variables)} variables")
-    print(f"{BOLD}GitHub:    {RESET}  {len(gh_secrets)} secrets, {len(gh_variables)} variables")
+    print(
+        f"{BOLD}Local .env:{RESET}  {len(local_secrets)} secrets, {len(local_variables)} variables"
+    )
+    print(
+        f"{BOLD}GitHub:    {RESET}  {len(gh_secrets)} secrets, {len(gh_variables)} variables"
+    )
     print()
 
     diff = {
@@ -424,20 +455,30 @@ def cmd_diff(repo: str, env_name: str, env_file: Path) -> Dict[str, any]:
     for key in gh_variables:
         if key not in all_local_keys:
             diff["missing_local"].append(("var", key, gh_variables[key]))
-            print(f"  {RED}- [VAR]{RESET} {key} {DIM}(in GitHub, not in local .env){RESET}")
+            print(
+                f"  {RED}- [VAR]{RESET} {key} {DIM}(in GitHub, not in local .env){RESET}"
+            )
 
     for key in gh_secrets:
         if key not in all_local_keys:
             diff["missing_local"].append(("secret", key, None))
-            print(f"  {RED}- [SECRET]{RESET} {key} {DIM}(in GitHub, not in local .env){RESET}")
+            print(
+                f"  {RED}- [SECRET]{RESET} {key} {DIM}(in GitHub, not in local .env){RESET}"
+            )
 
     # Summary
-    total_changes = len(diff["new_secrets"]) + len(diff["new_variables"]) + len(diff["changed_variables"])
+    total_changes = (
+        len(diff["new_secrets"])
+        + len(diff["new_variables"])
+        + len(diff["changed_variables"])
+    )
     total_unchanged = len(diff["unchanged_secrets"]) + len(diff["unchanged_variables"])
 
     print(f"\n{BOLD}{'─' * 40}{RESET}")
     print(f"{BOLD}Summary:{RESET}")
-    print(f"  {GREEN}+ New:{RESET}       {len(diff['new_secrets'])} secrets, {len(diff['new_variables'])} variables")
+    print(
+        f"  {GREEN}+ New:{RESET}       {len(diff['new_secrets'])} secrets, {len(diff['new_variables'])} variables"
+    )
     print(f"  {YELLOW}~ Changed:{RESET}   {len(diff['changed_variables'])} variables")
     print(f"  {RED}- Removed:{RESET}   {len(diff['missing_local'])} items")
     print(f"  {DIM}= Unchanged: {total_unchanged} items{RESET}")
@@ -471,7 +512,9 @@ def cmd_write(repo: str, env_name: str, env_file: Path) -> None:
     print(f"\n{BOLD}{'─' * 40}{RESET}")
     print(f"{YELLOW}⚠ This will overwrite existing values in GitHub.{RESET}")
 
-    if not confirm(f"\nProceed with writing {len(secrets)} secrets and {len(variables)} variables?"):
+    if not confirm(
+        f"\nProceed with writing {len(secrets)} secrets and {len(variables)} variables?"
+    ):
         print(f"\n{YELLOW}Cancelled.{RESET}")
         return
 
@@ -501,7 +544,9 @@ def cmd_write(repo: str, env_name: str, env_file: Path) -> None:
     print(f"\n{GREEN}✓ Done!{RESET}")
 
 
-def write_env_file(env_file: Path, secrets: Dict[str, str], variables: Dict[str, str]) -> bool:
+def write_env_file(
+    env_file: Path, secrets: Dict[str, str], variables: Dict[str, str]
+) -> bool:
     """Write secrets and variables to a .env file with proper section headers."""
     try:
         lines = [
@@ -512,12 +557,14 @@ def write_env_file(env_file: Path, secrets: Dict[str, str], variables: Dict[str,
         for key in sorted(secrets.keys()):
             lines.append(f"{key}={secrets[key]}")
 
-        lines.extend([
-            "",
-            "# ============================================================================",
-            "# VARIABLES (GitHub Variables - non-sensitive configuration)",
-            "# ============================================================================",
-        ])
+        lines.extend(
+            [
+                "",
+                "# ============================================================================",
+                "# VARIABLES (GitHub Variables - non-sensitive configuration)",
+                "# ============================================================================",
+            ]
+        )
         for key in sorted(variables.keys()):
             lines.append(f"{key}={variables[key]}")
 
@@ -539,7 +586,9 @@ def cmd_download(repo: str, env_name: str, env_file: Path) -> None:
     gh_secrets = get_github_secrets(repo, env_name)
 
     if not gh_variables and not gh_secrets:
-        print(f"{YELLOW}No variables or secrets found in environment '{env_name}'.{RESET}")
+        print(
+            f"{YELLOW}No variables or secrets found in environment '{env_name}'.{RESET}"
+        )
         print(f"{DIM}Nothing to download.{RESET}")
         return
 
@@ -557,23 +606,31 @@ def cmd_download(repo: str, env_name: str, env_file: Path) -> None:
             print(f"  {GREEN}+ [VAR]{RESET} {key} = {CYAN}{value}{RESET}")
         elif local_variables[key] != value:
             changed_vars.append(("var", key, value, local_variables[key]))
-            print(f"  {YELLOW}~ [VAR]{RESET} {key}: {RED}{local_variables[key]}{RESET} → {GREEN}{value}{RESET}")
+            print(
+                f"  {YELLOW}~ [VAR]{RESET} {key}: {RED}{local_variables[key]}{RESET} → {GREEN}{value}{RESET}"
+            )
 
     for key in gh_secrets:
         if key not in local_secrets:
             new_vars.append(("secret", key, "[HIDDEN]"))
-            print(f"  {GREEN}+ [SECRET]{RESET} {key} {YELLOW}(value will be placeholder){RESET}")
+            print(
+                f"  {GREEN}+ [SECRET]{RESET} {key} {YELLOW}(value will be placeholder){RESET}"
+            )
 
     # Check for local keys that will be removed (not in GitHub)
     for key in local_variables:
         if key not in gh_variables:
             deleted_local.append(("var", key))
-            print(f"  {RED}- [VAR]{RESET} {key} {DIM}(will be removed from local){RESET}")
+            print(
+                f"  {RED}- [VAR]{RESET} {key} {DIM}(will be removed from local){RESET}"
+            )
 
     for key in local_secrets:
         if key not in gh_secrets:
             deleted_local.append(("secret", key))
-            print(f"  {RED}- [SECRET]{RESET} {key} {DIM}(will be removed from local){RESET}")
+            print(
+                f"  {RED}- [SECRET]{RESET} {key} {DIM}(will be removed from local){RESET}"
+            )
 
     total_changes = len(new_vars) + len(changed_vars)
     if not total_changes and not deleted_local:
@@ -585,12 +642,16 @@ def cmd_download(repo: str, env_name: str, env_file: Path) -> None:
     print(f"  {GREEN}+ Add/Update:{RESET} {total_changes} items")
     if deleted_local:
         print(f"  {RED}- Remove:{RESET}     {len(deleted_local)} items from local .env")
-        print(f"\n{YELLOW}⚠ WARNING: {len(deleted_local)} local key(s) will be REMOVED from {env_file}{RESET}")
+        print(
+            f"\n{YELLOW}⚠ WARNING: {len(deleted_local)} local key(s) will be REMOVED from {env_file}{RESET}"
+        )
         print(f"{DIM}  These exist in your local .env but not in GitHub.{RESET}")
 
     # Note about secrets
     print(f"\n{YELLOW}⚠ Note: Secret VALUES cannot be downloaded from GitHub.{RESET}")
-    print(f"{DIM}  New secrets will be added with placeholder value 'REPLACE_ME'.{RESET}")
+    print(
+        f"{DIM}  New secrets will be added with placeholder value 'REPLACE_ME'.{RESET}"
+    )
     print(f"{DIM}  You'll need to fill in the actual secret values manually.{RESET}")
 
     if not confirm(f"\nOverwrite {env_file} with GitHub values?"):
@@ -607,7 +668,9 @@ def cmd_download(repo: str, env_name: str, env_file: Path) -> None:
             new_secrets[key] = "REPLACE_ME"  # Placeholder for new secrets
 
     if write_env_file(env_file, new_secrets, gh_variables):
-        print(f"\n{GREEN}✓ Downloaded {len(gh_secrets)} secrets and {len(gh_variables)} variables to {env_file}{RESET}")
+        print(
+            f"\n{GREEN}✓ Downloaded {len(gh_secrets)} secrets and {len(gh_variables)} variables to {env_file}{RESET}"
+        )
     else:
         print(f"\n{RED}✗ Failed to write {env_file}{RESET}")
 
@@ -620,7 +683,9 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
     if not env_file.exists():
         print(f"{RED}Error: Environment file not found: {env_file}{RESET}")
         print(f"{DIM}Cannot upload without a local .env file.{RESET}")
-        print(f"{DIM}Use 'Download from GitHub' to fetch current values, or create {env_file} first.{RESET}")
+        print(
+            f"{DIM}Use 'Download from GitHub' to fetch current values, or create {env_file} first.{RESET}"
+        )
         return
 
     print(f"{DIM}Checking for changes...{RESET}\n")
@@ -634,7 +699,9 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
     if not local_secrets and not local_variables:
         print(f"{RED}Error: No values found in {env_file}{RESET}")
         print(f"{DIM}Cannot upload an empty or placeholder-only .env file.{RESET}")
-        print(f"{DIM}Use 'Download from GitHub' to fetch current values, or add values to {env_file}.{RESET}")
+        print(
+            f"{DIM}Use 'Download from GitHub' to fetch current values, or add values to {env_file}.{RESET}"
+        )
         return
 
     gh_variables = get_github_variables(repo, env_name)
@@ -658,7 +725,9 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
             print(f"  {GREEN}+ [VAR]{RESET} {key} = {CYAN}{value}{RESET}")
         elif gh_variables[key] != value:
             changes.append(("changed_var", key, value, gh_variables[key]))
-            print(f"  {YELLOW}~ [VAR]{RESET} {key}: {RED}{gh_variables[key]}{RESET} → {GREEN}{value}{RESET}")
+            print(
+                f"  {YELLOW}~ [VAR]{RESET} {key}: {RED}{gh_variables[key]}{RESET} → {GREEN}{value}{RESET}"
+            )
 
     # Check for variables to delete (in GitHub but not in local variables)
     # Use type-specific checks: variables against local_variables, secrets against local_secrets
@@ -667,10 +736,14 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
             # Check if this key has a placeholder value (don't delete it)
             if placeholder_keys and key in placeholder_keys:
                 skipped_placeholders.append(("var", key))
-                print(f"  {DIM}· [VAR]{RESET} {key} {DIM}(skipped - has placeholder in .env){RESET}")
+                print(
+                    f"  {DIM}· [VAR]{RESET} {key} {DIM}(skipped - has placeholder in .env){RESET}"
+                )
             else:
                 deletions.append(("del_var", key))
-                print(f"  {RED}- [VAR]{RESET} {key} {DIM}(will be DELETED from GitHub){RESET}")
+                print(
+                    f"  {RED}- [VAR]{RESET} {key} {DIM}(will be DELETED from GitHub){RESET}"
+                )
 
     # Check for secrets to delete (in GitHub but not in local secrets)
     for key in gh_secrets:
@@ -678,10 +751,14 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
             # Check if this key has a placeholder value (don't delete it)
             if placeholder_keys and key in placeholder_keys:
                 skipped_placeholders.append(("secret", key))
-                print(f"  {DIM}· [SECRET]{RESET} {key} {DIM}(skipped - has placeholder in .env){RESET}")
+                print(
+                    f"  {DIM}· [SECRET]{RESET} {key} {DIM}(skipped - has placeholder in .env){RESET}"
+                )
             else:
                 deletions.append(("del_secret", key))
-                print(f"  {RED}- [SECRET]{RESET} {key} {DIM}(will be DELETED from GitHub){RESET}")
+                print(
+                    f"  {RED}- [SECRET]{RESET} {key} {DIM}(will be DELETED from GitHub){RESET}"
+                )
 
     if not changes and not deletions:
         print(f"{GREEN}✓ No changes to apply. GitHub is up to date.{RESET}")
@@ -695,10 +772,16 @@ def cmd_upload(repo: str, env_name: str, env_file: Path) -> None:
     # Prominent warning for deletions
     if deletions:
         print(f"\n{RED}{'!' * 60}{RESET}")
-        print(f"{RED}  ⚠ WARNING: {len(deletions)} item(s) will be PERMANENTLY DELETED from GitHub!{RESET}")
+        print(
+            f"{RED}  ⚠ WARNING: {len(deletions)} item(s) will be PERMANENTLY DELETED from GitHub!{RESET}"
+        )
         print(f"{RED}{'!' * 60}{RESET}")
-        print(f"{DIM}  These keys exist in GitHub but not in your local .env file.{RESET}")
-        print(f"{DIM}  If this is unintended, use 'Download from GitHub' first to sync locally.{RESET}")
+        print(
+            f"{DIM}  These keys exist in GitHub but not in your local .env file.{RESET}"
+        )
+        print(
+            f"{DIM}  If this is unintended, use 'Download from GitHub' first to sync locally.{RESET}"
+        )
 
     if not confirm(f"\nApply these changes to '{env_name}'?"):
         print(f"\n{YELLOW}Cancelled.{RESET}")
@@ -827,21 +910,19 @@ def main() -> None:
         description="Manage GitHub environment variables and secrets interactively",
     )
     parser.add_argument(
-        "--env",
-        default=None,
-        help="GitHub environment name (skips prompt if provided)"
+        "--env", default=None, help="GitHub environment name (skips prompt if provided)"
     )
     parser.add_argument(
         "--env-file",
         default=".env",
         type=Path,
-        help="Path to .env file (default: .env)"
+        help="Path to .env file (default: .env)",
     )
     parser.add_argument(
         "command",
         nargs="?",
         choices=["read", "write", "diff", "download", "upload"],
-        help="Run a specific command: read, diff, download (GitHub→local), upload (local→GitHub), write"
+        help="Run a specific command: read, diff, download (GitHub→local), upload (local→GitHub), write",
     )
 
     args = parser.parse_args()

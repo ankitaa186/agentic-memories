@@ -32,15 +32,21 @@ if not os.getenv("OPENAI_API_KEY"):
     print("Please create a .env file with OPENAI_API_KEY=your_key")
     sys.exit(1)
 
-from src.services.extract_utils import _call_llm_json
-from tests.evals.metrics import format_metrics_report, evaluate_extraction_comprehensive, count_tokens
+from src.services.extract_utils import _call_llm_json  # noqa: E402
+from tests.evals.metrics import (  # noqa: E402
+    format_metrics_report,
+    evaluate_extraction_comprehensive,
+    count_tokens,
+)
 
 # Check if we should use V2 prompt (set by run_evals.sh)
 if os.getenv("USE_PROMPT_V2"):
     from src.services.prompts_v2 import EXTRACTION_PROMPT_V2 as EXTRACTION_PROMPT
+
     print("ℹ️  Using EXTRACTION_PROMPT_V2")
 else:
     from src.services.prompts import EXTRACTION_PROMPT
+
     print("ℹ️  Using EXTRACTION_PROMPT (baseline)")
 
 FIXTURE = Path(__file__).parent / "fixtures" / "basic_extraction.jsonl"
@@ -80,16 +86,20 @@ def test_prompt_extraction(test_case):
 
     # Optional: existing memories context for dedup/update tests
     existing = test_case.get("existing", [])
-    existing_context = "\n".join(existing) if isinstance(existing, list) else (existing or "")
+    existing_context = (
+        "\n".join(existing) if isinstance(existing, list) else (existing or "")
+    )
 
     # Create payload (last 6 messages)
     payload = {
         "history": history_dicts[-6:],
-        "existing_memories_context": existing_context
+        "existing_memories_context": existing_context,
     }
 
     # Create the prompt that would be used
-    prompt = f"{EXTRACTION_PROMPT}\n\nBased on the conversation history, extract memories."
+    prompt = (
+        f"{EXTRACTION_PROMPT}\n\nBased on the conversation history, extract memories."
+    )
 
     try:
         # Call LLM directly (this is what node_extract does internally)
@@ -99,13 +109,15 @@ def test_prompt_extraction(test_case):
         predicted = []
         for item in items:
             if isinstance(item, dict) and "content" in item:
-                predicted.append({
-                    "content": item.get("content", ""),
-                    "type": item.get("type", "explicit"),
-                    "layer": item.get("layer", "semantic"),
-                    "confidence": item.get("confidence", 0.7),
-                    "tags": item.get("tags", [])
-                })
+                predicted.append(
+                    {
+                        "content": item.get("content", ""),
+                        "type": item.get("type", "explicit"),
+                        "layer": item.get("layer", "semantic"),
+                        "confidence": item.get("confidence", 0.7),
+                        "tags": item.get("tags", []),
+                    }
+                )
 
         # Estimate token usage
         prompt_text = prompt + "\n\n" + json.dumps(payload)
@@ -120,7 +132,7 @@ def test_prompt_extraction(test_case):
             "predicted": predicted,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
-            "model": "gpt-4"
+            "model": "gpt-4",
         }
 
     except Exception as e:
@@ -132,7 +144,7 @@ def test_prompt_extraction(test_case):
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "model": "gpt-4",
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -162,10 +174,12 @@ def main():
         results.append(result)
 
         if "error" not in result:
-            print(f"  ✓ Extracted {len(result['predicted'])} memories (expected {len(test_case['gold'])})")
+            print(
+                f"  ✓ Extracted {len(result['predicted'])} memories (expected {len(test_case['gold'])})"
+            )
 
             # Show what was extracted
-            for p in result['predicted'][:2]:  # Show first 2
+            for p in result["predicted"][:2]:  # Show first 2
                 print(f"    - [{p['layer']}] {p['content'][:50]}...")
         else:
             print(f"  ✗ Error: {result['error']}")

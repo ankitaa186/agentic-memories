@@ -2,6 +2,7 @@
 Profile Extraction Service
 Extracts profile-worthy information from memories using LLM
 """
+
 from typing import List, Dict, Any
 import logging
 from datetime import datetime, timezone
@@ -208,50 +209,77 @@ class ProfileExtractor:
     # Map common duplicate/variant field names to canonical names
     FIELD_NAME_ALIASES = {
         # Date variants
-        'birthdate': 'birthday',
-        'birth_date': 'birthday',
-        'dob': 'birthday',
+        "birthdate": "birthday",
+        "birth_date": "birthday",
+        "dob": "birthday",
         # Singular → plural
-        'brokerage_platform': 'brokerage_platforms',
-        'hobby': 'hobbies',
-        'skill': 'skills',
-        'language': 'languages',
+        "brokerage_platform": "brokerage_platforms",
+        "hobby": "hobbies",
+        "skill": "skills",
+        "language": "languages",
         # Goal duplicates
-        'retirement_goal': 'long_term',
-        'retirement_goals': 'long_term',
-        'targets': 'long_term',
-        'plans': 'short_term',
+        "retirement_goal": "long_term",
+        "retirement_goals": "long_term",
+        "targets": "long_term",
+        "plans": "short_term",
         # Occupation variants
-        'job': 'occupation',
-        'work': 'occupation',
+        "job": "occupation",
+        "work": "occupation",
         # Location variants
-        'city': 'location',
-        'country': 'location',
+        "city": "location",
+        "country": "location",
         # Family consolidation
-        'spouse_occupation': 'spouse',
-        'spouse_employer': 'spouse',
-        'wife': 'spouse',
-        'husband': 'spouse',
-        'daughter_age': 'children',
-        'son_age': 'children',
+        "spouse_occupation": "spouse",
+        "spouse_employer": "spouse",
+        "wife": "spouse",
+        "husband": "spouse",
+        "daughter_age": "children",
+        "son_age": "children",
         # Skills consolidation
-        'programming_languages': 'skills',
-        'technical_skills': 'skills',
+        "programming_languages": "skills",
+        "technical_skills": "skills",
     }
 
     def __init__(self):
         self.profile_keywords = {
-            'name', 'age', 'location', 'job', 'work', 'occupation', 'live', 'lives',
-            'like', 'love', 'enjoy', 'prefer', 'favorite', 'hate', 'dislike',
-            'goal', 'dream', 'plan', 'want', 'aspire', 'hope', 'wish',
-            'hobby', 'interest', 'passion', 'learn', 'study', 'practice',
-            'experience', 'skill', 'background', 'education', 'degree', 'graduated'
+            "name",
+            "age",
+            "location",
+            "job",
+            "work",
+            "occupation",
+            "live",
+            "lives",
+            "like",
+            "love",
+            "enjoy",
+            "prefer",
+            "favorite",
+            "hate",
+            "dislike",
+            "goal",
+            "dream",
+            "plan",
+            "want",
+            "aspire",
+            "hope",
+            "wish",
+            "hobby",
+            "interest",
+            "passion",
+            "learn",
+            "study",
+            "practice",
+            "experience",
+            "skill",
+            "background",
+            "education",
+            "degree",
+            "graduated",
         }
 
     def extract_from_memories(
-        self,
-        user_id: str,
-        memories: List[Memory]
+        self, user_id: str, memories: List[Memory]
     ) -> List[Dict[str, Any]]:
         """
         Extract profile information from a list of memories.
@@ -274,30 +302,27 @@ class ProfileExtractor:
         logger.info(
             "[profile.extract] user_id=%s analyzing=%s memories (all memories, no filtering)",
             user_id,
-            len(profile_worthy_memories)
+            len(profile_worthy_memories),
         )
 
         # Prepare memories for LLM
         memory_inputs = []
         for m in profile_worthy_memories:
-            memory_inputs.append({
-                "id": m.id or "unknown",
-                "content": m.content,
-                "tags": m.metadata.get("tags", []),
-                "timestamp": m.timestamp.isoformat() if m.timestamp else None
-            })
+            memory_inputs.append(
+                {
+                    "id": m.id or "unknown",
+                    "content": m.content,
+                    "tags": m.metadata.get("tags", []),
+                    "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+                }
+            )
 
         # Call LLM for extraction
-        payload = {
-            "user_id": user_id,
-            "memories": memory_inputs
-        }
+        payload = {"user_id": user_id, "memories": memory_inputs}
 
         try:
             extractions = _call_llm_json(
-                PROFILE_EXTRACTION_PROMPT,
-                payload,
-                expect_array=True
+                PROFILE_EXTRACTION_PROMPT, payload, expect_array=True
             )
 
             if not extractions:
@@ -313,7 +338,7 @@ class ProfileExtractor:
             logger.info(
                 "[profile.extract] user_id=%s extracted=%s fields",
                 user_id,
-                len(validated)
+                len(validated),
             )
 
             # Log detailed profile information extracted
@@ -325,17 +350,14 @@ class ProfileExtractor:
                         extraction.get("category"),
                         extraction.get("field_name"),
                         extraction.get("field_value"),
-                        extraction.get("confidence")
+                        extraction.get("confidence"),
                     )
 
             return validated
 
         except Exception as e:
             logger.error(
-                "[profile.extract] user_id=%s error=%s",
-                user_id,
-                e,
-                exc_info=True
+                "[profile.extract] user_id=%s error=%s", user_id, e, exc_info=True
             )
             return []
 
@@ -353,7 +375,14 @@ class ProfileExtractor:
         content_lower = content.lower()
 
         # Check for profile-related tags
-        profile_tags = {'profile', 'personal', 'preference', 'goal', 'interest', 'background'}
+        profile_tags = {
+            "profile",
+            "personal",
+            "preference",
+            "goal",
+            "interest",
+            "background",
+        }
         has_profile_tag = any(tag in profile_tags for tag in tags)
 
         if has_profile_tag:
@@ -363,17 +392,30 @@ class ProfileExtractor:
         has_keyword = any(kw in content_lower for kw in self.profile_keywords)
 
         # Additional patterns that suggest profile info
-        has_introduction = any(phrase in content_lower for phrase in [
-            "i am", "i'm", "my name is", "i work as", "i live in",
-            "i like", "i love", "i enjoy", "i prefer", "my goal",
-            "i want to", "i plan to", "my dream", "my passion"
-        ])
+        has_introduction = any(
+            phrase in content_lower
+            for phrase in [
+                "i am",
+                "i'm",
+                "my name is",
+                "i work as",
+                "i live in",
+                "i like",
+                "i love",
+                "i enjoy",
+                "i prefer",
+                "my goal",
+                "i want to",
+                "i plan to",
+                "my dream",
+                "my passion",
+            ]
+        )
 
         return has_keyword or has_introduction
 
     def _deduplicate_extractions(
-        self,
-        extractions: List[Dict[str, Any]]
+        self, extractions: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Deduplicate profile extractions by (category, field_name).
@@ -412,7 +454,9 @@ class ProfileExtractor:
                 category, field_name = key
 
                 # Check if field_value is a list/array in any of the items
-                is_array_field = any(isinstance(item.get("field_value"), list) for item in items)
+                is_array_field = any(
+                    isinstance(item.get("field_value"), list) for item in items
+                )
 
                 if is_array_field:
                     # Merge array values
@@ -429,7 +473,11 @@ class ProfileExtractor:
                                     seen_values.add(v_key)
                         else:
                             # Single value, convert to list
-                            v_key = str(values).lower() if isinstance(values, str) else str(values)
+                            v_key = (
+                                str(values).lower()
+                                if isinstance(values, str)
+                                else str(values)
+                            )
                             if v_key not in seen_values:
                                 merged_values.append(values)
                                 seen_values.add(v_key)
@@ -438,7 +486,9 @@ class ProfileExtractor:
                     merged = items[0].copy()
                     merged["field_value"] = merged_values
                     # Take highest confidence
-                    merged["confidence"] = max(item.get("confidence", 70) for item in items)
+                    merged["confidence"] = max(
+                        item.get("confidence", 70) for item in items
+                    )
                     deduplicated.append(merged)
                 else:
                     # Non-array field: keep the one with highest confidence
@@ -449,15 +499,13 @@ class ProfileExtractor:
                     "[profile.deduplicate] field=%s/%s had %s duplicates, merged",
                     category,
                     field_name,
-                    len(items)
+                    len(items),
                 )
 
         return deduplicated
 
     def _validate_extractions(
-        self,
-        extractions: List[Dict[str, Any]],
-        user_id: str
+        self, extractions: List[Dict[str, Any]], user_id: str
     ) -> List[Dict[str, Any]]:
         """
         Validate and enrich extraction results.
@@ -472,7 +520,7 @@ class ProfileExtractor:
         validated = []
 
         valid_categories = set(VALID_CATEGORIES)
-        valid_source_types = {'explicit', 'implicit', 'inferred'}
+        valid_source_types = {"explicit", "implicit", "inferred"}
 
         for extraction in extractions:
             # Validate required fields
@@ -486,16 +534,14 @@ class ProfileExtractor:
 
             if not all([category, field_name, field_value is not None]):
                 logger.warning(
-                    "[profile.validate] skipping incomplete extraction: %s",
-                    extraction
+                    "[profile.validate] skipping incomplete extraction: %s", extraction
                 )
                 continue
 
             # Validate category
             if category not in valid_categories:
                 logger.warning(
-                    "[profile.validate] invalid category=%s, skipping",
-                    category
+                    "[profile.validate] invalid category=%s, skipping", category
                 )
                 continue
 
@@ -505,7 +551,7 @@ class ProfileExtractor:
                 logger.info(
                     "[profile.validate] mapped alias %s -> %s",
                     field_name,
-                    canonical_name
+                    canonical_name,
                 )
                 field_name = canonical_name
 
@@ -529,7 +575,7 @@ class ProfileExtractor:
                 "confidence": confidence,
                 "source_type": source_type,
                 "source_memory_id": extraction.get("source_memory_id", "unknown"),
-                "extracted_at": datetime.now(timezone.utc)
+                "extracted_at": datetime.now(timezone.utc),
             }
 
             validated.append(validated_extraction)

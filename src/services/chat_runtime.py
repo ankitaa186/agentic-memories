@@ -39,7 +39,9 @@ class ChatRuntimeBridge:
         conversation_id, metadata = _conversation_context(request)
         await self._stream_transcript(conversation_id, metadata, request.history)
 
-    async def run_with_injections(self, request: TranscriptRequest) -> List[MemoryInjection]:
+    async def run_with_injections(
+        self, request: TranscriptRequest
+    ) -> List[MemoryInjection]:
         """Stream the transcript and return any injections emitted."""
 
         conversation_id, metadata = _conversation_context(request)
@@ -94,4 +96,3 @@ def _conversation_context(request: TranscriptRequest) -> tuple[str, dict[str, st
     metadata.setdefault("user_id", request.user_id)
     conversation_id = metadata.get("conversation_id") or request.user_id
     return conversation_id, metadata
-

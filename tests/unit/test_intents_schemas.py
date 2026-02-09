@@ -3,6 +3,7 @@
 Tests validation rules, required field enforcement, Literal type constraints,
 Field constraints, and serialization/deserialization.
 """
+
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -63,11 +64,7 @@ class TestTriggerCondition:
 
     def test_valid_price_condition(self):
         """TriggerCondition accepts valid price trigger fields."""
-        condition = TriggerCondition(
-            ticker="AAPL",
-            operator=">=",
-            value=200.0
-        )
+        condition = TriggerCondition(ticker="AAPL", operator=">=", value=200.0)
         assert condition.ticker == "AAPL"
         assert condition.operator == ">="
         assert condition.value == 200.0
@@ -96,7 +93,7 @@ class TestScheduledIntentCreate:
             intent_name="Daily Market Check",
             trigger_type="cron",
             trigger_schedule=TriggerSchedule(cron="0 9 * * *"),
-            action_context="Check morning market conditions"
+            action_context="Check morning market conditions",
         )
         assert intent.user_id == "user-123"
         assert intent.intent_name == "Daily Market Check"
@@ -110,8 +107,10 @@ class TestScheduledIntentCreate:
             user_id="user-123",
             intent_name="AAPL Price Alert",
             trigger_type="price",
-            trigger_condition=TriggerCondition(ticker="AAPL", operator=">=", value=200.0),
-            action_context="Alert when AAPL reaches $200"
+            trigger_condition=TriggerCondition(
+                ticker="AAPL", operator=">=", value=200.0
+            ),
+            action_context="Alert when AAPL reaches $200",
         )
         assert intent.trigger_type == "price"
 
@@ -119,9 +118,7 @@ class TestScheduledIntentCreate:
         """ScheduledIntentCreate rejects missing user_id."""
         with pytest.raises(ValidationError) as exc_info:
             ScheduledIntentCreate(
-                intent_name="Test",
-                trigger_type="cron",
-                action_context="Test context"
+                intent_name="Test", trigger_type="cron", action_context="Test context"
             )
         assert "user_id" in str(exc_info.value)
 
@@ -129,9 +126,7 @@ class TestScheduledIntentCreate:
         """ScheduledIntentCreate rejects missing intent_name."""
         with pytest.raises(ValidationError) as exc_info:
             ScheduledIntentCreate(
-                user_id="user-123",
-                trigger_type="cron",
-                action_context="Test context"
+                user_id="user-123", trigger_type="cron", action_context="Test context"
             )
         assert "intent_name" in str(exc_info.value)
 
@@ -139,9 +134,7 @@ class TestScheduledIntentCreate:
         """ScheduledIntentCreate rejects missing action_context."""
         with pytest.raises(ValidationError) as exc_info:
             ScheduledIntentCreate(
-                user_id="user-123",
-                intent_name="Test",
-                trigger_type="cron"
+                user_id="user-123", intent_name="Test", trigger_type="cron"
             )
         assert "action_context" in str(exc_info.value)
 
@@ -152,7 +145,7 @@ class TestScheduledIntentCreate:
                 user_id="user-123",
                 intent_name="Test",
                 trigger_type="invalid_type",
-                action_context="Test context"
+                action_context="Test context",
             )
         assert "trigger_type" in str(exc_info.value)
 
@@ -164,7 +157,7 @@ class TestScheduledIntentCreate:
                 user_id="user-123",
                 intent_name="Test",
                 trigger_type=trigger_type,
-                action_context="Test context"
+                action_context="Test context",
             )
             assert intent.trigger_type == trigger_type
 
@@ -176,7 +169,7 @@ class TestScheduledIntentCreate:
                 intent_name="Test",
                 trigger_type="cron",
                 action_type="invalid_action",
-                action_context="Test context"
+                action_context="Test context",
             )
         assert "action_type" in str(exc_info.value)
 
@@ -189,7 +182,7 @@ class TestScheduledIntentCreate:
                 intent_name="Test",
                 trigger_type="cron",
                 action_type=action_type,
-                action_context="Test context"
+                action_context="Test context",
             )
             assert intent.action_type == action_type
 
@@ -201,7 +194,7 @@ class TestScheduledIntentCreate:
                 intent_name="Test",
                 trigger_type="cron",
                 action_priority="urgent",
-                action_context="Test context"
+                action_context="Test context",
             )
         assert "action_priority" in str(exc_info.value)
 
@@ -214,7 +207,7 @@ class TestScheduledIntentCreate:
                 intent_name="Test",
                 trigger_type="cron",
                 action_priority=priority,
-                action_context="Test context"
+                action_context="Test context",
             )
             assert intent.action_priority == priority
 
@@ -224,7 +217,7 @@ class TestScheduledIntentCreate:
             user_id="user-123",
             intent_name="Test",
             trigger_type="cron",
-            action_context="Test context"
+            action_context="Test context",
         )
         assert intent.description is None
         assert intent.trigger_schedule is None
@@ -245,25 +238,21 @@ class TestIntentFireRequest:
             message_preview="Market update: AAPL up 5%",
             evaluation_ms=50,
             generation_ms=200,
-            delivery_ms=30
+            delivery_ms=30,
         )
         assert request.status == "success"
         assert request.message_id == "msg-123"
 
     def test_valid_failed_fire(self):
         """IntentFireRequest accepts valid failed status with error."""
-        request = IntentFireRequest(
-            status="failed",
-            error_message="LLM timeout"
-        )
+        request = IntentFireRequest(status="failed", error_message="LLM timeout")
         assert request.status == "failed"
         assert request.error_message == "LLM timeout"
 
     def test_valid_gate_blocked_fire(self):
         """IntentFireRequest accepts valid gate_blocked status."""
         request = IntentFireRequest(
-            status="gate_blocked",
-            gate_result={"score": 0.3, "reason": "User busy"}
+            status="gate_blocked", gate_result={"score": 0.3, "reason": "User busy"}
         )
         assert request.status == "gate_blocked"
         assert request.gate_result["score"] == 0.3
@@ -272,7 +261,7 @@ class TestIntentFireRequest:
         """IntentFireRequest accepts valid condition_not_met status."""
         request = IntentFireRequest(
             status="condition_not_met",
-            trigger_data={"current_price": 195.0, "target": 200.0}
+            trigger_data={"current_price": 195.0, "target": 200.0},
         )
         assert request.status == "condition_not_met"
 
@@ -334,7 +323,7 @@ class TestScheduledIntentResponse:
             created_at=now,
             updated_at=now,
             created_by="system",
-            metadata={"source": "api"}
+            metadata={"source": "api"},
         )
 
         # Verify all 24 fields
@@ -381,7 +370,7 @@ class TestIntentFireResponse:
             status="success",
             next_check=now,
             enabled=True,
-            execution_count=6
+            execution_count=6,
         )
 
         assert response.intent_id == intent_id
@@ -414,7 +403,7 @@ class TestIntentExecutionResponse:
             evaluation_ms=45,
             generation_ms=180,
             delivery_ms=25,
-            error_message=None
+            error_message=None,
         )
 
         # Verify all 14 fields
@@ -459,10 +448,7 @@ class TestScheduledIntentUpdate:
 
     def test_partial_update(self):
         """ScheduledIntentUpdate accepts partial field updates."""
-        update = ScheduledIntentUpdate(
-            intent_name="Updated Name",
-            enabled=False
-        )
+        update = ScheduledIntentUpdate(intent_name="Updated Name", enabled=False)
         assert update.intent_name == "Updated Name"
         assert update.enabled is False
         assert update.action_context is None  # unchanged

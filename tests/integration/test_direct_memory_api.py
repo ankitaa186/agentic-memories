@@ -6,6 +6,7 @@ Covers:
 - AC 10.6.2: Typed memory tests (episodic, emotional, procedural)
 - AC 10.6.3: Performance tests (store < 3s, delete < 1s)
 """
+
 import time
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -61,7 +62,9 @@ def mock_embedding() -> Generator[MagicMock, None, None]:
     """Mock embedding generation to return consistent vector."""
     embedding_vector = [0.1] * 1536  # OpenAI embedding dimension
 
-    with patch("src.routers.memories.generate_embedding", return_value=embedding_vector):
+    with patch(
+        "src.routers.memories.generate_embedding", return_value=embedding_vector
+    ):
         yield embedding_vector
 
 
@@ -178,7 +181,9 @@ class TestLifecycleTests:
         AC 10.6.1: Store memory, delete via delete endpoint, verify deleted
         """
         # Step 1: Store memory
-        store_response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+        store_response = client.post(
+            "/v1/memories/direct", json=sample_direct_memory_request
+        )
         assert store_response.status_code == 200
         memory_id = store_response.json()["memory_id"]
 
@@ -228,7 +233,9 @@ class TestLifecycleTests:
         user_id = sample_direct_memory_request["user_id"]
 
         # Step 1: Store memory
-        store_response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+        store_response = client.post(
+            "/v1/memories/direct", json=sample_direct_memory_request
+        )
         assert store_response.status_code == 200
         memory_id = store_response.json()["memory_id"]
 
@@ -334,7 +341,9 @@ class TestTypedMemoryTests:
 
         AC 10.6.2: Store episodic memory -> verify in time-based retrieval
         """
-        response = client.post("/v1/memories/direct", json=sample_episodic_memory_request)
+        response = client.post(
+            "/v1/memories/direct", json=sample_episodic_memory_request
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -365,7 +374,9 @@ class TestTypedMemoryTests:
 
         AC 10.6.2: Store emotional memory -> verify in emotional retrieval
         """
-        response = client.post("/v1/memories/direct", json=sample_emotional_memory_request)
+        response = client.post(
+            "/v1/memories/direct", json=sample_emotional_memory_request
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -393,7 +404,9 @@ class TestTypedMemoryTests:
 
         AC 10.6.2: Store procedural memory -> verify in procedural queries
         """
-        response = client.post("/v1/memories/direct", json=sample_procedural_memory_request)
+        response = client.post(
+            "/v1/memories/direct", json=sample_procedural_memory_request
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -451,7 +464,9 @@ class TestTypedMemoryTests:
     ) -> None:
         """Delete typed memory removes from both ChromaDB and typed tables."""
         # Step 1: Store episodic memory
-        store_response = client.post("/v1/memories/direct", json=sample_episodic_memory_request)
+        store_response = client.post(
+            "/v1/memories/direct", json=sample_episodic_memory_request
+        )
         assert store_response.status_code == 200
         memory_id = store_response.json()["memory_id"]
 
@@ -521,7 +536,9 @@ class TestPerformanceTests:
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
-        assert elapsed_time < 3.0, f"Store operation took {elapsed_time:.2f}s, expected < 3s"
+        assert elapsed_time < 3.0, (
+            f"Store operation took {elapsed_time:.2f}s, expected < 3s"
+        )
 
     def test_delete_performance_under_1_second(
         self,
@@ -558,7 +575,9 @@ class TestPerformanceTests:
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
-        assert elapsed_time < 1.0, f"Delete operation took {elapsed_time:.2f}s, expected < 1s"
+        assert elapsed_time < 1.0, (
+            f"Delete operation took {elapsed_time:.2f}s, expected < 1s"
+        )
 
     def test_store_multiple_memories_performance(
         self,
@@ -583,7 +602,9 @@ class TestPerformanceTests:
         avg_time = total_elapsed / num_memories
 
         # Each store should average < 3s
-        assert avg_time < 3.0, f"Average store time {avg_time:.2f}s exceeds 3s threshold"
+        assert avg_time < 3.0, (
+            f"Average store time {avg_time:.2f}s exceeds 3s threshold"
+        )
 
 
 # =============================================================================
@@ -601,7 +622,9 @@ class TestErrorHandling:
     ) -> None:
         """Store returns EMBEDDING_ERROR when embedding fails."""
         with patch("src.routers.memories.generate_embedding", return_value=None):
-            response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+            response = client.post(
+                "/v1/memories/direct", json=sample_direct_memory_request
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -619,7 +642,9 @@ class TestErrorHandling:
             "src.routers.memories.generate_embedding",
             side_effect=Exception("OpenAI API error"),
         ):
-            response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+            response = client.post(
+                "/v1/memories/direct", json=sample_direct_memory_request
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -634,7 +659,9 @@ class TestErrorHandling:
     ) -> None:
         """Store returns STORAGE_ERROR when ChromaDB fails."""
         with patch("src.routers.memories.upsert_memories", return_value=[]):
-            response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+            response = client.post(
+                "/v1/memories/direct", json=sample_direct_memory_request
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -652,7 +679,9 @@ class TestErrorHandling:
             "src.routers.memories.upsert_memories",
             side_effect=Exception("ChromaDB connection error"),
         ):
-            response = client.post("/v1/memories/direct", json=sample_direct_memory_request)
+            response = client.post(
+                "/v1/memories/direct", json=sample_direct_memory_request
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -669,7 +698,9 @@ class TestErrorHandling:
         """Typed table failure is best-effort - doesn't fail the request."""
         # Mock TimescaleDB to fail
         with patch("src.routers.memories.get_timescale_conn", return_value=None):
-            response = client.post("/v1/memories/direct", json=sample_episodic_memory_request)
+            response = client.post(
+                "/v1/memories/direct", json=sample_episodic_memory_request
+            )
 
         assert response.status_code == 200
         data = response.json()

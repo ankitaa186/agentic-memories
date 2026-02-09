@@ -20,9 +20,14 @@ class PersistRecorder:
         self.memories: List[str] = []
 
     def __call__(self, user_id: str, memories: Sequence[Memory]) -> Sequence[str]:
-        ids = [f"mem-{len(self.calls) + index}" for index, _ in enumerate(memories, start=1)]
+        ids = [
+            f"mem-{len(self.calls) + index}"
+            for index, _ in enumerate(memories, start=1)
+        ]
         self.calls.append((user_id, ids))
-        self.memories.extend([memory.metadata.get("aggregation", "single") for memory in memories])
+        self.memories.extend(
+            [memory.metadata.get("aggregation", "single") for memory in memories]
+        )
         return ids
 
 
@@ -104,7 +109,11 @@ def test_retrieval_injections_respect_cooldown() -> None:
             flush_interval=timedelta(days=1),
             max_buffer_size=5,
         ),
-        retrieval_policy=RetrievalPolicy(min_similarity=0.2, max_injections_per_message=1, reinjection_cooldown_turns=3),
+        retrieval_policy=RetrievalPolicy(
+            min_similarity=0.2,
+            max_injections_per_message=1,
+            reinjection_cooldown_turns=3,
+        ),
         persist_fn=PersistRecorder(),
         search_fn=search_stub,
     )
@@ -224,4 +233,3 @@ def test_scoped_subscription_filters_other_conversations() -> None:
     asyncio.run(scenario())
 
     assert captured == ["conv-a"]
-

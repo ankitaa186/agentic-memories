@@ -8,202 +8,214 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Message(BaseModel):
-	role: Literal["user", "assistant", "system"]
-	content: str
+    role: Literal["user", "assistant", "system"]
+    content: str
 
 
 class TranscriptRequest(BaseModel):
-	user_id: str
-	history: List[Message]
-	metadata: Optional[dict[str, Any]] = None
-
+    user_id: str
+    history: List[Message]
+    metadata: Optional[dict[str, Any]] = None
 
 
 class OrchestratorMessageRequest(BaseModel):
-	conversation_id: str
-	role: Literal["user", "assistant", "system", "tool"]
-	content: str
-	message_id: Optional[str] = None
-	timestamp: Optional[datetime] = None
-	metadata: Dict[str, str] = Field(default_factory=dict)
-	flush: bool = False
+    conversation_id: str
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+    message_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    metadata: Dict[str, str] = Field(default_factory=dict)
+    flush: bool = False
 
 
 class MemoryInjectionPayload(BaseModel):
-	memory_id: str
-	content: str
-	source: Literal["short_term", "long_term", "safety", "personalization", "system"]
-	channel: Literal["inline", "tool", "side_channel"] = "inline"
-	score: Optional[float] = None
-	metadata: Dict[str, str] = Field(default_factory=dict)
+    memory_id: str
+    content: str
+    source: Literal["short_term", "long_term", "safety", "personalization", "system"]
+    channel: Literal["inline", "tool", "side_channel"] = "inline"
+    score: Optional[float] = None
+    metadata: Dict[str, str] = Field(default_factory=dict)
 
 
 class OrchestratorStreamResponse(BaseModel):
-	injections: List[MemoryInjectionPayload] = Field(default_factory=list)
+    injections: List[MemoryInjectionPayload] = Field(default_factory=list)
 
 
 class OrchestratorTranscriptResponse(OrchestratorStreamResponse):
-	pass
+    pass
 
 
 class OrchestratorRetrieveRequest(BaseModel):
-	conversation_id: str
-	query: str
-	metadata: Dict[str, str] = Field(default_factory=dict)
-	limit: int = Field(default=6, ge=1, le=50)
-	offset: int = Field(default=0, ge=0)
+    conversation_id: str
+    query: str
+    metadata: Dict[str, str] = Field(default_factory=dict)
+    limit: int = Field(default=6, ge=1, le=50)
+    offset: int = Field(default=0, ge=0)
 
 
 class OrchestratorRetrieveResponse(OrchestratorStreamResponse):
-	pass
-
+    pass
 
 
 class StoreMemoryItem(BaseModel):
-	id: str
-	content: str
-	layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]
-	type: Literal["explicit", "implicit"]
-	confidence: float
-	ttl: Optional[int] = None
-	timestamp: Optional[datetime] = None
-	metadata: Optional[dict[str, Any]] = None
+    id: str
+    content: str
+    layer: Literal[
+        "short-term", "semantic", "long-term", "episodic", "procedural", "emotional"
+    ]
+    type: Literal["explicit", "implicit"]
+    confidence: float
+    ttl: Optional[int] = None
+    timestamp: Optional[datetime] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class StoreResponse(BaseModel):
-	memories_created: int
-	ids: List[str]
-	summary: Optional[str] = None
-	memories: Optional[List[StoreMemoryItem]] = None
-	duplicates_avoided: int = 0
-	updates_made: int = 0
-	existing_memories_checked: int = 0
+    memories_created: int
+    ids: List[str]
+    summary: Optional[str] = None
+    memories: Optional[List[StoreMemoryItem]] = None
+    duplicates_avoided: int = 0
+    updates_made: int = 0
+    existing_memories_checked: int = 0
 
 
 class RetrieveItem(BaseModel):
-	id: str
-	content: str
-	layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]
-	type: Literal["explicit", "implicit"]
-	score: float
-	metadata: Optional[dict[str, Any]] = None
-	importance: Optional[float] = None
-	persona_tags: Optional[List[str]] = None
-	emotional_signature: Optional[Dict[str, Any]] = None
+    id: str
+    content: str
+    layer: Literal[
+        "short-term", "semantic", "long-term", "episodic", "procedural", "emotional"
+    ]
+    type: Literal["explicit", "implicit"]
+    score: float
+    metadata: Optional[dict[str, Any]] = None
+    importance: Optional[float] = None
+    persona_tags: Optional[List[str]] = None
+    emotional_signature: Optional[Dict[str, Any]] = None
 
 
 class Pagination(BaseModel):
-	limit: int = 10
-	offset: int = 0
-	total: int = 0
+    limit: int = 10
+    offset: int = 0
+    total: int = 0
 
 
 class RetrieveResponse(BaseModel):
-	results: List[RetrieveItem]
-	pagination: Pagination
-	finance: Optional["FinanceAggregate"] = None
+    results: List[RetrieveItem]
+    pagination: Pagination
+    finance: Optional["FinanceAggregate"] = None
+
 
 class PersonaContext(BaseModel):
-	active_personas: List[str] = Field(default_factory=list)
-	forced_persona: Optional[str] = None
-	mood: Optional[str] = None
+    active_personas: List[str] = Field(default_factory=list)
+    forced_persona: Optional[str] = None
+    mood: Optional[str] = None
 
 
 class PersonaRetrieveRequest(BaseModel):
-	user_id: str
-	query: Optional[str] = None
-	limit: int = Field(default=10, ge=1, le=1000)
-	offset: int = Field(default=0, ge=0)
-	persona_context: Optional[PersonaContext] = None
-	granularity: Literal["raw", "episodic", "arc", "auto"] = "auto"
-	include_narrative: bool = False
-	explain: bool = False
-	filters: Optional[dict[str, Any]] = None
+    user_id: str
+    query: Optional[str] = None
+    limit: int = Field(default=10, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+    persona_context: Optional[PersonaContext] = None
+    granularity: Literal["raw", "episodic", "arc", "auto"] = "auto"
+    include_narrative: bool = False
+    explain: bool = False
+    filters: Optional[dict[str, Any]] = None
 
 
 class PersonaSelection(BaseModel):
-	selected: Optional[str] = None
-	confidence: float = 0.0
-	state_snapshot_id: Optional[str] = None
+    selected: Optional[str] = None
+    confidence: float = 0.0
+    state_snapshot_id: Optional[str] = None
 
 
 class PersonaRetrieveResults(BaseModel):
-	granularity: str
-	memories: List[RetrieveItem] = Field(default_factory=list)
-	summaries: List[Dict[str, Any]] = Field(default_factory=list)
-	narrative: Optional[str] = None
+    granularity: str
+    memories: List[RetrieveItem] = Field(default_factory=list)
+    summaries: List[Dict[str, Any]] = Field(default_factory=list)
+    narrative: Optional[str] = None
 
 
 class PersonaExplainability(BaseModel):
-	weights: Dict[str, float] = Field(default_factory=dict)
-	source_links: List[Dict[str, Any]] = Field(default_factory=list)
+    weights: Dict[str, float] = Field(default_factory=dict)
+    source_links: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class PersonaRetrieveResponse(BaseModel):
-	persona: PersonaSelection
-	results: PersonaRetrieveResults
-	explainability: Optional[PersonaExplainability] = None
+    persona: PersonaSelection
+    results: PersonaRetrieveResults
+    explainability: Optional[PersonaExplainability] = None
 
 
 class ForgetRequest(BaseModel):
-	scopes: List[Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"]] = Field(default_factory=list)
-	dry_run: bool = False
+    scopes: List[
+        Literal[
+            "short-term", "semantic", "long-term", "episodic", "procedural", "emotional"
+        ]
+    ] = Field(default_factory=list)
+    dry_run: bool = False
 
 
 class MaintenanceRequest(BaseModel):
-	jobs: List[Literal["ttl_cleanup", "promotion", "compaction"]] = Field(default_factory=list)
-	since_hours: Optional[int] = None
+    jobs: List[Literal["ttl_cleanup", "promotion", "compaction"]] = Field(
+        default_factory=list
+    )
+    since_hours: Optional[int] = None
 
 
 class MaintenanceResponse(BaseModel):
-	jobs_started: List[str]
-	status: Literal["running", "queued"] = "running"
-	started_at: datetime = Field(default_factory=datetime.utcnow)
+    jobs_started: List[str]
+    status: Literal["running", "queued"] = "running"
+    started_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # Structured retrieval
 class StructuredRetrieveRequest(BaseModel):
-	user_id: str
-	query: Optional[str] = None
-	limit: int = Field(default=50, ge=1, le=100)
+    user_id: str
+    query: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 class StructuredRetrieveResponse(BaseModel):
-	emotions: List[RetrieveItem] = Field(default_factory=list)
-	behaviors: List[RetrieveItem] = Field(default_factory=list)
-	personal: List[RetrieveItem] = Field(default_factory=list)
-	professional: List[RetrieveItem] = Field(default_factory=list)
-	habits: List[RetrieveItem] = Field(default_factory=list)
-	skills_tools: List[RetrieveItem] = Field(default_factory=list)
-	projects: List[RetrieveItem] = Field(default_factory=list)
-	relationships: List[RetrieveItem] = Field(default_factory=list)
-	learning_journal: List[RetrieveItem] = Field(default_factory=list)
-	other: List[RetrieveItem] = Field(default_factory=list)
-	finance: Optional["FinanceAggregate"] = None
+    emotions: List[RetrieveItem] = Field(default_factory=list)
+    behaviors: List[RetrieveItem] = Field(default_factory=list)
+    personal: List[RetrieveItem] = Field(default_factory=list)
+    professional: List[RetrieveItem] = Field(default_factory=list)
+    habits: List[RetrieveItem] = Field(default_factory=list)
+    skills_tools: List[RetrieveItem] = Field(default_factory=list)
+    projects: List[RetrieveItem] = Field(default_factory=list)
+    relationships: List[RetrieveItem] = Field(default_factory=list)
+    learning_journal: List[RetrieveItem] = Field(default_factory=list)
+    other: List[RetrieveItem] = Field(default_factory=list)
+    finance: Optional["FinanceAggregate"] = None
 
 
 # Portfolio summary (simplified schema - Story 3.3)
 class PortfolioHolding(BaseModel):
-	"""Simplified portfolio holding - public equities only"""
-	ticker: str
-	asset_name: Optional[str] = None
-	shares: Optional[float] = None
-	avg_price: Optional[float] = None
-	first_acquired: Optional[datetime] = None
-	last_updated: Optional[datetime] = None
+    """Simplified portfolio holding - public equities only"""
+
+    ticker: str
+    asset_name: Optional[str] = None
+    shares: Optional[float] = None
+    avg_price: Optional[float] = None
+    first_acquired: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
 
 
 class PortfolioSummaryResponse(BaseModel):
-	"""Simplified portfolio summary response"""
-	user_id: str
-	holdings: List[PortfolioHolding] = Field(default_factory=list)
-	total_holdings: int = 0
+    """Simplified portfolio summary response"""
+
+    user_id: str
+    holdings: List[PortfolioHolding] = Field(default_factory=list)
+    total_holdings: int = 0
 
 
 class FinanceGoal(BaseModel):
-	"""Finance goal extracted from memory"""
-	text: str
-	tickers: List[str] = Field(default_factory=list)
+    """Finance goal extracted from memory"""
+
+    text: str
+    tickers: List[str] = Field(default_factory=list)
 
 
 class FinanceAggregate(BaseModel):
@@ -221,7 +233,7 @@ class NarrativeRequest(BaseModel):
     user_id: str
     query: Optional[str] = None
     start_time: Optional[str] = None  # ISO8601
-    end_time: Optional[str] = None    # ISO8601
+    end_time: Optional[str] = None  # ISO8601
     limit: int = Field(default=25, ge=1, le=50)
 
 
@@ -245,12 +257,14 @@ class NarrativeResponse(BaseModel):
 # - Existing triggers continue to work unchanged without modification
 #
 
+
 class TriggerSchedule(BaseModel):
     """Schedule configuration for time-based triggers (cron, interval, once).
 
     Used within ScheduledIntentCreate to define when a trigger should fire.
     Only one of cron, interval_minutes, or trigger_at should be set based on trigger_type.
     """
+
     cron: Optional[str] = None
     interval_minutes: Optional[int] = None
     trigger_at: Optional[datetime] = None  # For 'once' trigger type
@@ -258,11 +272,11 @@ class TriggerSchedule(BaseModel):
         default=5,
         ge=5,
         description="Polling interval in minutes for condition-based triggers (min 5). "
-                    "Default: 5 for most triggers, 15 for portfolio triggers."
+        "Default: 5 for most triggers, 15 for portfolio triggers.",
     )
     timezone: str = Field(
         default="America/Los_Angeles",
-        description="IANA timezone for scheduling (e.g., 'America/Los_Angeles', 'Europe/London', 'UTC')"
+        description="IANA timezone for scheduling (e.g., 'America/Los_Angeles', 'Europe/London', 'UTC')",
     )
 
 
@@ -277,6 +291,7 @@ class TriggerCondition(BaseModel):
 
     New expression field takes precedence over structured fields when both are provided.
     """
+
     # Legacy structured fields (backward compatible)
     ticker: Optional[str] = None
     operator: Optional[str] = None  # '<', '>', '<=', '>=', '=='
@@ -285,12 +300,11 @@ class TriggerCondition(BaseModel):
 
     # New flexible expression fields (Story 6.2)
     condition_type: Optional[str] = Field(
-        default=None,
-        description="Condition category: 'price', 'portfolio', 'silence'"
+        default=None, description="Condition category: 'price', 'portfolio', 'silence'"
     )
     expression: Optional[str] = Field(
         default=None,
-        description="Human-readable condition expression (e.g., 'NVDA < 130', 'any_holding_change > 5%')"
+        description="Human-readable condition expression (e.g., 'NVDA < 130', 'any_holding_change > 5%')",
     )
 
     # Cooldown configuration (Story 6.3)
@@ -298,13 +312,13 @@ class TriggerCondition(BaseModel):
         default=24,
         ge=1,
         le=168,
-        description="Minimum hours between condition-based trigger fires (1-168, default 24)"
+        description="Minimum hours between condition-based trigger fires (1-168, default 24)",
     )
 
     # Fire mode configuration (Story 6.4)
     fire_mode: Literal["once", "recurring"] = Field(
         default="recurring",
-        description="Fire mode: 'once' disables after first successful fire, 'recurring' (default) continues"
+        description="Fire mode: 'once' disables after first successful fire, 'recurring' (default) continues",
     )
 
 
@@ -314,25 +328,27 @@ class ScheduledIntentCreate(BaseModel):
     Defines a proactive trigger that can fire based on time (cron/interval/once)
     or conditions (price/silence/portfolio).
     """
+
     user_id: str
     intent_name: str
     description: Optional[str] = None
     trigger_type: Literal["cron", "interval", "once", "price", "silence", "portfolio"]
     trigger_schedule: Optional[TriggerSchedule] = None
     trigger_condition: Optional[TriggerCondition] = None
-    action_type: Literal["notify", "check_in", "briefing", "analysis", "reminder"] = Field(
-        default="notify",
-        description="Type of action to perform when trigger fires"
+    action_type: Literal["notify", "check_in", "briefing", "analysis", "reminder"] = (
+        Field(
+            default="notify", description="Type of action to perform when trigger fires"
+        )
     )
     action_context: str = Field(
         description="Context passed to the LLM when firing this intent. "
-                    "Should include instructions for the AI assistant on how to respond "
-                    "to the trigger condition. Example: 'Alert the user about the price change "
-                    "and suggest reviewing their position.'"
+        "Should include instructions for the AI assistant on how to respond "
+        "to the trigger condition. Example: 'Alert the user about the price change "
+        "and suggest reviewing their position.'"
     )
     action_priority: Literal["low", "normal", "high", "critical"] = Field(
         default="normal",
-        description="Priority level affecting notification urgency and display"
+        description="Priority level affecting notification urgency and display",
     )
     expires_at: Optional[datetime] = None
     max_executions: Optional[int] = None
@@ -344,22 +360,23 @@ class ScheduledIntentUpdate(BaseModel):
 
     All fields are optional to support partial updates.
     """
+
     intent_name: Optional[str] = None
     description: Optional[str] = None
-    trigger_type: Optional[Literal["cron", "interval", "once", "price", "silence", "portfolio"]] = None
+    trigger_type: Optional[
+        Literal["cron", "interval", "once", "price", "silence", "portfolio"]
+    ] = None
     trigger_schedule: Optional[TriggerSchedule] = None
     trigger_condition: Optional[TriggerCondition] = None
-    action_type: Optional[Literal["notify", "check_in", "briefing", "analysis", "reminder"]] = Field(
-        default=None,
-        description="Type of action to perform when trigger fires"
-    )
+    action_type: Optional[
+        Literal["notify", "check_in", "briefing", "analysis", "reminder"]
+    ] = Field(default=None, description="Type of action to perform when trigger fires")
     action_context: Optional[str] = Field(
-        default=None,
-        description="Context passed to the LLM when firing this intent"
+        default=None, description="Context passed to the LLM when firing this intent"
     )
     action_priority: Optional[Literal["low", "normal", "high", "critical"]] = Field(
         default=None,
-        description="Priority level affecting notification urgency and display"
+        description="Priority level affecting notification urgency and display",
     )
     enabled: Optional[bool] = None
     expires_at: Optional[datetime] = None
@@ -373,6 +390,7 @@ class ScheduledIntentResponse(BaseModel):
     Represents the complete state of a scheduled intent including
     scheduling state and execution results.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     # Identity
@@ -420,6 +438,7 @@ class IntentFireRequest(BaseModel):
     Sent by the proactive worker after attempting to fire an intent.
     Records the execution outcome and timing metrics.
     """
+
     status: Literal["success", "failed", "gate_blocked", "condition_not_met"]
     trigger_data: Optional[Dict[str, Any]] = None
     gate_result: Optional[Dict[str, Any]] = None
@@ -437,13 +456,14 @@ class IntentFireResponse(BaseModel):
     Returns the updated intent state including next_check calculation.
     Includes cooldown status for condition-based triggers (Story 6.3).
     """
+
     intent_id: UUID
     status: str = Field(
         description="Execution result: 'success', 'failed', 'gate_blocked', 'condition_not_met', 'cooldown_active'"
     )
     next_check: Optional[datetime] = Field(
         default=None,
-        description="Next scheduled time for this intent to be checked (UTC)"
+        description="Next scheduled time for this intent to be checked (UTC)",
     )
     enabled: bool = Field(
         description="Whether the intent is still active. May be set to false by fire_mode='once' or max_executions"
@@ -454,22 +474,22 @@ class IntentFireResponse(BaseModel):
     was_disabled_reason: Optional[str] = Field(
         default=None,
         description="Reason if intent was disabled by this fire. "
-                    "Possible values: 'fire_mode_once' (condition trigger with fire_mode='once' succeeded), "
-                    "'max_executions_reached', 'expired', 'manual'"
+        "Possible values: 'fire_mode_once' (condition trigger with fire_mode='once' succeeded), "
+        "'max_executions_reached', 'expired', 'manual'",
     )
 
     # Cooldown fields (Story 6.3)
     cooldown_active: bool = Field(
         default=False,
-        description="True if intent is in cooldown period and fire was blocked"
+        description="True if intent is in cooldown period and fire was blocked",
     )
     cooldown_remaining_hours: Optional[float] = Field(
         default=None,
-        description="Hours remaining until cooldown expires (only set if cooldown_active=True)"
+        description="Hours remaining until cooldown expires (only set if cooldown_active=True)",
     )
     last_condition_fire: Optional[datetime] = Field(
         default=None,
-        description="Timestamp of last successful condition-based trigger fire"
+        description="Timestamp of last successful condition-based trigger fire",
     )
 
 
@@ -479,6 +499,7 @@ class IntentClaimResponse(BaseModel):
     Returns the claimed intent data and claim timestamp.
     Used to prevent duplicate processing in multi-worker scenarios.
     """
+
     intent: ScheduledIntentResponse
     claimed_at: datetime = Field(
         description="Timestamp when the claim was made (expires after 5 minutes)"
@@ -490,6 +511,7 @@ class IntentExecutionResponse(BaseModel):
 
     Represents a single execution attempt with timing and result details.
     """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -539,7 +561,9 @@ class DirectMemoryRequest(BaseModel):
     )
 
     # General memory fields
-    layer: Literal["short-term", "semantic", "long-term", "episodic", "procedural", "emotional"] = Field(
+    layer: Literal[
+        "short-term", "semantic", "long-term", "episodic", "procedural", "emotional"
+    ] = Field(
         default="semantic",
         description="Memory layer: 'short-term' (ephemeral), 'semantic' (facts), 'long-term' (persistent), 'episodic' (events), 'procedural' (skills), 'emotional' (feelings)",
         example="semantic",
@@ -670,7 +694,9 @@ class DirectMemoryResponse(BaseModel):
         example={"chromadb": True, "episodic": True},
     )
     error_code: Optional[
-        Literal["VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"]
+        Literal[
+            "VALIDATION_ERROR", "EMBEDDING_ERROR", "STORAGE_ERROR", "INTERNAL_ERROR"
+        ]
     ] = Field(
         default=None,
         description="Error code when status is 'error'. Values: VALIDATION_ERROR (invalid input), EMBEDDING_ERROR (vector generation failed), STORAGE_ERROR (database write failed), INTERNAL_ERROR (unexpected failure)",
@@ -704,11 +730,15 @@ class DeleteMemoryResponse(BaseModel):
     storage: Optional[Dict[str, bool]] = Field(
         default=None,
         description="Deletion status per backend. Keys: 'chromadb', 'episodic', 'emotional', 'procedural'. Value is True if deleted, False if not found or failed.",
-        example={"chromadb": True, "episodic": True, "emotional": False, "procedural": False},
+        example={
+            "chromadb": True,
+            "episodic": True,
+            "emotional": False,
+            "procedural": False,
+        },
     )
     message: Optional[str] = Field(
         default=None,
         description="Status or error message providing details about the deletion operation",
         example="Memory deleted successfully from all backends",
     )
-

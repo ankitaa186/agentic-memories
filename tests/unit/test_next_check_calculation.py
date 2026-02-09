@@ -10,6 +10,7 @@ AC3: Minimum 15 test cases with mocked time
 AC4: Croniter edge cases handled gracefully
 AC5: Methods testable in isolation without database
 """
+
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 import pytest
@@ -21,6 +22,7 @@ from src.services.intent_service import IntentService
 # =============================================================================
 # Fixtures (Task 1.2)
 # =============================================================================
+
 
 @pytest.fixture
 def mock_conn():
@@ -44,6 +46,7 @@ def fixed_now():
 # Task 2: Test _calculate_initial_next_check() for each trigger type (AC1)
 # =============================================================================
 
+
 class TestCalculateInitialNextCheck:
     """Tests for _calculate_initial_next_check() method."""
 
@@ -51,7 +54,9 @@ class TestCalculateInitialNextCheck:
         """Test cron type with valid expression returns next occurrence (2.1)."""
 
         # Use UTC timezone explicitly to get predictable results
-        schedule = TriggerSchedule(cron="0 9 * * 1", timezone="UTC")  # Every Monday at 9 AM UTC
+        schedule = TriggerSchedule(
+            cron="0 9 * * 1", timezone="UTC"
+        )  # Every Monday at 9 AM UTC
         now = datetime.now(timezone.utc)
 
         result = intent_service._calculate_initial_next_check("cron", schedule)
@@ -67,7 +72,7 @@ class TestCalculateInitialNextCheck:
         """Test cron type with invalid expression returns fallback (2.2, AC4)."""
         schedule = TriggerSchedule(cron="invalid cron")
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -82,7 +87,7 @@ class TestCalculateInitialNextCheck:
         """Test interval type with 30 minutes (2.3)."""
         schedule = TriggerSchedule(interval_minutes=30)
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -95,13 +100,15 @@ class TestCalculateInitialNextCheck:
         """Test interval type with various interval values (2.3)."""
         test_cases = [5, 15, 60, 120, 1440]  # 5min, 15min, 1hr, 2hr, 1day
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
             for minutes in test_cases:
                 schedule = TriggerSchedule(interval_minutes=minutes)
-                result = intent_service._calculate_initial_next_check("interval", schedule)
+                result = intent_service._calculate_initial_next_check(
+                    "interval", schedule
+                )
                 expected = fixed_now + timedelta(minutes=minutes)
                 assert result == expected, f"Failed for {minutes} minutes"
 
@@ -129,7 +136,7 @@ class TestCalculateInitialNextCheck:
         """Test price type returns immediate check (2.6)."""
         schedule = TriggerSchedule(check_interval_minutes=10)
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -142,7 +149,7 @@ class TestCalculateInitialNextCheck:
         """Test silence type returns immediate check (2.7)."""
         schedule = TriggerSchedule(check_interval_minutes=60)
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -152,7 +159,7 @@ class TestCalculateInitialNextCheck:
 
     def test_portfolio_immediate_check(self, intent_service, fixed_now):
         """Test portfolio type returns immediate check."""
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -183,13 +190,16 @@ class TestCalculateInitialNextCheck:
 # Task 3: Test _calculate_next_check_after_fire() for each status (AC2)
 # =============================================================================
 
+
 class TestCalculateNextCheckAfterFire:
     """Tests for _calculate_next_check_after_fire() method."""
 
     def test_success_cron_next_occurrence(self, intent_service, fixed_now):
         """Test success + cron returns croniter.get_next() (3.1)."""
         # Use UTC timezone explicitly for predictable results
-        schedule = TriggerSchedule(cron="0 9 * * *", timezone="UTC")  # Every day at 9 AM UTC
+        schedule = TriggerSchedule(
+            cron="0 9 * * *", timezone="UTC"
+        )  # Every day at 9 AM UTC
 
         result = intent_service._calculate_next_check_after_fire(
             "cron", schedule, "success", fixed_now
@@ -302,13 +312,16 @@ class TestCalculateNextCheckAfterFire:
 # Task 4: Test croniter edge cases (AC4)
 # =============================================================================
 
+
 class TestCroniterEdgeCases:
     """Tests for croniter edge cases."""
 
     def test_end_of_month_cron(self, intent_service):
         """Test end-of-month cron expressions (4.1)."""
         # Last day of month at noon
-        schedule = TriggerSchedule(cron="0 12 L * *")  # croniter supports L for last day
+        schedule = TriggerSchedule(
+            cron="0 12 L * *"
+        )  # croniter supports L for last day
         now = datetime(2025, 1, 30, 10, 0, 0, tzinfo=timezone.utc)
 
         result = intent_service._calculate_next_check_after_fire(
@@ -393,6 +406,7 @@ class TestCroniterEdgeCases:
 # Additional Edge Cases
 # =============================================================================
 
+
 class TestEdgeCases:
     """Additional edge case tests."""
 
@@ -431,6 +445,7 @@ class TestEdgeCases:
 # Task 6: Test trigger_type/schedule compatibility validation
 # =============================================================================
 
+
 class TestTriggerTypeScheduleCompatibility:
     """Tests for _validate_trigger_type_schedule_compatibility() method."""
 
@@ -438,7 +453,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test cron type without cron expression returns error."""
         schedule = TriggerSchedule(interval_minutes=30)  # Wrong field for cron
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("cron", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "cron", schedule
+        )
 
         assert len(errors) == 1
         assert "cron" in errors[0].lower()
@@ -447,7 +464,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test cron type with cron expression returns no errors."""
         schedule = TriggerSchedule(cron="0 9 * * *")
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("cron", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "cron", schedule
+        )
 
         assert len(errors) == 0
 
@@ -455,7 +474,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test interval type without interval_minutes returns error."""
         schedule = TriggerSchedule(cron="0 9 * * *")  # Wrong field for interval
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("interval", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "interval", schedule
+        )
 
         assert len(errors) == 1
         assert "interval_minutes" in errors[0].lower()
@@ -464,7 +485,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test interval type with interval_minutes returns no errors."""
         schedule = TriggerSchedule(interval_minutes=30)
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("interval", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "interval", schedule
+        )
 
         assert len(errors) == 0
 
@@ -472,7 +495,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test once type without trigger_at returns error."""
         schedule = TriggerSchedule(interval_minutes=30)  # Wrong field for once
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("once", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "once", schedule
+        )
 
         assert len(errors) == 1
         assert "trigger_at" in errors[0].lower()
@@ -481,7 +506,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test once type with trigger_at returns no errors."""
         schedule = TriggerSchedule(trigger_at=fixed_now)
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("once", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "once", schedule
+        )
 
         assert len(errors) == 0
 
@@ -489,7 +516,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test price type doesn't require specific schedule fields."""
         schedule = TriggerSchedule()  # Empty schedule with default check_interval
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("price", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "price", schedule
+        )
 
         assert len(errors) == 0
 
@@ -497,7 +526,9 @@ class TestTriggerTypeScheduleCompatibility:
         """Test silence type doesn't require specific schedule fields."""
         schedule = TriggerSchedule()
 
-        errors = intent_service._validate_trigger_type_schedule_compatibility("silence", schedule)
+        errors = intent_service._validate_trigger_type_schedule_compatibility(
+            "silence", schedule
+        )
 
         assert len(errors) == 0
 
@@ -506,16 +537,14 @@ class TestTriggerTypeScheduleCompatibility:
 # Task 7: Test timezone-aware next_check calculation (Epic 6 Story 6.1)
 # =============================================================================
 
+
 class TestTimezoneAwareNextCheck:
     """Tests for timezone-aware next_check calculation."""
 
     def test_cron_uses_timezone_from_schedule(self, intent_service):
         """Test cron calculation uses timezone from TriggerSchedule (AC1.1)."""
         # 9 AM every day in New York timezone
-        schedule = TriggerSchedule(
-            cron="0 9 * * *",
-            timezone="America/New_York"
-        )
+        schedule = TriggerSchedule(cron="0 9 * * *", timezone="America/New_York")
 
         result = intent_service._calculate_initial_next_check("cron", schedule)
 
@@ -539,7 +568,7 @@ class TestTimezoneAwareNextCheck:
         """Test cron with explicit UTC timezone."""
         schedule = TriggerSchedule(
             cron="0 12 * * *",  # Noon UTC
-            timezone="UTC"
+            timezone="UTC",
         )
 
         result = intent_service._calculate_initial_next_check("cron", schedule)
@@ -550,10 +579,7 @@ class TestTimezoneAwareNextCheck:
 
     def test_cron_europe_london_timezone(self, intent_service):
         """Test cron with Europe/London timezone."""
-        schedule = TriggerSchedule(
-            cron="0 9 * * *",
-            timezone="Europe/London"
-        )
+        schedule = TriggerSchedule(cron="0 9 * * *", timezone="Europe/London")
 
         result = intent_service._calculate_initial_next_check("cron", schedule)
 
@@ -564,7 +590,7 @@ class TestTimezoneAwareNextCheck:
         """Test cron with Asia/Tokyo timezone (+9 hours from UTC)."""
         schedule = TriggerSchedule(
             cron="0 9 * * *",  # 9 AM Tokyo
-            timezone="Asia/Tokyo"
+            timezone="Asia/Tokyo",
         )
 
         result = intent_service._calculate_initial_next_check("cron", schedule)
@@ -575,10 +601,7 @@ class TestTimezoneAwareNextCheck:
 
     def test_after_fire_cron_uses_timezone(self, intent_service, fixed_now):
         """Test _calculate_next_check_after_fire uses timezone for cron."""
-        schedule = TriggerSchedule(
-            cron="0 9 * * *",
-            timezone="America/Chicago"
-        )
+        schedule = TriggerSchedule(cron="0 9 * * *", timezone="America/Chicago")
 
         result = intent_service._calculate_next_check_after_fire(
             "cron", schedule, "success", fixed_now
@@ -589,12 +612,9 @@ class TestTimezoneAwareNextCheck:
 
     def test_interval_ignores_timezone(self, intent_service, fixed_now):
         """Test interval type doesn't use timezone (just adds minutes)."""
-        schedule = TriggerSchedule(
-            interval_minutes=30,
-            timezone="Asia/Tokyo"
-        )
+        schedule = TriggerSchedule(interval_minutes=30, timezone="Asia/Tokyo")
 
-        with patch('src.services.intent_service.datetime') as mock_dt:
+        with patch("src.services.intent_service.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 
@@ -607,10 +627,7 @@ class TestTimezoneAwareNextCheck:
     def test_once_uses_trigger_at_directly(self, intent_service, fixed_now):
         """Test once type uses trigger_at as-is, timezone in schedule is informational."""
         trigger_time = fixed_now + timedelta(hours=5)
-        schedule = TriggerSchedule(
-            trigger_at=trigger_time,
-            timezone="Pacific/Auckland"
-        )
+        schedule = TriggerSchedule(trigger_at=trigger_time, timezone="Pacific/Auckland")
 
         result = intent_service._calculate_initial_next_check("once", schedule)
 
@@ -621,7 +638,7 @@ class TestTimezoneAwareNextCheck:
         """Test invalid timezone in schedule falls back gracefully."""
         schedule = TriggerSchedule(
             cron="0 9 * * *",
-            timezone="Invalid/Timezone"  # Invalid IANA zone
+            timezone="Invalid/Timezone",  # Invalid IANA zone
         )
 
         # Should not crash - implementation may fall back to UTC or default
@@ -637,7 +654,7 @@ class TestTimezoneAwareNextCheck:
         # Schedule for 3 AM in LA
         schedule = TriggerSchedule(
             cron="0 3 * * *",  # 3 AM
-            timezone="America/Los_Angeles"
+            timezone="America/Los_Angeles",
         )
 
         result = intent_service._calculate_initial_next_check("cron", schedule)

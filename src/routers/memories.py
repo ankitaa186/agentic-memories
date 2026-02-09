@@ -7,6 +7,7 @@ ingestion pipeline, enabling sub-3-second latency for pre-formatted memories.
 Story 10.2 adds typed table storage for episodic, emotional, and procedural memories.
 Story 10.3 adds cross-storage memory deletion via DELETE /v1/memories/{memory_id}.
 """
+
 import json
 import logging
 import time
@@ -74,7 +75,9 @@ def _store_episodic(memory_id: str, body: DirectMemoryRequest) -> bool:
                     body.event_timestamp,
                     body.event_type,
                     body.content,
-                    json.dumps(body.location) if body.location else None,  # JSONB column
+                    json.dumps(body.location)
+                    if body.location
+                    else None,  # JSONB column
                     body.participants,  # TEXT[] array
                     body.importance,
                     body.persona_tags if body.persona_tags else None,  # TEXT[] array
@@ -428,13 +431,15 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
 
     # Build metadata with source tracking and typed storage flags (Story 10.2 - AC #3)
     metadata = dict(body.metadata) if body.metadata else {}
-    metadata.update({
-        "source": "direct_api",
-        "typed_table_id": typed_table_id,  # UUID for typed table lookups
-        "stored_in_episodic": stored_in_episodic,
-        "stored_in_emotional": stored_in_emotional,
-        "stored_in_procedural": stored_in_procedural,
-    })
+    metadata.update(
+        {
+            "source": "direct_api",
+            "typed_table_id": typed_table_id,  # UUID for typed table lookups
+            "stored_in_episodic": stored_in_episodic,
+            "stored_in_emotional": stored_in_emotional,
+            "stored_in_procedural": stored_in_procedural,
+        }
+    )
 
     # Build Memory object
     memory = Memory(
@@ -474,8 +479,11 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
         )
         # Rollback typed table inserts to avoid orphaned rows
         _rollback_typed_tables(
-            typed_table_id, body.user_id,
-            stored_in_episodic, stored_in_emotional, stored_in_procedural
+            typed_table_id,
+            body.user_id,
+            stored_in_episodic,
+            stored_in_emotional,
+            stored_in_procedural,
         )
         return DirectMemoryResponse(
             status="error",
@@ -492,8 +500,11 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
         )
         # Rollback typed table inserts to avoid orphaned rows
         _rollback_typed_tables(
-            typed_table_id, body.user_id,
-            stored_in_episodic, stored_in_emotional, stored_in_procedural
+            typed_table_id,
+            body.user_id,
+            stored_in_episodic,
+            stored_in_emotional,
+            stored_in_procedural,
         )
         return DirectMemoryResponse(
             status="error",

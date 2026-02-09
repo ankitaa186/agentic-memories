@@ -2,6 +2,7 @@
 Unit tests for Profile CRUD API endpoints
 Tests all profile endpoints: GET, PUT, DELETE, and completeness
 """
+
 import pytest
 from unittest.mock import patch
 
@@ -87,13 +88,13 @@ def test_get_profile_success(api_client, mock_profile_service, monkeypatch):
         "profile": {
             "basics": {
                 "name": {"value": "John Doe", "last_updated": "2024-11-16T12:00:00Z"},
-                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"}
+                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"},
             },
             "preferences": {},
             "goals": {},
             "interests": {},
-            "background": {}
-        }
+            "background": {},
+        },
     }
 
     # Patch the service
@@ -126,13 +127,18 @@ def test_get_profile_category_success(api_client, mock_profile_service, monkeypa
         "profile": {
             "basics": {
                 "name": {"value": "John Doe", "last_updated": "2024-11-16T12:00:00Z"},
-                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"}
+                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"},
             },
-            "preferences": {"communication_style": {"value": "direct", "last_updated": "2024-11-16T12:00:00Z"}},
+            "preferences": {
+                "communication_style": {
+                    "value": "direct",
+                    "last_updated": "2024-11-16T12:00:00Z",
+                }
+            },
             "goals": {},
             "interests": {},
-            "background": {}
-        }
+            "background": {},
+        },
     }
 
     with patch("src.routers.profile._profile_service", mock_profile_service):
@@ -179,7 +185,11 @@ def test_update_profile_field_success(api_client, mock_db_conn, monkeypatch):
         with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
             response = api_client.put(
                 "/v1/profile/basics/name",
-                json={"user_id": "test-user-123", "value": "Jane Smith", "source": "manual"}
+                json={
+                    "user_id": "test-user-123",
+                    "value": "Jane Smith",
+                    "source": "manual",
+                },
             )
 
     assert response.status_code == 200
@@ -195,7 +205,7 @@ def test_update_profile_field_invalid_category(api_client, monkeypatch):
     """Test 400 for invalid category in update"""
     response = api_client.put(
         "/v1/profile/invalid/field",
-        json={"user_id": "test-user-123", "value": "test", "source": "manual"}
+        json={"user_id": "test-user-123", "value": "test", "source": "manual"},
     )
 
     assert response.status_code == 400
@@ -206,7 +216,7 @@ def test_update_profile_field_null_value_rejected(api_client, monkeypatch):
     """Test 400 when trying to set field value to null"""
     response = api_client.put(
         "/v1/profile/basics/name",
-        json={"user_id": "test-user-123", "value": None, "source": "manual"}
+        json={"user_id": "test-user-123", "value": None, "source": "manual"},
     )
 
     assert response.status_code == 400
@@ -225,7 +235,7 @@ def test_delete_profile_field_success(api_client, mock_db_conn, monkeypatch):
     cursor.results = [("test-user-123",), ("name",)]
 
     # Override fetchall to return empty list (no remaining fields after deletion)
-    original_fetchall = cursor.fetchall
+    _original_fetchall = cursor.fetchall
     cursor.fetchall = lambda: []
 
     def mock_get_conn():
@@ -236,7 +246,9 @@ def test_delete_profile_field_success(api_client, mock_db_conn, monkeypatch):
 
     with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
         with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
-            response = api_client.delete("/v1/profile/basics/name?user_id=test-user-123")
+            response = api_client.delete(
+                "/v1/profile/basics/name?user_id=test-user-123"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -248,7 +260,9 @@ def test_delete_profile_field_success(api_client, mock_db_conn, monkeypatch):
 
 def test_delete_profile_field_invalid_category(api_client, monkeypatch):
     """Test 400 for invalid category in field delete"""
-    response = api_client.delete("/v1/profile/invalid_category/name?user_id=test-user-123")
+    response = api_client.delete(
+        "/v1/profile/invalid_category/name?user_id=test-user-123"
+    )
 
     assert response.status_code == 400
     assert "invalid category" in response.json()["detail"].lower()
@@ -290,7 +304,9 @@ def test_delete_profile_field_field_not_found(api_client, mock_db_conn, monkeypa
 
     with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
         with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
-            response = api_client.delete("/v1/profile/basics/nonexistent_field?user_id=test-user-123")
+            response = api_client.delete(
+                "/v1/profile/basics/nonexistent_field?user_id=test-user-123"
+            )
 
     assert response.status_code == 404
     assert "field" in response.json()["detail"].lower()
@@ -313,7 +329,9 @@ def test_delete_profile_success(api_client, mock_db_conn, monkeypatch):
 
     with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
         with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
-            response = api_client.delete("/v1/profile?user_id=test-user-123&confirmation=DELETE")
+            response = api_client.delete(
+                "/v1/profile?user_id=test-user-123&confirmation=DELETE"
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -323,7 +341,9 @@ def test_delete_profile_success(api_client, mock_db_conn, monkeypatch):
 
 def test_delete_profile_wrong_confirmation(api_client, monkeypatch):
     """Test 400 when confirmation is incorrect"""
-    response = api_client.delete("/v1/profile?user_id=test-user-123&confirmation=delete")
+    response = api_client.delete(
+        "/v1/profile?user_id=test-user-123&confirmation=delete"
+    )
 
     assert response.status_code == 400
     assert "confirmation" in response.json()["detail"].lower()
@@ -344,7 +364,9 @@ def test_delete_profile_not_found(api_client, mock_db_conn, monkeypatch):
 
     with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
         with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
-            response = api_client.delete("/v1/profile?user_id=nonexistent&confirmation=DELETE")
+            response = api_client.delete(
+                "/v1/profile?user_id=nonexistent&confirmation=DELETE"
+            )
 
     assert response.status_code == 404
 

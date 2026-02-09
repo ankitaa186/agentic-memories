@@ -11,6 +11,7 @@ The resulting merged environment is written to the chosen output file. When the
 script also appends the merged key/value pairs to it so that subsequent steps
 receive the same values automatically.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -96,7 +97,9 @@ def merge_environment(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Merge GitHub and local environment files")
+    parser = argparse.ArgumentParser(
+        description="Merge GitHub and local environment files"
+    )
     parser.add_argument(
         "--env-example",
         default="env.example",
@@ -121,7 +124,9 @@ def main() -> None:
     github_env_values = {key: os.environ.get(key, "") for key in template_values.keys()}
     local_env_values = parse_env_file(args.local_env)
 
-    merged_env, order = merge_environment(template_values, github_env_values, local_env_values)
+    merged_env, order = merge_environment(
+        template_values, github_env_values, local_env_values
+    )
 
     emit_env_file(args.output, merged_env, order)
     append_to_github_env(merged_env, order)

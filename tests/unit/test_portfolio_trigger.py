@@ -41,10 +41,9 @@ class TestPortfolioTriggerType:
             intent_name="Portfolio Alert",
             trigger_type="portfolio",
             trigger_condition=TriggerCondition(
-                expression="any_holding_change > 5%",
-                condition_type="portfolio"
+                expression="any_holding_change > 5%", condition_type="portfolio"
             ),
-            action_context="Alert when portfolio changes"
+            action_context="Alert when portfolio changes",
         )
         assert intent.trigger_type == "portfolio"
 
@@ -55,8 +54,11 @@ class TestPortfolioTriggerType:
     def test_portfolio_keywords_defined(self):
         """PORTFOLIO_KEYWORDS contains expected values."""
         expected = {
-            'any_holding_change', 'any_holding_up', 'any_holding_down',
-            'total_value', 'total_change'
+            "any_holding_change",
+            "any_holding_up",
+            "any_holding_down",
+            "total_value",
+            "total_change",
         }
         assert PORTFOLIO_KEYWORDS == expected
 
@@ -69,52 +71,67 @@ class TestPortfolioTriggerType:
 class TestPortfolioExpressionValidCases:
     """Tests for valid portfolio expressions (AC5.2)."""
 
-    @pytest.mark.parametrize("expression", [
-        "any_holding_change > 5%",
-        "any_holding_change >= 10%",
-        "any_holding_change < 3%",
-        "any_holding_change <= 1%",
-    ])
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "any_holding_change > 5%",
+            "any_holding_change >= 10%",
+            "any_holding_change < 3%",
+            "any_holding_change <= 1%",
+        ],
+    )
     def test_any_holding_change_expressions(self, expression):
         """any_holding_change expressions with various operators are valid."""
         assert PORTFOLIO_PERCENTAGE_PATTERN.match(expression)
 
-    @pytest.mark.parametrize("expression", [
-        "any_holding_down > 5%",
-        "any_holding_down >= 10%",
-        "any_holding_down < 15%",
-        "any_holding_down <= 20%",
-    ])
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "any_holding_down > 5%",
+            "any_holding_down >= 10%",
+            "any_holding_down < 15%",
+            "any_holding_down <= 20%",
+        ],
+    )
     def test_any_holding_down_expressions(self, expression):
         """any_holding_down expressions are valid."""
         assert PORTFOLIO_PERCENTAGE_PATTERN.match(expression)
 
-    @pytest.mark.parametrize("expression", [
-        "any_holding_up > 5%",
-        "any_holding_up >= 8.5%",
-        "any_holding_up < 10.25%",
-        "any_holding_up <= 15%",
-    ])
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "any_holding_up > 5%",
+            "any_holding_up >= 8.5%",
+            "any_holding_up < 10.25%",
+            "any_holding_up <= 15%",
+        ],
+    )
     def test_any_holding_up_expressions(self, expression):
         """any_holding_up expressions are valid."""
         assert PORTFOLIO_PERCENTAGE_PATTERN.match(expression)
 
-    @pytest.mark.parametrize("expression", [
-        "total_change > 3%",
-        "total_change >= 5%",
-        "total_change < 10%",
-        "total_change <= 2.5%",
-    ])
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "total_change > 3%",
+            "total_change >= 5%",
+            "total_change < 10%",
+            "total_change <= 2.5%",
+        ],
+    )
     def test_total_change_expressions(self, expression):
         """total_change expressions are valid."""
         assert PORTFOLIO_PERCENTAGE_PATTERN.match(expression)
 
-    @pytest.mark.parametrize("expression", [
-        "total_value > 100000",
-        "total_value >= 50000",
-        "total_value < 1000000",
-        "total_value <= 250000.50",
-    ])
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "total_value > 100000",
+            "total_value >= 50000",
+            "total_value < 1000000",
+            "total_value <= 250000.50",
+        ],
+    )
     def test_total_value_expressions(self, expression):
         """total_value expressions with absolute values are valid."""
         assert PORTFOLIO_ABSOLUTE_PATTERN.match(expression)
@@ -193,10 +210,9 @@ class TestPortfolioValidationService:
             intent_name="Portfolio Alert",
             trigger_type="portfolio",
             trigger_condition=TriggerCondition(
-                expression="any_holding_change > 5%",
-                condition_type="portfolio"
+                expression="any_holding_change > 5%", condition_type="portfolio"
             ),
-            action_context="Alert"
+            action_context="Alert",
         )
         result = validator.validate(intent)
         assert result.is_valid, f"Expected valid, got errors: {result.errors}"
@@ -209,10 +225,9 @@ class TestPortfolioValidationService:
             intent_name="Value Alert",
             trigger_type="portfolio",
             trigger_condition=TriggerCondition(
-                expression="total_value >= 100000",
-                condition_type="portfolio"
+                expression="total_value >= 100000", condition_type="portfolio"
             ),
-            action_context="Alert"
+            action_context="Alert",
         )
         result = validator.validate(intent)
         assert result.is_valid, f"Expected valid, got errors: {result.errors}"
@@ -225,10 +240,9 @@ class TestPortfolioValidationService:
             intent_name="Invalid Alert",
             trigger_type="portfolio",
             trigger_condition=TriggerCondition(
-                expression="unknown_metric > 5%",
-                condition_type="portfolio"
+                expression="unknown_metric > 5%", condition_type="portfolio"
             ),
-            action_context="Alert"
+            action_context="Alert",
         )
         result = validator.validate(intent)
         assert not result.is_valid
@@ -241,10 +255,8 @@ class TestPortfolioValidationService:
             user_id="test-user",
             intent_name="Portfolio Alert",
             trigger_type="portfolio",
-            trigger_condition=TriggerCondition(
-                condition_type="portfolio"
-            ),
-            action_context="Alert"
+            trigger_condition=TriggerCondition(condition_type="portfolio"),
+            action_context="Alert",
         )
         result = validator.validate(intent)
         # Currently expression is optional, validation passes
@@ -282,10 +294,9 @@ class TestPortfolioCheckInterval:
             trigger_type="portfolio",
             trigger_schedule=TriggerSchedule(check_interval_minutes=30),
             trigger_condition=TriggerCondition(
-                expression="any_holding_change > 5%",
-                condition_type="portfolio"
+                expression="any_holding_change > 5%", condition_type="portfolio"
             ),
-            action_context="Alert"
+            action_context="Alert",
         )
         assert intent.trigger_schedule.check_interval_minutes == 30
 
@@ -303,7 +314,7 @@ class TestPortfolioWithCooldownFireMode:
         condition = TriggerCondition(
             expression="any_holding_change > 5%",
             condition_type="portfolio",
-            cooldown_hours=48
+            cooldown_hours=48,
         )
         assert condition.cooldown_hours == 48
 
@@ -312,15 +323,14 @@ class TestPortfolioWithCooldownFireMode:
         condition = TriggerCondition(
             expression="any_holding_change > 5%",
             condition_type="portfolio",
-            fire_mode="once"
+            fire_mode="once",
         )
         assert condition.fire_mode == "once"
 
     def test_portfolio_supports_fire_mode_recurring(self):
         """Portfolio triggers support fire_mode='recurring' (default)."""
         condition = TriggerCondition(
-            expression="any_holding_change > 5%",
-            condition_type="portfolio"
+            expression="any_holding_change > 5%", condition_type="portfolio"
         )
         assert condition.fire_mode == "recurring"
 
@@ -330,10 +340,9 @@ class TestPortfolioWithCooldownFireMode:
             expression="total_value >= 100000",
             condition_type="portfolio",
             cooldown_hours=72,
-            fire_mode="once"
+            fire_mode="once",
         )
         assert condition.expression == "total_value >= 100000"
         assert condition.condition_type == "portfolio"
         assert condition.cooldown_hours == 72
         assert condition.fire_mode == "once"
-

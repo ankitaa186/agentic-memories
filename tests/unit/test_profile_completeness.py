@@ -2,6 +2,7 @@
 Unit tests for Profile Completeness Tracking (Story 1.6)
 Tests completeness calculation, gap identification, caching, and enhanced endpoint
 """
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -9,12 +10,22 @@ from unittest.mock import MagicMock, patch
 # Test EXPECTED_PROFILE_FIELDS constant
 def test_expected_profile_fields_structure():
     """Test EXPECTED_PROFILE_FIELDS has correct structure (AC1)"""
-    from src.services.profile_storage import EXPECTED_PROFILE_FIELDS, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        EXPECTED_PROFILE_FIELDS,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     # Verify 8 categories
     assert len(EXPECTED_PROFILE_FIELDS) == 8
     assert set(EXPECTED_PROFILE_FIELDS.keys()) == {
-        'basics', 'preferences', 'goals', 'interests', 'background', 'health', 'personality', 'values'
+        "basics",
+        "preferences",
+        "goals",
+        "interests",
+        "background",
+        "health",
+        "personality",
+        "values",
     }
 
     # Verify total is 27
@@ -26,19 +37,19 @@ def test_expected_profile_fields_content():
     from src.services.profile_storage import EXPECTED_PROFILE_FIELDS
 
     # Verify basics fields
-    assert 'name' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'birthday' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'location' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'occupation' in EXPECTED_PROFILE_FIELDS['basics']
-    assert 'family_status' in EXPECTED_PROFILE_FIELDS['basics']
+    assert "name" in EXPECTED_PROFILE_FIELDS["basics"]
+    assert "birthday" in EXPECTED_PROFILE_FIELDS["basics"]
+    assert "location" in EXPECTED_PROFILE_FIELDS["basics"]
+    assert "occupation" in EXPECTED_PROFILE_FIELDS["basics"]
+    assert "family_status" in EXPECTED_PROFILE_FIELDS["basics"]
 
     # Verify goals fields
-    assert 'short_term' in EXPECTED_PROFILE_FIELDS['goals']
-    assert 'long_term' in EXPECTED_PROFILE_FIELDS['goals']
+    assert "short_term" in EXPECTED_PROFILE_FIELDS["goals"]
+    assert "long_term" in EXPECTED_PROFILE_FIELDS["goals"]
 
     # Verify new categories exist
-    assert 'allergies' in EXPECTED_PROFILE_FIELDS['health']
-    assert 'personality_type' in EXPECTED_PROFILE_FIELDS['personality']
+    assert "allergies" in EXPECTED_PROFILE_FIELDS["health"]
+    assert "personality_type" in EXPECTED_PROFILE_FIELDS["personality"]
 
 
 # Mock classes for testing
@@ -82,20 +93,27 @@ class _MockConnection:
 # Test completeness calculation
 def test_completeness_calculation_empty_profile():
     """Test completeness is 0% for empty profile (AC2)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
     # Mock cursor with no profile fields
     mock_cursor = _MockCursor(
         fetchone_result=(0.0, 0, TOTAL_EXPECTED_FIELDS),  # profile exists but empty
-        results=[]  # no fields
+        results=[],  # no fields
     )
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
@@ -106,7 +124,10 @@ def test_completeness_calculation_empty_profile():
 
 def test_completeness_calculation_partial_profile():
     """Test completeness calculation with partial fields (AC1, AC2)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
@@ -114,7 +135,7 @@ def test_completeness_calculation_partial_profile():
     # 10 fields that match EXPECTED_PROFILE_FIELDS
     mock_cursor = _MockCursor(
         fetchone_result=(37.0, 10, TOTAL_EXPECTED_FIELDS),  # profile metadata
-        results=[]
+        results=[],
     )
 
     # We need to handle multiple fetchall calls
@@ -125,16 +146,16 @@ def test_completeness_calculation_partial_profile():
         if call_count[0] == 1:
             # profile_fields query - use fields from EXPECTED_PROFILE_FIELDS
             return [
-                ('basics', 'name'),
-                ('basics', 'birthday'),
-                ('basics', 'location'),
-                ('preferences', 'communication_style'),
-                ('preferences', 'food_preferences'),
-                ('goals', 'short_term'),
-                ('interests', 'hobbies'),
-                ('interests', 'learning_areas'),
-                ('background', 'skills'),
-                ('background', 'current_employer'),
+                ("basics", "name"),
+                ("basics", "birthday"),
+                ("basics", "location"),
+                ("preferences", "communication_style"),
+                ("preferences", "food_preferences"),
+                ("goals", "short_term"),
+                ("interests", "hobbies"),
+                ("interests", "learning_areas"),
+                ("background", "skills"),
+                ("background", "current_employer"),
             ]
         elif call_count[0] == 2:
             # confidence_scores query
@@ -144,9 +165,13 @@ def test_completeness_calculation_partial_profile():
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
@@ -164,7 +189,10 @@ def test_completeness_calculation_partial_profile():
 
 def test_completeness_category_breakdown():
     """Test per-category completeness breakdown (AC1)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
@@ -178,20 +206,24 @@ def test_completeness_category_breakdown():
         if call_count[0] == 1:
             # All 5 basics fields from EXPECTED_PROFILE_FIELDS
             return [
-                ('basics', 'name'),
-                ('basics', 'birthday'),
-                ('basics', 'location'),
-                ('basics', 'occupation'),
-                ('basics', 'family_status'),
+                ("basics", "name"),
+                ("basics", "birthday"),
+                ("basics", "location"),
+                ("basics", "occupation"),
+                ("basics", "family_status"),
             ]
         return []
 
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
@@ -207,7 +239,10 @@ def test_completeness_category_breakdown():
 
 def test_completeness_missing_fields():
     """Test missing fields are correctly identified (AC1)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
@@ -218,15 +253,19 @@ def test_completeness_missing_fields():
     def mock_fetchall():
         call_count[0] += 1
         if call_count[0] == 1:
-            return [('basics', 'name')]
+            return [("basics", "name")]
         return []
 
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     # Check missing basics fields (using new canonical names)
@@ -241,7 +280,10 @@ def test_completeness_missing_fields():
 # Test high-value gap identification
 def test_high_value_gaps_basics_priority():
     """Test basics fields have highest priority in gaps (AC3)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
@@ -256,22 +298,31 @@ def test_high_value_gaps_basics_priority():
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     gaps = result["high_value_gaps"]
 
     # First 5 gaps should be basics fields (using new canonical names)
-    basics_fields = {'name', 'birthday', 'location', 'occupation', 'family_status'}
+    basics_fields = {"name", "birthday", "location", "occupation", "family_status"}
     first_five = set(gaps[:5])
-    assert first_five == basics_fields, f"First 5 gaps should be basics fields, got {first_five}"
+    assert first_five == basics_fields, (
+        f"First 5 gaps should be basics fields, got {first_five}"
+    )
 
 
 def test_high_value_gaps_limit():
     """Test high-value gaps are limited to 10 items (AC3)"""
-    from src.services.profile_storage import ProfileStorageService, TOTAL_EXPECTED_FIELDS
+    from src.services.profile_storage import (
+        ProfileStorageService,
+        TOTAL_EXPECTED_FIELDS,
+    )
 
     service = ProfileStorageService()
 
@@ -286,9 +337,13 @@ def test_high_value_gaps_limit():
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=None):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=None
+            ):
                 result = service.get_completeness_details("test-user")
 
     # Should be limited to 10
@@ -308,13 +363,15 @@ def test_completeness_cache_hit():
         "total_fields": 25,
         "categories": {},
         "high_value_gaps": ["education"],
-        "cached_at": "2025-12-14T10:00:00Z"
+        "cached_at": "2025-12-14T10:00:00Z",
     }
 
     mock_redis = MagicMock()
     mock_redis.get.return_value = json.dumps(cached_data)
 
-    with patch("src.services.profile_storage.get_redis_client", return_value=mock_redis):
+    with patch(
+        "src.services.profile_storage.get_redis_client", return_value=mock_redis
+    ):
         result = service.get_completeness_details("test-user")
 
     assert result is not None
@@ -338,15 +395,19 @@ def test_completeness_cache_miss():
     def mock_fetchall():
         call_count[0] += 1
         if call_count[0] == 1:
-            return [('basics', 'name')]
+            return [("basics", "name")]
         return []
 
     mock_cursor.fetchall = mock_fetchall
     mock_conn = _MockConnection(cursor=mock_cursor)
 
-    with patch("src.services.profile_storage.get_timescale_conn", return_value=mock_conn):
+    with patch(
+        "src.services.profile_storage.get_timescale_conn", return_value=mock_conn
+    ):
         with patch("src.services.profile_storage.release_timescale_conn"):
-            with patch("src.services.profile_storage.get_redis_client", return_value=mock_redis):
+            with patch(
+                "src.services.profile_storage.get_redis_client", return_value=mock_redis
+            ):
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
@@ -400,17 +461,44 @@ def test_get_completeness_detailed_mode(api_client):
         "populated_fields": 15,
         "total_fields": 25,
         "categories": {
-            "basics": {"completeness_pct": 80.0, "populated": 4, "total": 5, "missing": ["education"]},
-            "preferences": {"completeness_pct": 60.0, "populated": 3, "total": 5, "missing": ["favorites", "style"]},
-            "goals": {"completeness_pct": 40.0, "populated": 2, "total": 5, "missing": ["aspirations", "plans", "targets"]},
-            "interests": {"completeness_pct": 60.0, "populated": 3, "total": 5, "missing": ["passions", "learning"]},
-            "background": {"completeness_pct": 60.0, "populated": 3, "total": 5, "missing": ["achievements", "journey"]},
+            "basics": {
+                "completeness_pct": 80.0,
+                "populated": 4,
+                "total": 5,
+                "missing": ["education"],
+            },
+            "preferences": {
+                "completeness_pct": 60.0,
+                "populated": 3,
+                "total": 5,
+                "missing": ["favorites", "style"],
+            },
+            "goals": {
+                "completeness_pct": 40.0,
+                "populated": 2,
+                "total": 5,
+                "missing": ["aspirations", "plans", "targets"],
+            },
+            "interests": {
+                "completeness_pct": 60.0,
+                "populated": 3,
+                "total": 5,
+                "missing": ["passions", "learning"],
+            },
+            "background": {
+                "completeness_pct": 60.0,
+                "populated": 3,
+                "total": 5,
+                "missing": ["achievements", "journey"],
+            },
         },
-        "high_value_gaps": ["education", "aspirations", "skills"]
+        "high_value_gaps": ["education", "aspirations", "skills"],
     }
 
     with patch("src.routers.profile._profile_service", mock_service):
-        response = api_client.get("/v1/profile/completeness?user_id=test-user&details=true")
+        response = api_client.get(
+            "/v1/profile/completeness?user_id=test-user&details=true"
+        )
 
     assert response.status_code == 200
     data = response.json()
@@ -433,7 +521,9 @@ def test_get_completeness_detailed_not_found(api_client):
     mock_service.get_completeness_details.return_value = None
 
     with patch("src.routers.profile._profile_service", mock_service):
-        response = api_client.get("/v1/profile/completeness?user_id=nonexistent&details=true")
+        response = api_client.get(
+            "/v1/profile/completeness?user_id=nonexistent&details=true"
+        )
 
     assert response.status_code == 404
 
@@ -441,14 +531,17 @@ def test_get_completeness_detailed_not_found(api_client):
 # Test cache invalidation
 def test_cache_invalidation_on_profile_update():
     """Test cache is invalidated when profile is updated (AC4)"""
-    mock_cursor = _MockCursor()
+    _mock_cursor = _MockCursor()
 
     mock_redis = MagicMock()
 
     # The _invalidate_completeness_cache function imports get_redis_client internally
-    with patch("src.dependencies.redis_client.get_redis_client", return_value=mock_redis):
+    with patch(
+        "src.dependencies.redis_client.get_redis_client", return_value=mock_redis
+    ):
         # Import after patching
         from src.routers.profile import _invalidate_completeness_cache
+
         _invalidate_completeness_cache("test-user")
 
     # Should have called delete on Redis
