@@ -231,7 +231,7 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 **TL;DR for Docker users**:
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/agentic-memories.git
+git clone https://github.com/ankitaa186/agentic-memories.git
 cd agentic-memories
 
 # 2. Start external databases
@@ -278,12 +278,12 @@ curl http://localhost:8080/health/full | jq
 - **External Dependencies**: `agentic-memories-storage` repository
   - Provides: TimescaleDB, Neo4j, ChromaDB, Redis
   - Quick start: `./docker-up.sh` in storage repo
-  - See: [agentic-memories-storage](https://github.com/yourusername/agentic-memories-storage)
+  - See: [agentic-memories-storage](https://github.com/ankitaa186/agentic-memories-storage)
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/agentic-memories.git
+git clone https://github.com/ankitaa186/agentic-memories.git
 cd agentic-memories
 ```
 
@@ -294,7 +294,7 @@ This project requires external databases. Deploy the companion storage repositor
 ```bash
 # In a separate directory (parallel to agentic-memories)
 cd ..
-git clone https://github.com/yourusername/agentic-memories-storage.git
+git clone https://github.com/ankitaa186/agentic-memories-storage.git
 cd agentic-memories-storage
 
 # Simple one-command startup
@@ -310,7 +310,7 @@ This provides:
 **Verify databases are running:**
 ```bash
 # Check TimescaleDB
-psql "postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories" -c "SELECT version();"
+psql "$TIMESCALE_DSN" -c "SELECT version();"
 
 # Check ChromaDB
 curl -s http://localhost:8000/api/v2/heartbeat
@@ -339,10 +339,10 @@ CHROMA_HOST=localhost
 CHROMA_PORT=8000
 CHROMA_TENANT=agentic-memories
 CHROMA_DATABASE=memories
-TIMESCALE_DSN=postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories
+TIMESCALE_DSN=postgresql://postgres:<your-password>@localhost:5433/agentic_memories
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
+NEO4J_PASSWORD=<your-password>
 REDIS_URL=redis://localhost:6379/0
 
 # Scheduled maintenance (optional)
@@ -375,10 +375,10 @@ pip install -r requirements.txt
 cd migrations
 
 # Set environment variables (if not using interactive prompts)
-export TIMESCALE_DSN="postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories"
+export TIMESCALE_DSN="postgresql://postgres:<your-password>@localhost:5433/agentic_memories"
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="password"
+export NEO4J_PASSWORD="<your-password>"
 export CHROMA_HOST="localhost"
 export CHROMA_PORT="8000"
 export CHROMA_TENANT="agentic-memories"
@@ -1575,10 +1575,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 📬 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/agentic-memories/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/agentic-memories/discussions)
-- **Email**: your.email@example.com
-- **Twitter**: [@yourusername](https://twitter.com/yourusername)
+- **Issues**: [GitHub Issues](https://github.com/ankitaa186/agentic-memories/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ankitaa186/agentic-memories/discussions)
 
 ---
 
