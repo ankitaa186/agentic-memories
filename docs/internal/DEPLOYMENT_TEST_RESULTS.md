@@ -125,7 +125,7 @@ The Agentic Memories application has been successfully deployed and tested. All 
 
 ### Docker Compose
 - API: `localhost:8080`
-- UI: `localhost:80`
+- UI: `localhost:3000`
 - Redis: Internal + `localhost:6379`
 
 ### External Dependencies
