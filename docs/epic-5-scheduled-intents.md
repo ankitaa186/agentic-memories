@@ -379,4 +379,4 @@ When Annie calls POST `/v1/intents/{id}/fire`:
 
 ## References
 
-- [Annie Technical Research - Proactive AI Architecture](/home/ankit/dev/annie/docs/research-technical-2025-12-21.md)
+- Annie Technical Research - Proactive AI Architecture (internal reference)

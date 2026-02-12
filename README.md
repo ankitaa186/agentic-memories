@@ -4,7 +4,7 @@
 
 **A living, breathing memory system that transforms AI from stateless responders into sentient companions with human-like consciousness**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
@@ -231,7 +231,7 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 **TL;DR for Docker users**:
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/agentic-memories.git
+git clone https://github.com/ankitaa186/agentic-memories.git
 cd agentic-memories
 
 # 2. Start external databases
@@ -278,12 +278,12 @@ curl http://localhost:8080/health/full | jq
 - **External Dependencies**: `agentic-memories-storage` repository
   - Provides: TimescaleDB, Neo4j, ChromaDB, Redis
   - Quick start: `./docker-up.sh` in storage repo
-  - See: [agentic-memories-storage](https://github.com/yourusername/agentic-memories-storage)
+  - See: [agentic-memories-storage](https://github.com/ankitaa186/agentic-memories-storage)
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/agentic-memories.git
+git clone https://github.com/ankitaa186/agentic-memories.git
 cd agentic-memories
 ```
 
@@ -294,7 +294,7 @@ This project requires external databases. Deploy the companion storage repositor
 ```bash
 # In a separate directory (parallel to agentic-memories)
 cd ..
-git clone https://github.com/yourusername/agentic-memories-storage.git
+git clone https://github.com/ankitaa186/agentic-memories-storage.git
 cd agentic-memories-storage
 
 # Simple one-command startup
@@ -310,7 +310,7 @@ This provides:
 **Verify databases are running:**
 ```bash
 # Check TimescaleDB
-psql "postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories" -c "SELECT version();"
+psql "$TIMESCALE_DSN" -c "SELECT version();"
 
 # Check ChromaDB
 curl -s http://localhost:8000/api/v2/heartbeat
@@ -339,10 +339,10 @@ CHROMA_HOST=localhost
 CHROMA_PORT=8000
 CHROMA_TENANT=agentic-memories
 CHROMA_DATABASE=memories
-TIMESCALE_DSN=postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories
+TIMESCALE_DSN=postgresql://postgres:<your-password>@localhost:5433/agentic_memories
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
+NEO4J_PASSWORD=<your-password>
 REDIS_URL=redis://localhost:6379/0
 
 # Scheduled maintenance (optional)
@@ -375,10 +375,10 @@ pip install -r requirements.txt
 cd migrations
 
 # Set environment variables (if not using interactive prompts)
-export TIMESCALE_DSN="postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories"
+export TIMESCALE_DSN="postgresql://postgres:<your-password>@localhost:5433/agentic_memories"
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="password"
+export NEO4J_PASSWORD="<your-password>"
 export CHROMA_HOST="localhost"
 export CHROMA_PORT="8000"
 export CHROMA_TENANT="agentic-memories"
@@ -514,7 +514,7 @@ curl -s "http://localhost:8080/v1/retrieve?user_id=test-user&query=my+portfolio"
 
 - **API**: http://localhost:8080
 - **API Docs**: http://localhost:8080/docs
-- **UI**: http://localhost:80
+- **UI**: http://localhost:3000
 - **Health Check**: http://localhost:8080/health/full
 
 **External Databases:**
@@ -1005,7 +1005,7 @@ Comprehensive health check for all services.
 
 ## 🎨 Web UI
 
-Access the beautiful memory browser at: **http://localhost:80**
+Access the beautiful memory browser at: **http://localhost:3000**
 
 Features:
 - 📊 **Memory Browser**: Visual timeline of all memories
@@ -1547,9 +1547,45 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ---
 
+## Disclaimer
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. USE AT YOUR OWN RISK.
+
+**The authors and contributors of Agentic Memories shall not be held liable
+for any damages, losses, or consequences arising from the use, misuse, or
+inability to use this software**, including but not limited to:
+
+- **Data loss or corruption** — This software manages databases and persistent
+  storage. Always maintain independent backups of any critical data.
+- **AI-generated content** — Memory extraction, consolidation, and retrieval
+  rely on large language models (LLMs) which may produce inaccurate, incomplete,
+  misleading, or biased outputs. Do not rely on this software for medical,
+  legal, financial, or safety-critical decisions.
+- **Security vulnerabilities** — While we make reasonable efforts to follow
+  security best practices, no software is guaranteed to be free of
+  vulnerabilities. You are responsible for securing your own deployment,
+  credentials, and infrastructure.
+- **Third-party services** — This software integrates with external APIs and
+  services (OpenAI, Grok, etc.) which have their own terms of service, pricing,
+  and limitations. You are solely responsible for compliance with those terms
+  and any costs incurred.
+- **Privacy and personal data** — This software stores and processes user
+  conversations and personal information. You are solely responsible for
+  compliance with all applicable data protection laws and regulations (GDPR,
+  CCPA, etc.) in your jurisdiction.
+
+**By using this software, you acknowledge that you have read this disclaimer
+and agree to assume all risks associated with its use.**
+
+This project is experimental and under active development. APIs, data formats,
+and behavior may change without notice between versions.
+
+---
+
 ## 📝 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) for details.
 
 ---
 
@@ -1575,10 +1611,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 📬 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/agentic-memories/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/agentic-memories/discussions)
-- **Email**: your.email@example.com
-- **Twitter**: [@yourusername](https://twitter.com/yourusername)
+- **Issues**: [GitHub Issues](https://github.com/ankitaa186/agentic-memories/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ankitaa186/agentic-memories/discussions)
 
 ---
 

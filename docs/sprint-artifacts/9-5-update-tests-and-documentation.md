@@ -123,7 +123,7 @@ So that **tests are accurate and documentation matches the new architecture**.
 
 ### Project Structure Notes
 
-**Test Files Location:** `/home/ankit/dev/agentic-memories/tests/`
+**Test Files Location:** `tests/`
 - Most Neo4j mocks removed in Story 9.3
 - Need to verify no remaining Neo4j references
 - Test suite currently: 85 passed, 1 skipped (baseline)

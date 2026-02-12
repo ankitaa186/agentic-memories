@@ -33,5 +33,6 @@ class MessageStreamAdapter:
 
         timestamp = event.timestamp or datetime.utcnow()
 
-        return replace(event, message_id=message_id, metadata=metadata, timestamp=timestamp)
-
+        return replace(
+            event, message_id=message_id, metadata=metadata, timestamp=timestamp
+        )

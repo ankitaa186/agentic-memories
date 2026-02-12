@@ -292,7 +292,7 @@ fi
 echo ""
 echo "[agentic-memories] Services started with restart policy 'unless-stopped'."
 echo "- API:          http://localhost:8080"
-echo "- UI:           http://localhost:80"
+echo "- UI:           http://localhost:3000"
 echo "- ChromaDB:     http://localhost:8000 (external)"
 echo "- Redis:        localhost:6379"
 

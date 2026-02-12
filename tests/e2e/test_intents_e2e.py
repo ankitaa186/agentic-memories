@@ -7,6 +7,7 @@ Run with: pytest tests/integration/test_intents_e2e.py -v
 
 Requires: Docker container running (./scripts/run_docker.sh)
 """
+
 import time
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -26,12 +27,11 @@ class TestIntentsE2ECRUD:
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
             "action_context": "Remind me to check status",
-            "action_priority": "normal"
+            "action_priority": "normal",
         }
 
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
 
         assert response.status_code == 201, f"Failed: {response.text}"
@@ -50,7 +50,9 @@ class TestIntentsE2ECRUD:
         next_check = datetime.fromisoformat(data["next_check"].replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         delta = (next_check - now).total_seconds() / 60
-        assert 28 <= delta <= 32, f"next_check should be ~30 min from now, got {delta} min"
+        assert 28 <= delta <= 32, (
+            f"next_check should be ~30 min from now, got {delta} min"
+        )
 
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{data['id']}")
@@ -62,12 +64,11 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Cron Test",
             "trigger_type": "cron",
             "trigger_schedule": {"cron": "0 9 * * 1"},  # Every Monday at 9 AM
-            "action_context": "Weekly reminder"
+            "action_context": "Weekly reminder",
         }
 
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
 
         assert response.status_code == 201, f"Failed: {response.text}"
@@ -94,19 +95,17 @@ class TestIntentsE2ECRUD:
                 "intent_name": f"E2E List Test {i}",
                 "trigger_type": "interval",
                 "trigger_schedule": {"interval_minutes": 30 + i * 10},
-                "action_context": f"Test action {i}"
+                "action_context": f"Test action {i}",
             }
             response = real_api_client.post(
-                f"{e2e_config.api_base_url}/v1/intents",
-                json=payload
+                f"{e2e_config.api_base_url}/v1/intents", json=payload
             )
             assert response.status_code == 201
             intent_ids.append(response.json()["id"])
 
         # List intents for user
         response = real_api_client.get(
-            f"{e2e_config.api_base_url}/v1/intents",
-            params={"user_id": unique_user_id}
+            f"{e2e_config.api_base_url}/v1/intents", params={"user_id": unique_user_id}
         )
 
         assert response.status_code == 200
@@ -129,17 +128,18 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Get Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 60},
-            "action_context": "Test get by ID"
+            "action_context": "Test get by ID",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
 
         # Get the intent by ID
-        response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
+        response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}"
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -152,7 +152,9 @@ class TestIntentsE2ECRUD:
     def test_get_intent_not_found(self, real_api_client, e2e_config):
         """Test 404 for non-existent intent with real database."""
         fake_id = str(uuid4())
-        response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{fake_id}")
+        response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{fake_id}"
+        )
 
         assert response.status_code == 404
 
@@ -164,11 +166,10 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Update Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "Original context"
+            "action_context": "Original context",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -177,11 +178,10 @@ class TestIntentsE2ECRUD:
         update_payload = {
             "intent_name": "E2E Update Test - Modified",
             "action_context": "Updated context",
-            "trigger_schedule": {"interval_minutes": 45}
+            "trigger_schedule": {"interval_minutes": 45},
         }
         response = real_api_client.put(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}",
-            json=update_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}", json=update_payload
         )
 
         assert response.status_code == 200
@@ -192,7 +192,9 @@ class TestIntentsE2ECRUD:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_update_trigger_type_without_compatible_schedule_fails(self, real_api_client, e2e_config, unique_user_id):
+    def test_update_trigger_type_without_compatible_schedule_fails(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test that changing trigger_type without compatible schedule returns 400.
 
         This prevents silent data corruption where an intent becomes unschedulable.
@@ -203,11 +205,10 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Update Validation Test",
             "trigger_type": "cron",
             "trigger_schedule": {"cron": "0 9 * * *"},
-            "action_context": "Test update validation"
+            "action_context": "Test update validation",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -219,17 +220,20 @@ class TestIntentsE2ECRUD:
             # No trigger_schedule provided - should fail!
         }
         response = real_api_client.put(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}",
-            json=update_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}", json=update_payload
         )
 
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+        assert response.status_code == 400, (
+            f"Expected 400, got {response.status_code}: {response.text}"
+        )
         data = response.json()
         assert "errors" in data
         assert any("interval_minutes" in err.lower() for err in data["errors"])
 
         # Verify intent is unchanged
-        get_response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
+        get_response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}"
+        )
         assert get_response.status_code == 200
         intent_data = get_response.json()
         assert intent_data["trigger_type"] == "cron"  # Still cron
@@ -237,7 +241,9 @@ class TestIntentsE2ECRUD:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_update_trigger_type_with_compatible_schedule_succeeds(self, real_api_client, e2e_config, unique_user_id):
+    def test_update_trigger_type_with_compatible_schedule_succeeds(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test that changing trigger_type with compatible schedule succeeds."""
         # Create a cron-based intent
         payload = {
@@ -245,11 +251,10 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Update Type Test",
             "trigger_type": "cron",
             "trigger_schedule": {"cron": "0 9 * * *"},
-            "action_context": "Test update with schedule"
+            "action_context": "Test update with schedule",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -257,11 +262,10 @@ class TestIntentsE2ECRUD:
         # Change trigger_type to 'interval' AND provide compatible schedule
         update_payload = {
             "trigger_type": "interval",
-            "trigger_schedule": {"interval_minutes": 30}
+            "trigger_schedule": {"interval_minutes": 30},
         }
         response = real_api_client.put(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}",
-            json=update_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}", json=update_payload
         )
 
         assert response.status_code == 200
@@ -280,21 +284,24 @@ class TestIntentsE2ECRUD:
             "intent_name": "E2E Delete Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "To be deleted"
+            "action_context": "To be deleted",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
 
         # Delete the intent
-        response = real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
+        response = real_api_client.delete(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}"
+        )
         assert response.status_code == 204
 
         # Verify it's gone
-        get_response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
+        get_response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}"
+        )
         assert get_response.status_code == 404
 
 
@@ -310,11 +317,10 @@ class TestIntentsE2EFire:
             "intent_name": "E2E Fire Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "Fire test"
+            "action_context": "Fire test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -327,11 +333,10 @@ class TestIntentsE2EFire:
             "trigger_data": {"test": "data"},
             "evaluation_ms": 50,
             "generation_ms": 100,
-            "delivery_ms": 25
+            "delivery_ms": 25,
         }
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-            json=fire_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire", json=fire_payload
         )
 
         assert response.status_code == 200
@@ -344,7 +349,9 @@ class TestIntentsE2EFire:
         assert data["next_check"] != original_next_check
 
         # Verify the intent was updated in database
-        get_response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
+        get_response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}"
+        )
         assert get_response.status_code == 200
         intent_data = get_response.json()
         assert intent_data["execution_count"] == 1
@@ -354,7 +361,9 @@ class TestIntentsE2EFire:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_fire_intent_failed_backoff(self, real_api_client, e2e_config, unique_user_id):
+    def test_fire_intent_failed_backoff(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test firing an intent with failed status applies 15-min backoff."""
         # Create an intent
         payload = {
@@ -362,23 +371,18 @@ class TestIntentsE2EFire:
             "intent_name": "E2E Fire Failed Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 60},
-            "action_context": "Fire failed test"
+            "action_context": "Fire failed test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
 
         # Fire with failed status
-        fire_payload = {
-            "status": "failed",
-            "error_message": "E2E test failure"
-        }
+        fire_payload = {"status": "failed", "error_message": "E2E test failure"}
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-            json=fire_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire", json=fire_payload
         )
 
         assert response.status_code == 200
@@ -395,7 +399,9 @@ class TestIntentsE2EFire:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_fire_once_disables_intent(self, real_api_client, e2e_config, unique_user_id):
+    def test_fire_once_disables_intent(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test firing a one-time intent disables it."""
         future_time = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
 
@@ -404,24 +410,19 @@ class TestIntentsE2EFire:
             "intent_name": "E2E Fire Once Test",
             "trigger_type": "once",
             "trigger_schedule": {"trigger_at": future_time},
-            "action_context": "One-time fire test"
+            "action_context": "One-time fire test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
         assert create_response.json()["enabled"] is True
 
         # Fire the intent
-        fire_payload = {
-            "status": "success",
-            "message_id": "e2e-once-msg"
-        }
+        fire_payload = {"status": "success", "message_id": "e2e-once-msg"}
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-            json=fire_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire", json=fire_payload
         )
 
         assert response.status_code == 200
@@ -433,18 +434,19 @@ class TestIntentsE2EFire:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_fire_condition_not_met_5min_retry(self, real_api_client, e2e_config, unique_user_id):
+    def test_fire_condition_not_met_5min_retry(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test condition_not_met applies 5-minute retry."""
         payload = {
             "user_id": unique_user_id,
             "intent_name": "E2E Condition Not Met Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 60},
-            "action_context": "Condition not met test"
+            "action_context": "Condition not met test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -452,8 +454,7 @@ class TestIntentsE2EFire:
         # Fire with condition_not_met
         fire_payload = {"status": "condition_not_met"}
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-            json=fire_payload
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire", json=fire_payload
         )
 
         assert response.status_code == 200
@@ -464,7 +465,9 @@ class TestIntentsE2EFire:
         next_check = datetime.fromisoformat(data["next_check"].replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         delta = (next_check - now).total_seconds() / 60
-        assert 4 <= delta <= 6, f"condition_not_met should have 5-min retry, got {delta} min"
+        assert 4 <= delta <= 6, (
+            f"condition_not_met should have 5-min retry, got {delta} min"
+        )
 
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
@@ -482,11 +485,10 @@ class TestIntentsE2EHistory:
             "intent_name": "E2E History Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "History test"
+            "action_context": "History test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -496,17 +498,19 @@ class TestIntentsE2EHistory:
             fire_payload = {
                 "status": "success" if i % 2 == 0 else "condition_not_met",
                 "message_id": f"e2e-hist-msg-{i}" if i % 2 == 0 else None,
-                "trigger_data": {"iteration": i}
+                "trigger_data": {"iteration": i},
             }
             fire_response = real_api_client.post(
                 f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-                json=fire_payload
+                json=fire_payload,
             )
             assert fire_response.status_code == 200
             time.sleep(0.1)  # Small delay to ensure ordering
 
         # Get history
-        response = real_api_client.get(f"{e2e_config.api_base_url}/v1/intents/{intent_id}/history")
+        response = real_api_client.get(
+            f"{e2e_config.api_base_url}/v1/intents/{intent_id}/history"
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -527,7 +531,9 @@ class TestIntentsE2EHistory:
         # Cleanup
         real_api_client.delete(f"{e2e_config.api_base_url}/v1/intents/{intent_id}")
 
-    def test_intent_history_pagination(self, real_api_client, e2e_config, unique_user_id):
+    def test_intent_history_pagination(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test execution history pagination."""
         # Create an intent
         payload = {
@@ -535,11 +541,10 @@ class TestIntentsE2EHistory:
             "intent_name": "E2E History Pagination Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 30},
-            "action_context": "History pagination test"
+            "action_context": "History pagination test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]
@@ -549,14 +554,14 @@ class TestIntentsE2EHistory:
             fire_payload = {"status": "success", "message_id": f"e2e-page-{i}"}
             real_api_client.post(
                 f"{e2e_config.api_base_url}/v1/intents/{intent_id}/fire",
-                json=fire_payload
+                json=fire_payload,
             )
             time.sleep(0.05)
 
         # Get first page
         response = real_api_client.get(
             f"{e2e_config.api_base_url}/v1/intents/{intent_id}/history",
-            params={"limit": 2, "offset": 0}
+            params={"limit": 2, "offset": 0},
         )
         assert response.status_code == 200
         page1 = response.json()
@@ -565,7 +570,7 @@ class TestIntentsE2EHistory:
         # Get second page
         response = real_api_client.get(
             f"{e2e_config.api_base_url}/v1/intents/{intent_id}/history",
-            params={"limit": 2, "offset": 2}
+            params={"limit": 2, "offset": 2},
         )
         assert response.status_code == 200
         page2 = response.json()
@@ -582,19 +587,20 @@ class TestIntentsE2EHistory:
 class TestIntentsE2EValidation:
     """E2E tests for intent validation with real database."""
 
-    def test_validation_rejects_invalid_cron(self, real_api_client, e2e_config, unique_user_id):
+    def test_validation_rejects_invalid_cron(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test validation rejects invalid cron expression."""
         payload = {
             "user_id": unique_user_id,
             "intent_name": "E2E Invalid Cron Test",
             "trigger_type": "cron",
             "trigger_schedule": {"cron": "not a valid cron"},
-            "action_context": "Should fail validation"
+            "action_context": "Should fail validation",
         }
 
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
 
         assert response.status_code == 400
@@ -602,26 +608,29 @@ class TestIntentsE2EValidation:
         assert "errors" in data
         assert any("cron" in err.lower() for err in data["errors"])
 
-    def test_validation_rejects_missing_schedule(self, real_api_client, e2e_config, unique_user_id):
+    def test_validation_rejects_missing_schedule(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test validation rejects missing required schedule field."""
         payload = {
             "user_id": unique_user_id,
             "intent_name": "E2E Missing Schedule Test",
             "trigger_type": "interval",
             # Missing trigger_schedule.interval_minutes
-            "action_context": "Should fail validation"
+            "action_context": "Should fail validation",
         }
 
         response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
 
         assert response.status_code == 400
         data = response.json()
         assert "errors" in data
 
-    def test_pending_intents_endpoint(self, real_api_client, e2e_config, unique_user_id):
+    def test_pending_intents_endpoint(
+        self, real_api_client, e2e_config, unique_user_id
+    ):
         """Test getting pending intents."""
         # Create an intent (minimum interval is 5 minutes)
         payload = {
@@ -629,11 +638,10 @@ class TestIntentsE2EValidation:
             "intent_name": "E2E Pending Test",
             "trigger_type": "interval",
             "trigger_schedule": {"interval_minutes": 5},
-            "action_context": "Pending test"
+            "action_context": "Pending test",
         }
         create_response = real_api_client.post(
-            f"{e2e_config.api_base_url}/v1/intents",
-            json=payload
+            f"{e2e_config.api_base_url}/v1/intents", json=payload
         )
         assert create_response.status_code == 201
         intent_id = create_response.json()["id"]

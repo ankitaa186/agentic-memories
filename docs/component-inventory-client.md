@@ -291,7 +291,7 @@
 **Production Build:**
 1. Build UI: `cd ui && npm run build`
 2. Output: `ui/dist/`
-3. Served via Docker: `http://localhost:80`
+3. Served via Docker: `http://localhost:3000`
 
 ---
 

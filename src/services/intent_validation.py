@@ -13,6 +13,7 @@ Validation Rules:
 - AC6: Required fields by trigger type
 - AC7: Return all errors in single response
 """
+
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, TYPE_CHECKING
@@ -48,28 +49,30 @@ REQUIRED_FIELDS = {
 
 # Expression validation patterns (Story 6.2)
 # Price expression: TICKER OP VALUE (e.g., "NVDA < 130", "AAPL >= 200.50")
-PRICE_EXPR_PATTERN = re.compile(r'^[A-Z]{1,5}\s*[<>=!]{1,2}\s*[0-9.]+$')
+PRICE_EXPR_PATTERN = re.compile(r"^[A-Z]{1,5}\s*[<>=!]{1,2}\s*[0-9.]+$")
 
 # Portfolio expression keywords
 PORTFOLIO_KEYWORDS = {
-    'any_holding_change', 'any_holding_up', 'any_holding_down',
-    'total_value', 'total_change'
+    "any_holding_change",
+    "any_holding_up",
+    "any_holding_down",
+    "total_value",
+    "total_change",
 }
 
 # Portfolio expression patterns (Story 6.5 AC5.2)
 # Percentage patterns: any_holding_change > 5%, total_change >= -10%
 PORTFOLIO_PERCENTAGE_PATTERN = re.compile(
-    r'^(any_holding_change|any_holding_down|any_holding_up|total_change)\s*(>|>=|<|<=)\s*(-?\d+(\.\d+)?)%$',
-    re.IGNORECASE
+    r"^(any_holding_change|any_holding_down|any_holding_up|total_change)\s*(>|>=|<|<=)\s*(-?\d+(\.\d+)?)%$",
+    re.IGNORECASE,
 )
 # Absolute value pattern: total_value >= 100000
 PORTFOLIO_ABSOLUTE_PATTERN = re.compile(
-    r'^total_value\s*(>|>=|<|<=)\s*(-?\d+(\.\d+)?)$',
-    re.IGNORECASE
+    r"^total_value\s*(>|>=|<|<=)\s*(-?\d+(\.\d+)?)$", re.IGNORECASE
 )
 
 # Silence expression: inactive_hours > N
-SILENCE_EXPR_PATTERN = re.compile(r'^inactive_hours\s*>\s*\d+$')
+SILENCE_EXPR_PATTERN = re.compile(r"^inactive_hours\s*>\s*\d+$")
 
 
 @dataclass
@@ -80,6 +83,7 @@ class ValidationResult:
         is_valid: True if all validation checks passed
         errors: List of human-readable error messages for failed checks
     """
+
     is_valid: bool
     errors: List[str]
 
@@ -136,7 +140,11 @@ class IntentValidationService:
         errors.extend(required_errors)
 
         # AC2, AC3: Validate cron expression frequency and daily count
-        if intent.trigger_type == "cron" and intent.trigger_schedule and intent.trigger_schedule.cron:
+        if (
+            intent.trigger_type == "cron"
+            and intent.trigger_schedule
+            and intent.trigger_schedule.cron
+        ):
             cron_errors = self._validate_cron_frequency(intent.trigger_schedule.cron)
             errors.extend(cron_errors)
 
@@ -167,12 +175,15 @@ class IntentValidationService:
         if not is_valid:
             logger.warning(
                 "[intent.validation] user_id=%s trigger_type=%s errors=%d",
-                intent.user_id, intent.trigger_type, len(errors)
+                intent.user_id,
+                intent.trigger_type,
+                len(errors),
             )
         else:
             logger.info(
                 "[intent.validation] user_id=%s trigger_type=%s valid=true",
-                intent.user_id, intent.trigger_type
+                intent.user_id,
+                intent.trigger_type,
             )
 
         return ValidationResult(is_valid=is_valid, errors=errors)
@@ -199,16 +210,20 @@ class IntentValidationService:
                     FROM scheduled_intents
                     WHERE user_id = %s AND enabled = true
                     """,
-                    (user_id,)
+                    (user_id,),
                 )
                 row = cur.fetchone()
                 count = row["count"] if row else 0
 
                 if count >= MAX_TRIGGERS_PER_USER:
-                    errors.append(f"Limit reached: {MAX_TRIGGERS_PER_USER} active triggers max")
+                    errors.append(
+                        f"Limit reached: {MAX_TRIGGERS_PER_USER} active triggers max"
+                    )
                     logger.info(
                         "[intent.validation.count] user_id=%s count=%d limit=%d exceeded=true",
-                        user_id, count, MAX_TRIGGERS_PER_USER
+                        user_id,
+                        count,
+                        MAX_TRIGGERS_PER_USER,
                     )
         except Exception as e:
             logger.error("[intent.validation.count] user_id=%s error=%s", user_id, e)
@@ -266,11 +281,15 @@ class IntentValidationService:
 
         except Exception as e:
             errors.append(f"Invalid cron expression: {e}")
-            logger.warning("[intent.validation.cron] expression=%s error=%s", cron_expression, e)
+            logger.warning(
+                "[intent.validation.cron] expression=%s error=%s", cron_expression, e
+            )
 
         return errors
 
-    def _validate_interval(self, trigger_schedule: Optional[TriggerSchedule]) -> List[str]:
+    def _validate_interval(
+        self, trigger_schedule: Optional[TriggerSchedule]
+    ) -> List[str]:
         """Validate interval trigger meets minimum duration (AC4).
 
         Note: Pydantic already validates check_interval_minutes >= 5,
@@ -296,7 +315,9 @@ class IntentValidationService:
 
         return errors
 
-    def _validate_once_trigger(self, trigger_schedule: Optional[TriggerSchedule]) -> List[str]:
+    def _validate_once_trigger(
+        self, trigger_schedule: Optional[TriggerSchedule]
+    ) -> List[str]:
         """Validate one-time trigger is scheduled in the future (AC5).
 
         Handles timezone-aware comparisons correctly.
@@ -346,7 +367,9 @@ class IntentValidationService:
         trigger_type = intent.trigger_type
 
         if trigger_type not in REQUIRED_FIELDS:
-            logger.warning("[intent.validation.required] unknown trigger_type=%s", trigger_type)
+            logger.warning(
+                "[intent.validation.required] unknown trigger_type=%s", trigger_type
+            )
             return errors
 
         requirements = REQUIRED_FIELDS[trigger_type]
@@ -355,17 +378,25 @@ class IntentValidationService:
         if "schedule" in requirements:
             for field in requirements["schedule"]:
                 if intent.trigger_schedule is None:
-                    errors.append(f"trigger_schedule.{field} required for type '{trigger_type}'")
+                    errors.append(
+                        f"trigger_schedule.{field} required for type '{trigger_type}'"
+                    )
                 elif getattr(intent.trigger_schedule, field, None) is None:
-                    errors.append(f"trigger_schedule.{field} required for type '{trigger_type}'")
+                    errors.append(
+                        f"trigger_schedule.{field} required for type '{trigger_type}'"
+                    )
 
         # Check condition fields
         if "condition" in requirements:
             for field in requirements["condition"]:
                 if intent.trigger_condition is None:
-                    errors.append(f"trigger_condition.{field} required for type '{trigger_type}'")
+                    errors.append(
+                        f"trigger_condition.{field} required for type '{trigger_type}'"
+                    )
                 elif getattr(intent.trigger_condition, field, None) is None:
-                    errors.append(f"trigger_condition.{field} required for type '{trigger_type}'")
+                    errors.append(
+                        f"trigger_condition.{field} required for type '{trigger_type}'"
+                    )
 
         return errors
 
@@ -384,14 +415,18 @@ class IntentValidationService:
         errors: List[str] = []
 
         if not tz:
-            errors.append("timezone cannot be empty. Use IANA format (e.g., 'America/Los_Angeles')")
+            errors.append(
+                "timezone cannot be empty. Use IANA format (e.g., 'America/Los_Angeles')"
+            )
             return errors
 
         try:
             ZoneInfo(tz)
             logger.debug("[intent.validation.timezone] tz=%s valid=true", tz)
         except ZoneInfoNotFoundError:
-            errors.append(f"Invalid timezone: {tz}. Use IANA format (e.g., 'America/Los_Angeles')")
+            errors.append(
+                f"Invalid timezone: {tz}. Use IANA format (e.g., 'America/Los_Angeles')"
+            )
             logger.info("[intent.validation.timezone] tz=%s valid=false", tz)
 
         return errors
@@ -422,9 +457,9 @@ class IntentValidationService:
 
         # Warn if both expression and structured fields are provided
         has_structured_price = (
-            condition.ticker is not None or
-            condition.operator is not None or
-            condition.value is not None
+            condition.ticker is not None
+            or condition.operator is not None
+            or condition.value is not None
         )
         has_structured_silence = condition.threshold_hours is not None
 
@@ -432,7 +467,8 @@ class IntentValidationService:
             logger.warning(
                 "[intent.validation.expression] Both expression and structured fields provided. "
                 "Expression takes precedence. trigger_type=%s expression=%s",
-                trigger_type, condition.expression
+                trigger_type,
+                condition.expression,
             )
 
         # Validate based on condition type
@@ -444,7 +480,7 @@ class IntentValidationService:
                 )
                 logger.info(
                     "[intent.validation.expression] price expression invalid: %s",
-                    condition.expression
+                    condition.expression,
                 )
 
         elif cond_type == "portfolio":
@@ -462,7 +498,7 @@ class IntentValidationService:
                 )
                 logger.info(
                     "[intent.validation.expression] portfolio expression invalid: %s",
-                    condition.expression
+                    condition.expression,
                 )
 
         elif cond_type == "silence":
@@ -473,20 +509,22 @@ class IntentValidationService:
                 )
                 logger.info(
                     "[intent.validation.expression] silence expression invalid: %s",
-                    condition.expression
+                    condition.expression,
                 )
 
         else:
             # Unknown condition type with expression - just log, don't error
             logger.debug(
                 "[intent.validation.expression] Unknown condition type %s with expression: %s",
-                cond_type, condition.expression
+                cond_type,
+                condition.expression,
             )
 
         if not errors:
             logger.debug(
                 "[intent.validation.expression] valid=true type=%s expression=%s",
-                cond_type, condition.expression
+                cond_type,
+                condition.expression,
             )
 
         return errors

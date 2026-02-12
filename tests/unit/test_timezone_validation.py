@@ -3,22 +3,22 @@ Unit tests for timezone validation in IntentValidationService (Epic 6 Story 6.1)
 
 Tests AC1.3: Invalid timezones return validation error with IANA format example.
 """
+
 import pytest
 
 from src.schemas import ScheduledIntentCreate, TriggerSchedule
 from src.services.intent_validation import IntentValidationService
 
 
-def make_intent(timezone: str = "America/Los_Angeles", **kwargs) -> ScheduledIntentCreate:
+def make_intent(
+    timezone: str = "America/Los_Angeles", **kwargs
+) -> ScheduledIntentCreate:
     """Helper to create a minimal valid intent with timezone."""
     defaults = {
         "user_id": "test-user",
         "intent_name": "Test Intent",
         "trigger_type": "cron",
-        "trigger_schedule": TriggerSchedule(
-            cron="0 9 * * *",
-            timezone=timezone
-        ),
+        "trigger_schedule": TriggerSchedule(cron="0 9 * * *", timezone=timezone),
         "action_context": "Test context",
     }
     defaults.update(kwargs)

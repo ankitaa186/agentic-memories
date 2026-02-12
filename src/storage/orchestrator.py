@@ -11,30 +11,30 @@ logger = logging.getLogger(__name__)
 
 
 class StorageOrchestrator:
-	"""Facade for cross-store operations.
+    """Facade for cross-store operations.
 
-	This orchestrates writes/reads across Timescale/Postgres and Chroma.
-	It is intentionally minimal; production concerns like retries/transactions
-	should be layered in as features roll out.
-	"""
+    This orchestrates writes/reads across Timescale/Postgres and Chroma.
+    It is intentionally minimal; production concerns like retries/transactions
+    should be layered in as features roll out.
+    """
 
-	def __init__(self) -> None:
-		self._timescale = get_timescale_conn()
-		self._chroma = get_chroma_client()
+    def __init__(self) -> None:
+        self._timescale = get_timescale_conn()
+        self._chroma = get_chroma_client()
 
-	def insert_episode(self, episode: Dict[str, Any]) -> Optional[str]:
-		"""Insert an episodic memory row into Timescale.
+    def insert_episode(self, episode: Dict[str, Any]) -> Optional[str]:
+        """Insert an episodic memory row into Timescale.
 
-		Returns the logical id (UUID string) if present, otherwise None.
-		"""
-		conn = self._timescale
-		if conn is None:
-			logger.info("[orchestrator] timescale not configured; skip episode insert")
-			return episode.get("id")
-		try:
-			with conn.cursor() as cur:
-				cur.execute(
-					"""
+        Returns the logical id (UUID string) if present, otherwise None.
+        """
+        conn = self._timescale
+        if conn is None:
+            logger.info("[orchestrator] timescale not configured; skip episode insert")
+            return episode.get("id")
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
 					INSERT INTO episodic_memories (
 						id, user_id, event_timestamp, event_type, content,
 						location, participants, emotional_valence, emotional_arousal,
@@ -47,44 +47,50 @@ class StorageOrchestrator:
 						%(last_recalled)s, %(decay_factor)s
 					) ON CONFLICT DO NOTHING
 					""",
-					episode,
-				)
-				conn.commit()
-			return episode.get("id")
-		except Exception as exc:
-			logger.info("[orchestrator] insert_episode failed: %s", exc)
-			return episode.get("id")
+                    episode,
+                )
+                conn.commit()
+            return episode.get("id")
+        except Exception as exc:
+            logger.info("[orchestrator] insert_episode failed: %s", exc)
+            return episode.get("id")
 
-	def upsert_chroma(self, _id: str, embedding: Optional[list[float]], metadata: Dict[str, Any]) -> None:
-		client = self._chroma
-		if client is None:
-			logger.info("[orchestrator] chroma not configured; skip upsert")
-			return
-		try:
-			col = None
-			# Prefer existing collection helper if available via retrieval utils
-			for c in client.list_collections():
-				if hasattr(c, "name") and c.name:
-					col = c
-					break
-			if col is None:
-				logger.info("[orchestrator] no chroma collections found; skip upsert")
-				return
-			# Upsert is supported by chromadb
-			col.upsert(ids=[_id], embeddings=[embedding] if embedding else None, metadatas=[metadata])
-		except Exception as exc:
-			logger.info("[orchestrator] chroma upsert failed: %s", exc)
+    def upsert_chroma(
+        self, _id: str, embedding: Optional[list[float]], metadata: Dict[str, Any]
+    ) -> None:
+        client = self._chroma
+        if client is None:
+            logger.info("[orchestrator] chroma not configured; skip upsert")
+            return
+        try:
+            col = None
+            # Prefer existing collection helper if available via retrieval utils
+            for c in client.list_collections():
+                if hasattr(c, "name") and c.name:
+                    col = c
+                    break
+            if col is None:
+                logger.info("[orchestrator] no chroma collections found; skip upsert")
+                return
+            # Upsert is supported by chromadb
+            col.upsert(
+                ids=[_id],
+                embeddings=[embedding] if embedding else None,
+                metadatas=[metadata],
+            )
+        except Exception as exc:
+            logger.info("[orchestrator] chroma upsert failed: %s", exc)
 
-	def update_semantic_knowledge(self, facts: list[Dict[str, Any]]) -> None:
-		conn = self._timescale
-		if conn is None:
-			return
-		# Depending on deployment, semantic_memories may live in the same DSN
-		try:
-			with conn.cursor() as cur:
-				for f in facts or []:
-					cur.execute(
-						"""
+    def update_semantic_knowledge(self, facts: list[Dict[str, Any]]) -> None:
+        conn = self._timescale
+        if conn is None:
+            return
+        # Depending on deployment, semantic_memories may live in the same DSN
+        try:
+            with conn.cursor() as cur:
+                for f in facts or []:
+                    cur.execute(
+                        """
 						INSERT INTO semantic_memories (
 							id, user_id, content, category, subcategory, confidence,
 							source_episodes, learned_date, last_accessed, access_count,
@@ -99,20 +105,20 @@ class StorageOrchestrator:
 							last_accessed = EXCLUDED.last_accessed,
 							access_count = GREATEST(semantic_memories.access_count, EXCLUDED.access_count)
 						""",
-						f,
-					)
-				conn.commit()
-		except Exception as exc:
-			logger.info("[orchestrator] update_semantic_knowledge failed: %s", exc)
+                        f,
+                    )
+                conn.commit()
+        except Exception as exc:
+            logger.info("[orchestrator] update_semantic_knowledge failed: %s", exc)
 
-	def record_emotional_state(self, state: Dict[str, Any]) -> None:
-		conn = self._timescale
-		if conn is None:
-			return
-		try:
-			with conn.cursor() as cur:
-				cur.execute(
-					"""
+    def record_emotional_state(self, state: Dict[str, Any]) -> None:
+        conn = self._timescale
+        if conn is None:
+            return
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
 					INSERT INTO emotional_memories (
 						user_id, timestamp, emotion_vector, triggers, intensity, duration,
 						coping_strategies, resolution, linked_episodes
@@ -121,10 +127,8 @@ class StorageOrchestrator:
 						%(coping_strategies)s, %(resolution)s, %(linked_episodes)s
 					)
 					""",
-					state,
-				)
-				conn.commit()
-		except Exception as exc:
-			logger.info("[orchestrator] record_emotional_state failed: %s", exc)
-
-
+                    state,
+                )
+                conn.commit()
+        except Exception as exc:
+            logger.info("[orchestrator] record_emotional_state failed: %s", exc)

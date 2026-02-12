@@ -22,12 +22,19 @@ def test_retrieve_uses_persona_results(api_client, monkeypatch):
         source="hybrid",
     )
 
-    monkeypatch.setattr("src.app._persona_copilot.retrieve", lambda **_: {"identity": persona_result})
-    search_stub = lambda **_: (_ for _ in ()).throw(AssertionError("search_memories should not be called"))
+    monkeypatch.setattr(
+        "src.app._persona_copilot.retrieve", lambda **_: {"identity": persona_result}
+    )
+
+    def search_stub(**_):
+        raise AssertionError("search_memories should not be called")
+
     monkeypatch.setattr("src.app.search_memories", search_stub)
     monkeypatch.setattr("src.services.tracing.start_trace", lambda **_: None)
 
-    response = api_client.get("/v1/retrieve", params={"user_id": "user-123", "query": "call"})
+    response = api_client.get(
+        "/v1/retrieve", params={"user_id": "user-123", "query": "call"}
+    )
     assert response.status_code == 200
     data = response.json()
 
@@ -55,7 +62,9 @@ def test_retrieve_falls_back_to_semantic_search(api_client, monkeypatch):
     monkeypatch.setattr("src.app.search_memories", lambda **_: (fallback_items, 1))
     monkeypatch.setattr("src.services.tracing.start_trace", lambda **_: None)
 
-    response = api_client.get("/v1/retrieve", params={"user_id": "user-123", "query": "goals", "limit": 1})
+    response = api_client.get(
+        "/v1/retrieve", params={"user_id": "user-123", "query": "goals", "limit": 1}
+    )
     assert response.status_code == 200
     data = response.json()
 
