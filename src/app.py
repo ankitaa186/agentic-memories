@@ -53,7 +53,7 @@ from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url, get_chroma_tenant, get_chroma_database
 import httpx
 from src.services.reconstruction import ReconstructionService
-from src.services.retrieval import search_memories
+from src.services.retrieval import search_memories, _standard_collection_name as _standard_collection_name  # noqa: F401 — used by test monkeypatch
 from src.services.extract_utils import _call_llm_json
 from src.dependencies.cloudflare_access import (
     verify_cf_access_token,
