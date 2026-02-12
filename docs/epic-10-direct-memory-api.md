@@ -239,7 +239,7 @@ class DirectMemoryResponse(BaseModel):
 // Request
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User is allergic to shellfish - confirmed severe reaction, carries EpiPen",
   "layer": "semantic",
   "type": "explicit",
@@ -265,7 +265,7 @@ POST /v1/memories/direct
 // Request
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User attended daughter's graduation ceremony at Stanford",
   "layer": "long-term",
   "type": "explicit",
@@ -294,7 +294,7 @@ POST /v1/memories/direct
 // Request
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User expressed frustration about job search taking too long",
   "layer": "semantic",
   "type": "explicit",
@@ -356,7 +356,7 @@ class DeleteMemoryResponse(BaseModel):
 #### Example: Successful Deletion
 
 ```
-DELETE /v1/memories/mem_a1b2c3d4e5f6?user_id=0000000000
+DELETE /v1/memories/mem_a1b2c3d4e5f6?user_id=1169491032
 
 {
   "status": "success",
@@ -372,7 +372,7 @@ DELETE /v1/memories/mem_a1b2c3d4e5f6?user_id=0000000000
 #### Example: Not Found
 
 ```
-DELETE /v1/memories/mem_nonexistent?user_id=0000000000
+DELETE /v1/memories/mem_nonexistent?user_id=1169491032
 
 {
   "status": "error",

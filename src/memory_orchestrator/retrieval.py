@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from .client_api import MemoryInjection, MemoryInjectionChannel, MemoryInjectionSource, MessageEvent, MessageRole
+from .client_api import (
+    MemoryInjection,
+    MemoryInjectionChannel,
+    MemoryInjectionSource,
+    MessageEvent,
+    MessageRole,
+)
 from .policies import RetrievalPolicy
 
 
@@ -63,7 +69,9 @@ class RetrievalOrchestrator:
 
         for result in retrieval_results:
             memory_id = str(result.get("id"))
-            if not memory_id or state.recently_injected(memory_id, self._policy.reinjection_cooldown_turns):
+            if not memory_id or state.recently_injected(
+                memory_id, self._policy.reinjection_cooldown_turns
+            ):
                 continue
 
             injection = self._build_injection(event.conversation_id, result)
@@ -135,4 +143,3 @@ def _source_from_layer(layer: str) -> MemoryInjectionSource:
     if normalized == "semantic":
         return MemoryInjectionSource.LONG_TERM
     return MemoryInjectionSource.SYSTEM
-

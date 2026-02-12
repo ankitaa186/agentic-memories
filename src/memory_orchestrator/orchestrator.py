@@ -26,7 +26,10 @@ logger = logging.getLogger("agentic_memories.orchestrator")
 
 
 PersistFn = Callable[[str, Sequence[Memory]], Sequence[str]]
-SearchFn = Callable[[str, str, Optional[Dict[str, object]], int, int], Tuple[List[Dict[str, object]], int]]
+SearchFn = Callable[
+    [str, str, Optional[Dict[str, object]], int, int],
+    Tuple[List[Dict[str, object]], int],
+]
 
 
 class AdaptiveMemoryOrchestrator(MemoryOrchestratorClient):
@@ -54,7 +57,9 @@ class AdaptiveMemoryOrchestrator(MemoryOrchestratorClient):
             self._ensure_open()
             adapted = self._adapter.adapt(event)
             logger.info(
-                "[orchestrator.stream] conversation=%s role=%s", adapted.conversation_id, adapted.role
+                "[orchestrator.stream] conversation=%s role=%s",
+                adapted.conversation_id,
+                adapted.role,
             )
 
             batches = self._ingestion.process(adapted)
@@ -134,7 +139,7 @@ class AdaptiveMemoryOrchestrator(MemoryOrchestratorClient):
                 batch.user_id,
             )
             return
-        
+
         try:
             ids = self._persist(batch.user_id, memories)
             logger.debug(
@@ -146,7 +151,9 @@ class AdaptiveMemoryOrchestrator(MemoryOrchestratorClient):
             )
         except Exception:
             logger.exception(
-                "[orchestrator.persist.error] conversation=%s user=%s", batch.conversation_id, batch.user_id
+                "[orchestrator.persist.error] conversation=%s user=%s",
+                batch.conversation_id,
+                batch.user_id,
             )
 
     def _maybe_retrieve(self, event: MessageEvent) -> List[MemoryInjection]:
@@ -183,4 +190,3 @@ def build_default_orchestrator() -> AdaptiveMemoryOrchestrator:
     """Factory used by services to obtain the adaptive orchestrator."""
 
     return AdaptiveMemoryOrchestrator()
-

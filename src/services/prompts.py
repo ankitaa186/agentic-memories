@@ -710,5 +710,3 @@ User: "I'm terrible at public speaking but getting better with practice."
 
 **Extract memories as JSON array:**
 """.strip()
-
-

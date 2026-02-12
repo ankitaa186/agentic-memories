@@ -78,7 +78,9 @@ class SummaryStore:
     def _key(self, user_id: str, persona: str, tier: SummaryTier) -> str:
         return f"persona:summary:{user_id}:{persona}:{tier.value}"
 
-    def load(self, user_id: str, persona: str, tier: SummaryTier) -> List[SummaryRecord]:
+    def load(
+        self, user_id: str, persona: str, tier: SummaryTier
+    ) -> List[SummaryRecord]:
         key = self._key(user_id, persona, tier)
         if self._redis is not None:
             raw = self._redis.get(key)
@@ -90,7 +92,13 @@ class SummaryStore:
                     pass
         return list(self._cache.get(key, []))
 
-    def save(self, user_id: str, persona: str, tier: SummaryTier, records: List[SummaryRecord]) -> None:
+    def save(
+        self,
+        user_id: str,
+        persona: str,
+        tier: SummaryTier,
+        records: List[SummaryRecord],
+    ) -> None:
         key = self._key(user_id, persona, tier)
         if self._redis is not None:
             payload = json.dumps([record.to_dict() for record in records])
@@ -133,12 +141,18 @@ class SummaryManager:
         newest = max(record.created_at for record in records)
         age = datetime.now(timezone.utc) - newest
         # Consider stale if older than 24 hours or freshness below threshold
-        return age.total_seconds() > 86400 or any(record.freshness < 0.6 for record in records)
+        return age.total_seconds() > 86400 or any(
+            record.freshness < 0.6 for record in records
+        )
 
-    def _generate(self, user_id: str, persona: str, tier: SummaryTier) -> List[SummaryRecord]:
+    def _generate(
+        self, user_id: str, persona: str, tier: SummaryTier
+    ) -> List[SummaryRecord]:
         query = ""  # Blank query to fetch persona scoped memories
         filters = {"persona_tags": [persona]}
-        results, _ = search_memories(user_id=user_id, query=query, filters=filters, limit=20, offset=0)
+        results, _ = search_memories(
+            user_id=user_id, query=query, filters=filters, limit=20, offset=0
+        )
         if not results:
             return []
 
@@ -153,7 +167,9 @@ class SummaryManager:
         else:
             text = f"Recent highlights for {persona}: " + "; ".join(snippets)
 
-        confidence = sum((item.get("score", 0.0) or 0.0) for item in top_memories) / max(len(top_memories), 1)
+        confidence = sum(
+            (item.get("score", 0.0) or 0.0) for item in top_memories
+        ) / max(len(top_memories), 1)
         freshness = 1.0
         now = datetime.now(timezone.utc)
         record = SummaryRecord(

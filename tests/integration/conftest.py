@@ -6,7 +6,6 @@ database connections and FastAPI's TestClient.
 Note: E2E fixtures (real HTTP client, app_ready, etc.) are located in
 tests/e2e/conftest.py for tests running against the deployed Docker container.
 """
-import pytest
 
 
 # Integration-specific fixtures can be added here as needed.

@@ -6,6 +6,7 @@ Tests AC4.2: TriggerCondition accepts fire_mode field
 Tests AC4.3: Fire endpoint disables intent when fire_mode='once' and status='success'
 Tests AC4.4: Response includes was_disabled_reason='fire_mode_once'
 """
+
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -68,19 +69,14 @@ class TestFireModeWithOtherFields:
 
     def test_fire_mode_with_cooldown_hours(self):
         """fire_mode coexists with cooldown_hours."""
-        condition = TriggerCondition(
-            fire_mode="once",
-            cooldown_hours=48
-        )
+        condition = TriggerCondition(fire_mode="once", cooldown_hours=48)
         assert condition.fire_mode == "once"
         assert condition.cooldown_hours == 48
 
     def test_fire_mode_with_expression(self):
         """fire_mode coexists with expression field."""
         condition = TriggerCondition(
-            fire_mode="once",
-            expression="NVDA < 130",
-            condition_type="price"
+            fire_mode="once", expression="NVDA < 130", condition_type="price"
         )
         assert condition.fire_mode == "once"
         assert condition.expression == "NVDA < 130"
@@ -88,10 +84,7 @@ class TestFireModeWithOtherFields:
     def test_fire_mode_with_legacy_fields(self):
         """fire_mode coexists with legacy structured fields."""
         condition = TriggerCondition(
-            fire_mode="once",
-            ticker="NVDA",
-            operator="<",
-            value=130.0
+            fire_mode="once", ticker="NVDA", operator="<", value=130.0
         )
         assert condition.fire_mode == "once"
         assert condition.ticker == "NVDA"
@@ -145,10 +138,7 @@ class TestIntentFireResponseWithFireMode:
     def test_was_disabled_reason_default_none(self):
         """was_disabled_reason defaults to None."""
         response = IntentFireResponse(
-            intent_id=uuid4(),
-            status="success",
-            enabled=True,
-            execution_count=1
+            intent_id=uuid4(), status="success", enabled=True, execution_count=1
         )
         assert response.was_disabled_reason is None
 
@@ -159,7 +149,7 @@ class TestIntentFireResponseWithFireMode:
             status="success",
             enabled=False,
             execution_count=1,
-            was_disabled_reason="fire_mode_once"
+            was_disabled_reason="fire_mode_once",
         )
         assert response.was_disabled_reason == "fire_mode_once"
         assert response.enabled is False
@@ -173,7 +163,7 @@ class TestIntentFireResponseWithFireMode:
             enabled=False,
             execution_count=1,
             was_disabled_reason="fire_mode_once",
-            next_check=None  # Should be None when disabled
+            next_check=None,  # Should be None when disabled
         )
 
         assert response.intent_id == intent_id
@@ -190,7 +180,7 @@ class TestIntentFireResponseWithFireMode:
             enabled=True,
             execution_count=2,
             was_disabled_reason=None,
-            next_check=datetime.now(timezone.utc)
+            next_check=datetime.now(timezone.utc),
         )
 
         assert response.enabled is True
@@ -220,7 +210,7 @@ class TestFireModeOnceNonSuccess:
             status=status,
             enabled=True,  # Should stay enabled on non-success
             execution_count=1,
-            was_disabled_reason=None  # No disable reason
+            was_disabled_reason=None,  # No disable reason
         )
 
         assert response.status == status

@@ -13,17 +13,42 @@ from src.services.summary_manager import SummaryManager
 PERSONA_WEIGHT_PROFILES: Dict[str, Dict[str, float]] = {
     # Core personas (general-purpose)
     "identity": {"semantic": 0.5, "temporal": 0.2, "importance": 0.2, "emotional": 0.1},
-    "relationships": {"semantic": 0.3, "temporal": 0.2, "importance": 0.2, "emotional": 0.3},
-    "health": {"semantic": 0.25, "temporal": 0.25, "importance": 0.25, "emotional": 0.25},
+    "relationships": {
+        "semantic": 0.3,
+        "temporal": 0.2,
+        "importance": 0.2,
+        "emotional": 0.3,
+    },
+    "health": {
+        "semantic": 0.25,
+        "temporal": 0.25,
+        "importance": 0.25,
+        "emotional": 0.25,
+    },
     "finance": {"semantic": 0.3, "temporal": 0.3, "importance": 0.3, "emotional": 0.1},
-    "creativity": {"semantic": 0.4, "temporal": 0.15, "importance": 0.25, "emotional": 0.2},
+    "creativity": {
+        "semantic": 0.4,
+        "temporal": 0.15,
+        "importance": 0.25,
+        "emotional": 0.2,
+    },
     # Annie companion personas
     # - partner: Intimate companion with deep emotional bond, pattern recognition, mirror work
-    "partner": {"semantic": 0.25, "temporal": 0.25, "importance": 0.15, "emotional": 0.35},
+    "partner": {
+        "semantic": 0.25,
+        "temporal": 0.25,
+        "importance": 0.15,
+        "emotional": 0.35,
+    },
     # - guide: Wise mentor for decisions, goals, accountability, transformation
     "guide": {"semantic": 0.3, "temporal": 0.25, "importance": 0.3, "emotional": 0.15},
     # - strategist: Financial advisor for investments, portfolio, wealth planning
-    "strategist": {"semantic": 0.25, "temporal": 0.3, "importance": 0.35, "emotional": 0.1},
+    "strategist": {
+        "semantic": 0.25,
+        "temporal": 0.3,
+        "importance": 0.35,
+        "emotional": 0.1,
+    },
     # - expert: Technical peer for DIY, cooking, smart home, domain knowledge
     "expert": {"semantic": 0.5, "temporal": 0.15, "importance": 0.2, "emotional": 0.15},
     # - friend: Casual warm companion for everyday moments
@@ -70,10 +95,14 @@ class PersonaRetrievalResult:
 class PersonaRetrievalAgent:
     """Wraps retrieval services with persona-specific weighting."""
 
-    def __init__(self, persona: str, hybrid_service: Optional[HybridRetrievalService] = None):
+    def __init__(
+        self, persona: str, hybrid_service: Optional[HybridRetrievalService] = None
+    ):
         self.persona = persona
         self.hybrid = hybrid_service or HybridRetrievalService()
-        self.weight_profile = PERSONA_WEIGHT_PROFILES.get(persona, PERSONA_WEIGHT_PROFILES["identity"])
+        self.weight_profile = PERSONA_WEIGHT_PROFILES.get(
+            persona, PERSONA_WEIGHT_PROFILES["identity"]
+        )
 
     def retrieve(
         self,
@@ -106,7 +135,9 @@ class PersonaRetrievalAgent:
         if persona_requested:
             filtered_results = []
             for result in hybrid_results:
-                tags = _normalize_persona_tags((result.metadata or {}).get("persona_tags"))
+                tags = _normalize_persona_tags(
+                    (result.metadata or {}).get("persona_tags")
+                )
                 if any(tag in target_tags for tag in tags):
                     filtered_results.append(result)
             hybrid_results = filtered_results
@@ -114,7 +145,9 @@ class PersonaRetrievalAgent:
             prioritized: List[Any] = []
             remainder: List[Any] = []
             for result in hybrid_results:
-                tags = _normalize_persona_tags((result.metadata or {}).get("persona_tags"))
+                tags = _normalize_persona_tags(
+                    (result.metadata or {}).get("persona_tags")
+                )
                 if self.persona in tags:
                     prioritized.append(result)
                 else:
@@ -170,7 +203,9 @@ class PersonaRetrievalAgent:
                 prioritized = []
                 remainder = []
                 for item in fallback:
-                    tags = _normalize_persona_tags((item.get("metadata") or {}).get("persona_tags"))
+                    tags = _normalize_persona_tags(
+                        (item.get("metadata") or {}).get("persona_tags")
+                    )
                     if self.persona in tags:
                         prioritized.append(item)
                     else:
@@ -204,7 +239,9 @@ class PersonaCoPilot:
             self._agents[persona] = PersonaRetrievalAgent(persona)
         return self._agents[persona]
 
-    def _resolve_personas(self, state: PersonaState, forced_persona: Optional[str] = None) -> List[str]:
+    def _resolve_personas(
+        self, state: PersonaState, forced_persona: Optional[str] = None
+    ) -> List[str]:
         if forced_persona:
             return [forced_persona]
         personas = state.active_personas or []
@@ -225,7 +262,9 @@ class PersonaCoPilot:
         persona_context = persona_context or {}
         forced = persona_context.get("forced_persona")
         if persona_context.get("active_personas"):
-            self.state_store.update_state(user_id, active_personas=list(persona_context["active_personas"]))
+            self.state_store.update_state(
+                user_id, active_personas=list(persona_context["active_personas"])
+            )
         if persona_context.get("mood"):
             self.state_store.update_state(user_id, mood=persona_context["mood"])
 

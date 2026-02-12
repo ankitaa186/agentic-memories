@@ -5,6 +5,7 @@ Tests AC2.3: Price expressions validated as "TICKER OP VALUE" format.
 Tests AC2.4: Portfolio expressions validated against supported keywords.
 Tests AC2.5: Backward compatible with existing structured fields.
 """
+
 import pytest
 
 from src.schemas import ScheduledIntentCreate, TriggerCondition
@@ -12,9 +13,7 @@ from src.services.intent_validation import IntentValidationService
 
 
 def make_condition_intent(
-    trigger_type: str = "price",
-    condition: TriggerCondition = None,
-    **kwargs
+    trigger_type: str = "price", condition: TriggerCondition = None, **kwargs
 ) -> ScheduledIntentCreate:
     """Helper to create a minimal valid intent with condition."""
     defaults = {
@@ -60,7 +59,9 @@ class TestPriceExpressionValidation:
 
     def test_valid_price_expression_decimal(self, service_no_db):
         """Valid price expression with decimal 'AAPL >= 200.50' passes validation."""
-        condition = TriggerCondition(expression="AAPL >= 200.50", condition_type="price")
+        condition = TriggerCondition(
+            expression="AAPL >= 200.50", condition_type="price"
+        )
         intent = make_condition_intent(trigger_type="price", condition=condition)
         result = service_no_db.validate(intent)
         assert result.is_valid is True
@@ -119,8 +120,7 @@ class TestPortfolioExpressionValidation:
     def test_valid_portfolio_expression_any_holding_change(self, service_no_db):
         """Valid portfolio expression 'any_holding_change > 5%' passes validation."""
         condition = TriggerCondition(
-            expression="any_holding_change > 5%",
-            condition_type="portfolio"
+            expression="any_holding_change > 5%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -129,8 +129,7 @@ class TestPortfolioExpressionValidation:
     def test_valid_portfolio_expression_any_holding_up(self, service_no_db):
         """Valid portfolio expression 'any_holding_up > 10%' passes validation."""
         condition = TriggerCondition(
-            expression="any_holding_up > 10%",
-            condition_type="portfolio"
+            expression="any_holding_up > 10%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -139,8 +138,7 @@ class TestPortfolioExpressionValidation:
     def test_valid_portfolio_expression_any_holding_down(self, service_no_db):
         """Valid portfolio expression 'any_holding_down > 5%' passes validation."""
         condition = TriggerCondition(
-            expression="any_holding_down > 5%",
-            condition_type="portfolio"
+            expression="any_holding_down > 5%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -149,8 +147,7 @@ class TestPortfolioExpressionValidation:
     def test_valid_portfolio_expression_total_value(self, service_no_db):
         """Valid portfolio expression 'total_value >= 100000' passes validation."""
         condition = TriggerCondition(
-            expression="total_value >= 100000",
-            condition_type="portfolio"
+            expression="total_value >= 100000", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -159,8 +156,7 @@ class TestPortfolioExpressionValidation:
     def test_valid_portfolio_expression_total_change(self, service_no_db):
         """Valid portfolio expression 'total_change > -5%' passes validation."""
         condition = TriggerCondition(
-            expression="total_change > -5%",
-            condition_type="portfolio"
+            expression="total_change > -5%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -169,8 +165,7 @@ class TestPortfolioExpressionValidation:
     def test_invalid_portfolio_expression_unknown_keyword(self, service_no_db):
         """Invalid portfolio expression with unknown keyword fails."""
         condition = TriggerCondition(
-            expression="unknown_metric > 5%",
-            condition_type="portfolio"
+            expression="unknown_metric > 5%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -181,8 +176,7 @@ class TestPortfolioExpressionValidation:
     def test_invalid_portfolio_expression_price_format(self, service_no_db):
         """Portfolio expression in price format fails."""
         condition = TriggerCondition(
-            expression="NVDA < 130",
-            condition_type="portfolio"
+            expression="NVDA < 130", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -196,8 +190,7 @@ class TestSilenceExpressionValidation:
     def test_valid_silence_expression(self, service_no_db):
         """Valid silence expression 'inactive_hours > 48' passes validation."""
         condition = TriggerCondition(
-            expression="inactive_hours > 48",
-            condition_type="silence"
+            expression="inactive_hours > 48", condition_type="silence"
         )
         intent = make_condition_intent(trigger_type="silence", condition=condition)
         result = service_no_db.validate(intent)
@@ -206,8 +199,7 @@ class TestSilenceExpressionValidation:
     def test_valid_silence_expression_no_spaces(self, service_no_db):
         """Valid silence expression without spaces passes validation."""
         condition = TriggerCondition(
-            expression="inactive_hours>24",
-            condition_type="silence"
+            expression="inactive_hours>24", condition_type="silence"
         )
         intent = make_condition_intent(trigger_type="silence", condition=condition)
         result = service_no_db.validate(intent)
@@ -216,8 +208,7 @@ class TestSilenceExpressionValidation:
     def test_invalid_silence_expression_wrong_format(self, service_no_db):
         """Invalid silence expression format fails."""
         condition = TriggerCondition(
-            expression="silence > 48",
-            condition_type="silence"
+            expression="silence > 48", condition_type="silence"
         )
         intent = make_condition_intent(trigger_type="silence", condition=condition)
         result = service_no_db.validate(intent)
@@ -229,7 +220,7 @@ class TestSilenceExpressionValidation:
         """Invalid silence expression with wrong operator fails."""
         condition = TriggerCondition(
             expression="inactive_hours < 48",  # Should be >
-            condition_type="silence"
+            condition_type="silence",
         )
         intent = make_condition_intent(trigger_type="silence", condition=condition)
         result = service_no_db.validate(intent)
@@ -242,11 +233,7 @@ class TestBackwardCompatibility:
 
     def test_structured_fields_still_work(self, service_no_db):
         """Intent with only structured fields (ticker/operator/value) still works."""
-        condition = TriggerCondition(
-            ticker="NVDA",
-            operator="<",
-            value=130.0
-        )
+        condition = TriggerCondition(ticker="NVDA", operator="<", value=130.0)
         intent = make_condition_intent(trigger_type="price", condition=condition)
         result = service_no_db.validate(intent)
         # Should pass - no expression to validate
@@ -262,8 +249,7 @@ class TestBackwardCompatibility:
     def test_no_condition_fields_for_portfolio(self, service_no_db):
         """Portfolio trigger type with expression works."""
         condition = TriggerCondition(
-            expression="any_holding_change > 5%",
-            condition_type="portfolio"
+            expression="any_holding_change > 5%", condition_type="portfolio"
         )
         intent = make_condition_intent(trigger_type="portfolio", condition=condition)
         result = service_no_db.validate(intent)
@@ -276,7 +262,7 @@ class TestBackwardCompatibility:
             operator=">",
             value=200.0,
             expression="NVDA < 130",  # Expression takes precedence
-            condition_type="price"
+            condition_type="price",
         )
         intent = make_condition_intent(trigger_type="price", condition=condition)
         result = service_no_db.validate(intent)
@@ -288,7 +274,7 @@ class TestBackwardCompatibility:
         condition = TriggerCondition(
             ticker="NVDA",
             operator="<",
-            value=130.0
+            value=130.0,
             # No expression field
         )
         intent = make_condition_intent(trigger_type="price", condition=condition)
@@ -324,7 +310,7 @@ class TestTriggerConditionModel:
             value=130.0,
             threshold_hours=48,
             condition_type="price",
-            expression="NVDA < 130"
+            expression="NVDA < 130",
         )
         assert condition.ticker == "NVDA"
         assert condition.operator == "<"
@@ -335,10 +321,7 @@ class TestTriggerConditionModel:
 
     def test_model_dump_includes_new_fields(self):
         """model_dump() includes new fields when set."""
-        condition = TriggerCondition(
-            condition_type="price",
-            expression="NVDA < 130"
-        )
+        condition = TriggerCondition(condition_type="price", expression="NVDA < 130")
         data = condition.model_dump(exclude_none=True)
         assert data["condition_type"] == "price"
         assert data["expression"] == "NVDA < 130"

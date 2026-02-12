@@ -166,7 +166,7 @@ class DeleteMemoryResponse(BaseModel):
 
 ```json
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User is allergic to shellfish - confirmed severe reaction, carries EpiPen",
   "layer": "semantic",
   "type": "explicit",
@@ -185,7 +185,7 @@ class DeleteMemoryResponse(BaseModel):
 
 ```json
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User got engaged to Sarah at the Golden Gate Bridge",
   "layer": "long-term",
   "type": "explicit",
@@ -202,7 +202,7 @@ class DeleteMemoryResponse(BaseModel):
 
 ```json
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User expressed frustration about work-life balance",
   "layer": "semantic",
   "type": "implicit",
@@ -217,7 +217,7 @@ class DeleteMemoryResponse(BaseModel):
 
 ```json
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User learned how to use options trading for hedging",
   "layer": "semantic",
   "type": "explicit",
@@ -286,7 +286,7 @@ DELETE /v1/memories/{memory_id}?user_id={user_id}
 #### Example Request
 
 ```
-DELETE /v1/memories/a1b2c3d4-e5f6-7890-abcd-ef1234567890?user_id=0000000000
+DELETE /v1/memories/a1b2c3d4-e5f6-7890-abcd-ef1234567890?user_id=1169491032
 ```
 
 #### Example Response (Success)

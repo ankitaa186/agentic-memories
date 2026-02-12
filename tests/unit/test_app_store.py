@@ -13,7 +13,9 @@ def test_store_transcript_requires_llm_configuration(api_client, monkeypatch):
     assert response.json()["detail"] == "LLM is not configured"
 
 
-def test_store_transcript_returns_summary_and_updates_cache(api_client, monkeypatch, redis_stub):
+def test_store_transcript_returns_summary_and_updates_cache(
+    api_client, monkeypatch, redis_stub
+):
     timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
     memories = [
         SimpleNamespace(
@@ -43,7 +45,10 @@ def test_store_transcript_returns_summary_and_updates_cache(api_client, monkeypa
     }
 
     run_unified_ingestion = MagicMock(return_value=final_state)
-    monkeypatch.setattr("src.services.unified_ingestion_graph.run_unified_ingestion", run_unified_ingestion)
+    monkeypatch.setattr(
+        "src.services.unified_ingestion_graph.run_unified_ingestion",
+        run_unified_ingestion,
+    )
 
     payload = {
         "user_id": "user-456",

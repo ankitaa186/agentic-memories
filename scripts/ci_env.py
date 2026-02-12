@@ -15,6 +15,7 @@ Usage in GitHub Actions:
         ...
       run: python scripts/ci_env.py --env prod
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +48,9 @@ def get_repo() -> str:
         return repo
 
     # Fallback to gh CLI
-    code, stdout, _ = run_gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    code, stdout, _ = run_gh(
+        ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
+    )
     if code != 0:
         print("Error: Could not determine repository", file=sys.stderr)
         sys.exit(1)
@@ -56,10 +59,14 @@ def get_repo() -> str:
 
 def fetch_environment_variables(repo: str, env_name: str) -> dict[str, str]:
     """Fetch all variables from a GitHub environment."""
-    code, stdout, stderr = run_gh([
-        "api", f"repos/{repo}/environments/{env_name}/variables?per_page=100",
-        "--jq", ".variables // []"
-    ])
+    code, stdout, stderr = run_gh(
+        [
+            "api",
+            f"repos/{repo}/environments/{env_name}/variables?per_page=100",
+            "--jq",
+            ".variables // []",
+        ]
+    )
 
     if code != 0:
         if "Not Found" in stderr:
@@ -79,7 +86,10 @@ def export_to_github_env(variables: dict[str, str]) -> None:
     """Export variables to GITHUB_ENV for subsequent steps."""
     github_env_path = os.environ.get("GITHUB_ENV")
     if not github_env_path:
-        print("Warning: GITHUB_ENV not set (not running in GitHub Actions?)", file=sys.stderr)
+        print(
+            "Warning: GITHUB_ENV not set (not running in GitHub Actions?)",
+            file=sys.stderr,
+        )
         # Print for debugging when run locally
         for key, value in variables.items():
             print(f"  {key}={value[:20]}..." if len(value) > 20 else f"  {key}={value}")
@@ -90,6 +100,7 @@ def export_to_github_env(variables: dict[str, str]) -> None:
             # Handle multiline values with heredoc syntax
             if "\n" in value:
                 import uuid
+
                 delimiter = f"EOF_{uuid.uuid4().hex[:8]}"
                 f.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
             else:
@@ -134,20 +145,18 @@ def main() -> None:
         description="Fetch GitHub environment variables for CI"
     )
     parser.add_argument(
-        "--env",
-        required=True,
-        help="GitHub environment name (dev, prod, staging)"
+        "--env", required=True, help="GitHub environment name (dev, prod, staging)"
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=Path(".env.ci"),
-        help="Output .env file path (default: .env.ci)"
+        help="Output .env file path (default: .env.ci)",
     )
     parser.add_argument(
         "--export",
         action="store_true",
-        help="Also export to GITHUB_ENV for subsequent steps"
+        help="Also export to GITHUB_ENV for subsequent steps",
     )
     args = parser.parse_args()
 

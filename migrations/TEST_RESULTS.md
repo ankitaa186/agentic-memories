@@ -1,7 +1,7 @@
 # Migration Script Test Results
 
 ## Test Environment
-- **Database Password**: Passw0rd1! (all databases)
+- **Database Password**: <your-password> (all databases)
 - **PostgreSQL**: localhost:5433
 - **Neo4j**: bolt://localhost:7687
 - **ChromaDB**: localhost:8000
@@ -28,7 +28,7 @@ bash migrate.sh validate
 
 ### ✅ Test 3: Status Command (with env vars)
 ```bash
-export TIMESCALE_DSN="postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories"
+export TIMESCALE_DSN="postgresql://postgres:<your-password>@localhost:5433/agentic_memories"
 bash migrate.sh status
 ```
 **Result**: PASSED ✅
@@ -42,10 +42,10 @@ bash migrate.sh status
 
 ### ✅ Test 4: Database Statistics Command
 ```bash
-export TIMESCALE_DSN="postgresql://postgres:Passw0rd1!@localhost:5433/agentic_memories"
+export TIMESCALE_DSN="postgresql://postgres:<your-password>@localhost:5433/agentic_memories"
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="Passw0rd1!"
+export NEO4J_PASSWORD="<your-password>"
 export CHROMA_HOST="localhost"
 export CHROMA_PORT="8000"
 bash migrate.sh stats

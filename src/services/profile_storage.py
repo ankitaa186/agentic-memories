@@ -2,6 +2,7 @@
 Profile Storage Service
 Stores and retrieves user profile information from PostgreSQL
 """
+
 from typing import List, Dict, Any, Optional, Set
 import logging
 import json
@@ -17,18 +18,25 @@ logger = logging.getLogger("agentic_memories.profile_storage")
 # These define the baseline for completeness calculation
 # Core fields a "complete" profile should have
 EXPECTED_PROFILE_FIELDS: Dict[str, List[str]] = {
-    'basics': ['name', 'birthday', 'location', 'occupation', 'family_status'],
-    'preferences': ['communication_style', 'food_preferences', 'love_language', 'gift_preferences'],
-    'goals': ['short_term', 'long_term', 'bucket_list'],
-    'interests': ['hobbies', 'learning_areas', 'favorite_topics'],
-    'background': ['skills', 'education_history', 'work_history', 'current_employer'],
-    'health': ['allergies', 'dietary_needs'],
-    'personality': ['personality_type', 'stress_response', 'social_battery'],
-    'values': ['life_values', 'philanthropy', 'spiritual_alignment']
+    "basics": ["name", "birthday", "location", "occupation", "family_status"],
+    "preferences": [
+        "communication_style",
+        "food_preferences",
+        "love_language",
+        "gift_preferences",
+    ],
+    "goals": ["short_term", "long_term", "bucket_list"],
+    "interests": ["hobbies", "learning_areas", "favorite_topics"],
+    "background": ["skills", "education_history", "work_history", "current_employer"],
+    "health": ["allergies", "dietary_needs"],
+    "personality": ["personality_type", "stress_response", "social_battery"],
+    "values": ["life_values", "philanthropy", "spiritual_alignment"],
 }
 
 # Total expected fields count
-TOTAL_EXPECTED_FIELDS = sum(len(fields) for fields in EXPECTED_PROFILE_FIELDS.values())  # 25
+TOTAL_EXPECTED_FIELDS = sum(
+    len(fields) for fields in EXPECTED_PROFILE_FIELDS.values()
+)  # 25
 
 # Valid category names - single source of truth
 VALID_CATEGORIES = list(EXPECTED_PROFILE_FIELDS.keys())
@@ -42,9 +50,7 @@ class ProfileStorageService:
     """Handles storage and retrieval of user profile data"""
 
     def store_profile_extractions(
-        self,
-        user_id: str,
-        extractions: List[Dict[str, Any]]
+        self, user_id: str, extractions: List[Dict[str, Any]]
     ) -> int:
         """
         Store profile extractions in PostgreSQL.
@@ -74,18 +80,21 @@ class ProfileStorageService:
             cursor = conn.cursor()
 
             # Ensure user profile exists
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO user_profiles (user_id, completeness_pct, total_fields, populated_fields)
                 VALUES (%s, 0.00, 0, 0)
                 ON CONFLICT (user_id) DO NOTHING
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             # Process each extraction
             for extraction in extractions:
                 category = extraction.get("category")
                 field_name = extraction.get("field_name")
                 field_value = extraction.get("field_value")
-                confidence = extraction.get("confidence", 70)
+                _confidence = extraction.get("confidence", 70)
                 source_type = extraction.get("source_type", "implicit")
                 source_memory_id = extraction.get("source_memory_id", "unknown")
 
@@ -96,7 +105,8 @@ class ProfileStorageService:
                 field_value_str = self._serialize_field_value(field_value)
 
                 # Upsert profile_field
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO profile_fields (user_id, category, field_name, field_value, value_type, last_updated)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id, category, field_name)
@@ -104,13 +114,32 @@ class ProfileStorageService:
                         field_value = EXCLUDED.field_value,
                         value_type = EXCLUDED.value_type,
                         last_updated = EXCLUDED.last_updated
-                """, (user_id, category, field_name, field_value_str, value_type, datetime.now(timezone.utc)))
+                """,
+                    (
+                        user_id,
+                        category,
+                        field_name,
+                        field_value_str,
+                        value_type,
+                        datetime.now(timezone.utc),
+                    ),
+                )
 
                 # Record source (insert new source record each time)
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO profile_sources (user_id, category, field_name, source_memory_id, source_type, extracted_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                """, (user_id, category, field_name, source_memory_id, source_type, datetime.now(timezone.utc)))
+                """,
+                    (
+                        user_id,
+                        category,
+                        field_name,
+                        source_memory_id,
+                        source_type,
+                        datetime.now(timezone.utc),
+                    ),
+                )
 
                 fields_updated += 1
 
@@ -120,9 +149,7 @@ class ProfileStorageService:
             conn.commit()
 
             logger.info(
-                "[profile.store] user_id=%s fields_updated=%s",
-                user_id,
-                fields_updated
+                "[profile.store] user_id=%s fields_updated=%s", user_id, fields_updated
             )
 
             return fields_updated
@@ -131,10 +158,7 @@ class ProfileStorageService:
             if conn:
                 conn.rollback()
             logger.error(
-                "[profile.store] user_id=%s error=%s",
-                user_id,
-                e,
-                exc_info=True
+                "[profile.store] user_id=%s error=%s", user_id, e, exc_info=True
             )
             raise
         finally:
@@ -177,20 +201,25 @@ class ProfileStorageService:
         Uses EXPECTED_PROFILE_FIELDS constant (25 total fields across 5 categories).
         """
         # Get populated fields grouped by category
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT category, field_name
             FROM profile_fields
             WHERE user_id = %s
-        """, (user_id,))
+        """,
+            (user_id,),
+        )
 
         rows = cursor.fetchall()
 
         # Build set of populated fields per category
-        populated_by_category: Dict[str, Set[str]] = {cat: set() for cat in EXPECTED_PROFILE_FIELDS}
+        populated_by_category: Dict[str, Set[str]] = {
+            cat: set() for cat in EXPECTED_PROFILE_FIELDS
+        }
         for row in rows:
             if isinstance(row, dict):
-                category = row['category']
-                field_name = row['field_name']
+                category = row["category"]
+                field_name = row["field_name"]
             else:
                 category, field_name = row
 
@@ -208,7 +237,8 @@ class ProfileStorageService:
         completeness_pct = min(100.0, (total_populated / TOTAL_EXPECTED_FIELDS) * 100)
 
         # Update user_profiles
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE user_profiles
             SET
                 completeness_pct = %s,
@@ -216,7 +246,15 @@ class ProfileStorageService:
                 populated_fields = %s,
                 last_updated = %s
             WHERE user_id = %s
-        """, (completeness_pct, TOTAL_EXPECTED_FIELDS, total_populated, datetime.now(timezone.utc), user_id))
+        """,
+            (
+                completeness_pct,
+                TOTAL_EXPECTED_FIELDS,
+                total_populated,
+                datetime.now(timezone.utc),
+                user_id,
+            ),
+        )
 
         # Invalidate completeness cache
         self._invalidate_completeness_cache(user_id)
@@ -228,10 +266,17 @@ class ProfileStorageService:
             if redis_client:
                 cache_key = COMPLETENESS_CACHE_KEY.format(user_id=user_id)
                 redis_client.delete(cache_key)
-                logger.debug("[profile.cache] invalidated completeness cache for user_id=%s", user_id)
+                logger.debug(
+                    "[profile.cache] invalidated completeness cache for user_id=%s",
+                    user_id,
+                )
         except Exception as e:
             # Cache invalidation failure shouldn't break the main flow
-            logger.warning("[profile.cache] failed to invalidate cache for user_id=%s: %s", user_id, e)
+            logger.warning(
+                "[profile.cache] failed to invalidate cache for user_id=%s: %s",
+                user_id,
+                e,
+            )
 
     def get_completeness_details(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -261,31 +306,39 @@ class ProfileStorageService:
             cursor = conn.cursor()
 
             # Check if profile exists
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT completeness_pct, populated_fields, total_fields
                 FROM user_profiles
                 WHERE user_id = %s
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             profile_row = cursor.fetchone()
             if not profile_row:
                 return None
 
             # Get populated fields by category
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT category, field_name
                 FROM profile_fields
                 WHERE user_id = %s
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             rows = cursor.fetchall()
 
             # Build set of populated fields per category
-            populated_by_category: Dict[str, Set[str]] = {cat: set() for cat in EXPECTED_PROFILE_FIELDS}
+            populated_by_category: Dict[str, Set[str]] = {
+                cat: set() for cat in EXPECTED_PROFILE_FIELDS
+            }
             for row in rows:
                 if isinstance(row, dict):
-                    category = row['category']
-                    field_name = row['field_name']
+                    category = row["category"]
+                    field_name = row["field_name"]
                 else:
                     category, field_name = row
 
@@ -293,19 +346,22 @@ class ProfileStorageService:
                     populated_by_category[category].add(field_name)
 
             # Get confidence scores for gap prioritization
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT category, field_name, overall_confidence
                 FROM profile_confidence_scores
                 WHERE user_id = %s
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             confidence_rows = cursor.fetchall()
             confidence_by_field: Dict[str, float] = {}
             for row in confidence_rows:
                 if isinstance(row, dict):
-                    cat = row['category']
-                    field = row['field_name']
-                    conf = row['overall_confidence']
+                    cat = row["category"]
+                    field = row["field_name"]
+                    conf = row["overall_confidence"]
                 else:
                     cat, field, conf = row
                 confidence_by_field[f"{cat}.{field}"] = float(conf) if conf else 0.0
@@ -323,25 +379,31 @@ class ProfileStorageService:
 
                 category_total = len(expected_fields)
                 category_populated = len(populated_expected)
-                category_pct = (category_populated / category_total) * 100 if category_total > 0 else 0.0
+                category_pct = (
+                    (category_populated / category_total) * 100
+                    if category_total > 0
+                    else 0.0
+                )
 
                 categories[category] = {
                     "completeness_pct": round(category_pct, 1),
                     "populated": category_populated,
                     "total": category_total,
-                    "missing": sorted(missing)
+                    "missing": sorted(missing),
                 }
 
                 total_populated += category_populated
 
             # Calculate overall completeness
-            overall_pct = (total_populated / TOTAL_EXPECTED_FIELDS) * 100 if TOTAL_EXPECTED_FIELDS > 0 else 0.0
+            overall_pct = (
+                (total_populated / TOTAL_EXPECTED_FIELDS) * 100
+                if TOTAL_EXPECTED_FIELDS > 0
+                else 0.0
+            )
 
             # Identify high-value gaps
             high_value_gaps = self._identify_high_value_gaps(
-                populated_by_category,
-                confidence_by_field,
-                categories
+                populated_by_category, confidence_by_field, categories
             )
 
             result = {
@@ -349,7 +411,7 @@ class ProfileStorageService:
                 "populated_fields": total_populated,
                 "total_fields": TOTAL_EXPECTED_FIELDS,
                 "categories": categories,
-                "high_value_gaps": high_value_gaps
+                "high_value_gaps": high_value_gaps,
             }
 
             # Cache the result
@@ -359,10 +421,7 @@ class ProfileStorageService:
 
         except Exception as e:
             logger.error(
-                "[profile.completeness] user_id=%s error=%s",
-                user_id,
-                e,
-                exc_info=True
+                "[profile.completeness] user_id=%s error=%s", user_id, e, exc_info=True
             )
             return None
         finally:
@@ -375,7 +434,7 @@ class ProfileStorageService:
         self,
         populated_by_category: Dict[str, Set[str]],
         confidence_by_field: Dict[str, float],
-        categories: Dict[str, Any]
+        categories: Dict[str, Any],
     ) -> List[str]:
         """
         Identify high-value gaps to prioritize for filling.
@@ -396,29 +455,29 @@ class ProfileStorageService:
         high_value_gaps = []
 
         # Priority 1: Missing basics fields (highest priority - foundational identity)
-        basics_missing = categories.get('basics', {}).get('missing', [])
+        basics_missing = categories.get("basics", {}).get("missing", [])
         for field in basics_missing:
             high_value_gaps.append(field)
 
         # Priority 2: Fields with zero confidence (never extracted) across other categories
-        for category in ['preferences', 'goals', 'interests', 'background']:
-            missing = categories.get(category, {}).get('missing', [])
+        for category in ["preferences", "goals", "interests", "background"]:
+            missing = categories.get(category, {}).get("missing", [])
             for field in missing:
                 key = f"{category}.{field}"
                 conf = confidence_by_field.get(key, 0.0)
                 if conf == 0.0 and field not in high_value_gaps:
                     # Use descriptive name for non-basics fields
-                    gap_name = f"{field}" if category == 'basics' else f"{field}"
+                    gap_name = f"{field}" if category == "basics" else f"{field}"
                     if gap_name not in high_value_gaps:
                         high_value_gaps.append(gap_name)
 
         # Priority 3: Goal-relevant fields (if goals category is partially populated)
-        goals_populated = populated_by_category.get('goals', set())
+        goals_populated = populated_by_category.get("goals", set())
         if goals_populated:
             # If user has goals, skills and background are relevant
-            for field in ['skills', 'experiences', 'learning']:
-                for category in ['background', 'interests']:
-                    if field in categories.get(category, {}).get('missing', []):
+            for field in ["skills", "experiences", "learning"]:
+                for category in ["background", "interests"]:
+                    if field in categories.get(category, {}).get("missing", []):
                         if field not in high_value_gaps:
                             high_value_gaps.append(field)
 
@@ -435,7 +494,9 @@ class ProfileStorageService:
                 if cached:
                     return json.loads(cached)
         except Exception as e:
-            logger.warning("[profile.cache] failed to get cache for user_id=%s: %s", user_id, e)
+            logger.warning(
+                "[profile.cache] failed to get cache for user_id=%s: %s", user_id, e
+            )
         return None
 
     def _cache_completeness(self, user_id: str, data: Dict[str, Any]):
@@ -447,12 +508,18 @@ class ProfileStorageService:
                 # Add cache timestamp
                 data_with_ts = {
                     **data,
-                    "cached_at": datetime.now(timezone.utc).isoformat()
+                    "cached_at": datetime.now(timezone.utc).isoformat(),
                 }
-                redis_client.setex(cache_key, COMPLETENESS_CACHE_TTL, json.dumps(data_with_ts))
-                logger.debug("[profile.cache] cached completeness for user_id=%s", user_id)
+                redis_client.setex(
+                    cache_key, COMPLETENESS_CACHE_TTL, json.dumps(data_with_ts)
+                )
+                logger.debug(
+                    "[profile.cache] cached completeness for user_id=%s", user_id
+                )
         except Exception as e:
-            logger.warning("[profile.cache] failed to cache for user_id=%s: %s", user_id, e)
+            logger.warning(
+                "[profile.cache] failed to cache for user_id=%s: %s", user_id, e
+            )
 
     def get_profile_by_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -472,11 +539,14 @@ class ProfileStorageService:
             cursor = conn.cursor()
 
             # Get profile metadata
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT completeness_pct, total_fields, populated_fields, last_updated, created_at
                 FROM user_profiles
                 WHERE user_id = %s
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             profile_row = cursor.fetchone()
             if not profile_row:
@@ -485,21 +555,30 @@ class ProfileStorageService:
 
             # Handle both tuple and dict-like cursor results
             if isinstance(profile_row, dict):
-                completeness_pct = profile_row['completeness_pct']
-                total_fields = profile_row['total_fields']
-                populated_fields = profile_row['populated_fields']
-                last_updated = profile_row['last_updated']
-                created_at = profile_row['created_at']
+                completeness_pct = profile_row["completeness_pct"]
+                total_fields = profile_row["total_fields"]
+                populated_fields = profile_row["populated_fields"]
+                last_updated = profile_row["last_updated"]
+                created_at = profile_row["created_at"]
             else:
-                completeness_pct, total_fields, populated_fields, last_updated, created_at = profile_row
+                (
+                    completeness_pct,
+                    total_fields,
+                    populated_fields,
+                    last_updated,
+                    created_at,
+                ) = profile_row
 
             # Get all profile fields
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT category, field_name, field_value, value_type, last_updated
                 FROM profile_fields
                 WHERE user_id = %s
                 ORDER BY category, field_name
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
 
             fields_rows = cursor.fetchall()
 
@@ -512,26 +591,32 @@ class ProfileStorageService:
                 "background": {},
                 "health": {},
                 "personality": {},
-                "values": {}
+                "values": {},
             }
 
             for row in fields_rows:
                 # Handle both tuple and dict-like cursor results
                 if isinstance(row, dict):
-                    category = row['category']
-                    field_name = row['field_name']
-                    field_value = row['field_value']
-                    value_type = row['value_type']
-                    field_last_updated = row['last_updated']
+                    category = row["category"]
+                    field_name = row["field_name"]
+                    field_value = row["field_value"]
+                    value_type = row["value_type"]
+                    field_last_updated = row["last_updated"]
                 else:
-                    category, field_name, field_value, value_type, field_last_updated = row
+                    (
+                        category,
+                        field_name,
+                        field_value,
+                        value_type,
+                        field_last_updated,
+                    ) = row
 
                 # Deserialize value based on type
                 parsed_value = self._deserialize_field_value(field_value, value_type)
 
                 # Handle both datetime objects and string timestamps
                 if field_last_updated:
-                    if hasattr(field_last_updated, 'isoformat'):
+                    if hasattr(field_last_updated, "isoformat"):
                         last_updated_str = field_last_updated.isoformat()
                     else:
                         last_updated_str = str(field_last_updated)
@@ -540,13 +625,25 @@ class ProfileStorageService:
 
                 profile_data[category][field_name] = {
                     "value": parsed_value,
-                    "last_updated": last_updated_str
+                    "last_updated": last_updated_str,
                 }
 
             # Build final profile object
             # Handle both datetime objects and string timestamps for metadata
-            last_updated_str = last_updated.isoformat() if hasattr(last_updated, 'isoformat') else str(last_updated) if last_updated else None
-            created_at_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at) if created_at else None
+            last_updated_str = (
+                last_updated.isoformat()
+                if hasattr(last_updated, "isoformat")
+                else str(last_updated)
+                if last_updated
+                else None
+            )
+            created_at_str = (
+                created_at.isoformat()
+                if hasattr(created_at, "isoformat")
+                else str(created_at)
+                if created_at
+                else None
+            )
 
             profile = {
                 "user_id": user_id,
@@ -555,25 +652,20 @@ class ProfileStorageService:
                 "populated_fields": populated_fields,
                 "last_updated": last_updated_str,
                 "created_at": created_at_str,
-                "profile": profile_data
+                "profile": profile_data,
             }
 
             logger.info(
                 "[profile.get] user_id=%s completeness=%.1f%% fields=%s",
                 user_id,
                 completeness_pct,
-                populated_fields
+                populated_fields,
             )
 
             return profile
 
         except Exception as e:
-            logger.error(
-                "[profile.get] user_id=%s error=%s",
-                user_id,
-                e,
-                exc_info=True
-            )
+            logger.error("[profile.get] user_id=%s error=%s", user_id, e, exc_info=True)
             return None
         finally:
             if cursor:

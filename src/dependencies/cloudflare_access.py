@@ -51,7 +51,12 @@ def verify_cf_access_token(token: str) -> Dict[str, Any]:
             audience=aud,
             options={"verify_at_hash": False},
         )
-        _logger.info("[cf.verify] ok sub=%s aud=%s iss=%s", claims.get("sub"), claims.get("aud"), claims.get("iss"))
+        _logger.info(
+            "[cf.verify] ok sub=%s aud=%s iss=%s",
+            claims.get("sub"),
+            claims.get("aud"),
+            claims.get("iss"),
+        )
         return claims
     except Exception as exc:
         _logger.info("[cf.verify.error] %s", exc)
@@ -60,7 +65,9 @@ def verify_cf_access_token(token: str) -> Dict[str, Any]:
 
 def extract_token_from_headers(headers: Dict[str, str]) -> Optional[str]:
     # Priority: explicit Cloudflare header
-    cf_hdr = headers.get("cf-access-jwt-assertion") or headers.get("Cf-Access-Jwt-Assertion")
+    cf_hdr = headers.get("cf-access-jwt-assertion") or headers.get(
+        "Cf-Access-Jwt-Assertion"
+    )
     if cf_hdr:
         return cf_hdr
     # Fallback: Authorization: Bearer <token>
@@ -68,5 +75,3 @@ def extract_token_from_headers(headers: Dict[str, str]) -> Optional[str]:
     if auth and auth.lower().startswith("bearer "):
         return auth.split(" ", 1)[1].strip()
     return None
-
-

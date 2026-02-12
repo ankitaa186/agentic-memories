@@ -14,27 +14,27 @@ on:
 
 jobs:
   deploy:
+    # NOTE: This workflow requires a self-hosted runner configured for your
+    # deployment target. See: https://docs.github.com/en/actions/hosting-your-own-runners
     runs-on: self-hosted
+    env:
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/agentic-memories' }}
     steps:
-      - name: Deploy to Specific Directory
+      - name: Deploy to server
         run: |
-          # 1. Go to your specific folder
-          # REPLACE THIS with your actual folder path (e.g., /home/ubuntu/agentic-memories)
-          cd /home/ankit/dev/agentic-memories
+          cd "$DEPLOY_DIR"
 
-          # 2. Update the code safely
           echo "Fetching latest code for branch: ${{ inputs.branch }}..."
           git fetch --all
           git checkout ${{ inputs.branch }}
           git pull origin ${{ inputs.branch }}
 
-          # 3. Run your start script (Uses existing .env automatically)
           echo "Starting services..."
           make start
 
       - name: Healthcheck and Validation
         run: |
-          cd /home/ankit/dev/agentic-memories
+          cd "$DEPLOY_DIR"
 
           echo "Waiting for services to be ready..."
           sleep 10
@@ -47,12 +47,12 @@ jobs:
             echo "Healthcheck attempt $i/$MAX_RETRIES..."
 
             if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-              echo "✓ Basic health check passed"
+              echo "OK: Basic health check passed"
               break
             fi
 
             if [ $i -eq $MAX_RETRIES ]; then
-              echo "✗ Health check failed after $MAX_RETRIES attempts"
+              echo "FAIL: Health check failed after $MAX_RETRIES attempts"
               docker compose logs --tail=50
               exit 1
             fi
@@ -66,71 +66,15 @@ jobs:
           FULL_HEALTH=$(curl -sf http://localhost:8080/health/full)
           echo "$FULL_HEALTH" | python3 -m json.tool
 
-          # Validate full health response
           STATUS=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', 'unknown'))")
           if [ "$STATUS" != "ok" ]; then
-            echo "✗ Full healthcheck status is '$STATUS', expected 'ok'"
+            echo "FAIL: Full healthcheck status is '$STATUS', expected 'ok'"
             docker compose logs --tail=100
             exit 1
           fi
-          echo "✓ Full healthcheck passed"
-
-          # Defensive component tests
-          echo ""
-          echo "Running defensive component tests..."
-
-          # Test ChromaDB is connected
-          echo -n "Testing ChromaDB connection... "
-          CHROMA_OK=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('chroma', {}).get('ok', False))")
-          if [ "$CHROMA_OK" = "True" ]; then
-            echo "✓ OK"
-          else
-            echo "✗ ChromaDB status: $CHROMA_OK"
-            exit 1
-          fi
-
-          # Test TimescaleDB is connected
-          echo -n "Testing TimescaleDB connection... "
-          TIMESCALE_OK=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('timescale', {}).get('ok', False))")
-          if [ "$TIMESCALE_OK" = "True" ]; then
-            echo "✓ OK"
-          else
-            echo "✗ TimescaleDB status: $TIMESCALE_OK"
-            exit 1
-          fi
-
-          # Test Redis is connected
-          echo -n "Testing Redis connection... "
-          REDIS_OK=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('redis', {}).get('ok', False))")
-          if [ "$REDIS_OK" = "True" ]; then
-            echo "✓ OK"
-          else
-            echo "✗ Redis status: $REDIS_OK"
-            exit 1
-          fi
-
-          # Test migrations are applied
-          echo -n "Testing migrations... "
-          MIGRATIONS_OK=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('migrations', {}).get('ok', False))")
-          if [ "$MIGRATIONS_OK" = "True" ]; then
-            LATEST=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('migrations', {}).get('latest', 'unknown'))")
-            echo "✓ OK (latest: $LATEST)"
-          else
-            echo "✗ Migrations status: $MIGRATIONS_OK"
-            exit 1
-          fi
-
-          # Test LLM connectivity
-          echo -n "Testing LLM connectivity... "
-          LLM_OK=$(echo "$FULL_HEALTH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('checks', {}).get('llm_connectivity', {}).get('ok', False))")
-          if [ "$LLM_OK" = "True" ]; then
-            echo "✓ OK"
-          else
-            echo "✗ LLM connectivity status: $LLM_OK"
-            exit 1
-          fi
+          echo "OK: Full healthcheck passed"
 
           echo ""
           echo "========================================="
-          echo "✓ All healthchecks and validations passed"
+          echo "All healthchecks and validations passed"
           echo "========================================="

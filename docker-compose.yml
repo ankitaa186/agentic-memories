@@ -18,7 +18,7 @@ services:
       - CHROMA_TENANT=agentic-memories
       - CHROMA_DATABASE=memories
       - REDIS_URL=redis://redis:6379/0
-      - TIMESCALE_DSN=${TIMESCALE_DSN:-postgresql://postgres:Passw0rd1!@host.docker.internal:5433/agentic_memories}
+      - TIMESCALE_DSN=${TIMESCALE_DSN:?Set TIMESCALE_DSN in your .env file}
       - CF_ACCESS_AUD=${CF_ACCESS_AUD}
       - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
@@ -42,7 +42,7 @@ services:
     image: agentic-memories-ui:local
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "3000:80"
     depends_on:
       - api
   redis:
