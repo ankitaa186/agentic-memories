@@ -514,7 +514,7 @@ curl -s "http://localhost:8080/v1/retrieve?user_id=test-user&query=my+portfolio"
 
 - **API**: http://localhost:8080
 - **API Docs**: http://localhost:8080/docs
-- **UI**: http://localhost:80
+- **UI**: http://localhost:3000
 - **Health Check**: http://localhost:8080/health/full
 
 **External Databases:**
@@ -1005,7 +1005,7 @@ Comprehensive health check for all services.
 
 ## 🎨 Web UI
 
-Access the beautiful memory browser at: **http://localhost:80**
+Access the beautiful memory browser at: **http://localhost:3000**
 
 Features:
 - 📊 **Memory Browser**: Visual timeline of all memories
