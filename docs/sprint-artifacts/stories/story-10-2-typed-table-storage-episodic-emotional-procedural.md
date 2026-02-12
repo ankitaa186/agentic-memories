@@ -240,7 +240,7 @@ CREATE TABLE procedural_memories (
 ```json
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User attended daughter's graduation ceremony at Stanford",
   "layer": "long-term",
   "type": "explicit",
@@ -271,7 +271,7 @@ POST /v1/memories/direct
 ```json
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User expressed frustration about job search taking too long",
   "layer": "semantic",
   "type": "explicit",
@@ -301,7 +301,7 @@ POST /v1/memories/direct
 ```json
 POST /v1/memories/direct
 {
-  "user_id": "0000000000",
+  "user_id": "1169491032",
   "content": "User demonstrated advanced Python skills including async programming",
   "layer": "semantic",
   "type": "explicit",

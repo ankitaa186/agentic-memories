@@ -161,7 +161,7 @@ app.include_router(memories.router)
 curl -X POST http://localhost:8000/v1/memories/direct \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "0000000000",
+    "user_id": "1169491032",
     "content": "User is allergic to shellfish",
     "importance": 0.95,
     "persona_tags": ["health", "allergy"]
