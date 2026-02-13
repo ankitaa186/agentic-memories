@@ -43,3 +43,17 @@ services:
       options:
         <<: *loki-options
         loki-external-labels: "service=redis,env=prod,project=agentic-memories"
+
+  timescaledb:
+    logging:
+      driver: loki
+      options:
+        <<: *loki-options
+        loki-external-labels: "service=timescaledb,env=prod,project=agentic-memories"
+
+  chromadb:
+    logging:
+      driver: loki
+      options:
+        <<: *loki-options
+        loki-external-labels: "service=chromadb,env=prod,project=agentic-memories"

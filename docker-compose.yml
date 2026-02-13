@@ -1,11 +1,8 @@
-# End of Selection
 services:
   api:
     build: .
     image: agentic-memories:local
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - DEBUGGER_PORT=5679
@@ -13,12 +10,12 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - XAI_API_KEY=${XAI_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - CHROMA_HOST=${CHROMA_HOST:-host.docker.internal}
+      - CHROMA_HOST=${CHROMA_HOST:-chromadb}
       - CHROMA_PORT=${CHROMA_PORT:-8000}
       - CHROMA_TENANT=agentic-memories
       - CHROMA_DATABASE=memories
       - REDIS_URL=redis://redis:6379/0
-      - TIMESCALE_DSN=${TIMESCALE_DSN:?Set TIMESCALE_DSN in your .env file}
+      - TIMESCALE_DSN=${TIMESCALE_DSN:-postgresql://postgres:${POSTGRES_PASSWORD:-changeme}@timescaledb:5432/agentic_memories}
       - CF_ACCESS_AUD=${CF_ACCESS_AUD}
       - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
@@ -29,7 +26,12 @@ services:
       - "8080:8080"
       - "${API_DEBUG_PORT:-5681}:5679"  # debugpy remote debugging port (dev only)
     depends_on:
-      - redis
+      timescaledb:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      redis:
+        condition: service_started
   ui:
     build:
       context: ./ui
@@ -50,3 +52,41 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    restart: unless-stopped
+    shm_size: ${POSTGRES_SHM_SIZE:-2gb}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-1536MB}
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-100}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-32MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-4GB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-256MB}
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: agentic_memories
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/timescaledb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agentic_memories"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  chromadb:
+    image: chromadb/chroma:1.4.0
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chromadb:/data
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"

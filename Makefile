@@ -1,6 +1,6 @@
 # Makefile for agentic-memories
 
-.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile test-coverage start stop clean clean-all lint format docker-logs docker-shell docker-test gh gh-read gh-diff gh-download gh-upload gh-write migrate
+.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile test-coverage start stop clean clean-all lint format logs docker-logs docker-shell docker-test gh gh-read gh-diff gh-download gh-upload gh-write migrate
 
 # Detect uv or fallback to pip
 UV_AVAILABLE := $(shell command -v uv 2>/dev/null)
@@ -143,6 +143,9 @@ test-coverage: venv ## Run tests with coverage report
 # ============================================================
 # DOCKER
 # ============================================================
+
+logs: ## Tail logs (shorthand). Usage: make logs / make logs SERVICE=api
+	@docker compose $(COMPOSE_FILES) logs -f --tail 100 $(SERVICE)
 
 docker-logs: ## Show Docker container logs (use ENV=prod for production, SERVICE=name for specific)
 	@if [ -z "$(SERVICE)" ]; then \

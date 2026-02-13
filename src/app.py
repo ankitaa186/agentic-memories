@@ -556,6 +556,8 @@ _ui_origin = getenv("UI_ORIGIN")
 allow_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost",
     "http://127.0.0.1",
     "http://192.168.1.220",
@@ -570,7 +572,7 @@ if _ui_origin and _ui_origin not in allow_origins:
 # - 10.x.x.x
 # - 172.16.x.x - 172.31.x.x
 # - memoryforge.io and subdomains
-LAN_ORIGIN_REGEX = r"^https?://(localhost|127\\.0\\.0\\.1|192\\.168\\.\\d{1,3}\\.\\d{1,3}|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|172\\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}|([a-zA-Z0-9-]+\\.)*memoryforge\\.io)(:\\d+)?$"
+LAN_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}|([a-zA-Z0-9-]+\.)*memoryforge\.io)(:\d+)?$"
 
 app.add_middleware(
     CORSMiddleware,

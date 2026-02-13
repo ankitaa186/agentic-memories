@@ -120,7 +120,7 @@ def _call_llm_json(
                         model=EXTRACTION_MODEL,
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": json.dumps(user_payload)},
+                            {"role": "user", "content": json.dumps(user_payload, default=str)},
                         ],
                         response_format=None
                         if expect_array
@@ -134,7 +134,7 @@ def _call_llm_json(
                         "LLM call ok | provider=openai model=%s | expect_array=%s | payload=%s | output=%s",
                         EXTRACTION_MODEL,
                         expect_array,
-                        json.dumps(user_payload)[:1000],
+                        json.dumps(user_payload, default=str)[:1000],
                         text[:1000],
                     )
                     return _parse_json_from_text(text, expect_array)
@@ -164,7 +164,7 @@ def _call_llm_json(
                         model=EXTRACTION_MODEL,
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": json.dumps(user_payload)},
+                            {"role": "user", "content": json.dumps(user_payload, default=str)},
                         ],
                         response_format=None
                         if expect_array
@@ -178,7 +178,7 @@ def _call_llm_json(
                         "LLM call ok | provider=xai model=%s | expect_array=%s | payload=%s | output=%s",
                         EXTRACTION_MODEL,
                         expect_array,
-                        json.dumps(user_payload)[:1000],
+                        json.dumps(user_payload, default=str)[:1000],
                         text[:1000],
                     )
                     return _parse_json_from_text(text, expect_array)
@@ -197,7 +197,7 @@ def _call_llm_json(
             provider,
             EXTRACTION_MODEL,
             expect_array,
-            json.dumps(user_payload)[:1000],
+            json.dumps(user_payload, default=str)[:1000],
         )
         # Trace the error for debugging
         from src.services.tracing import trace_error

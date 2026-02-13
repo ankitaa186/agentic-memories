@@ -89,7 +89,7 @@
 
 2. **Setup Environment:**
    - Follow [README.md Quick Start](../README.md#-quick-start)
-   - Set up external databases (see agentic-memories-storage repo)
+   - Run `make start` to launch all services (API, UI, databases)
    - Run migrations: `cd migrations && bash migrate.sh up`
 
 3. **Development:**
@@ -244,14 +244,11 @@ When creating a brownfield PRD, reference these key documents:
 
 **Development:**
 ```bash
-# Start external databases first (separate repo)
-cd ../agentic-memories-storage && ./docker-up.sh
+# Start all services (API, UI, databases)
+make start
 
 # Run migrations
 cd migrations && bash migrate.sh up
-
-# Start API
-uvicorn src.app:app --reload --port 8080
 
 # Start UI
 cd ui && npm run dev

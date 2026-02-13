@@ -47,6 +47,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Persistent data (database volumes)
+data/
+
 # Node (if present)
 node_modules/
 migrations/.dbconfig
