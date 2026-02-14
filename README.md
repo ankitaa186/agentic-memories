@@ -89,6 +89,21 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 - **Emotional Memory Enhancement** (McGaugh) - Emotional events remembered better
 - **Reconstructive Memory** (Bartlett) - Gap-filling during recall
 
+### 🧹 Why Forgetting Matters
+
+> *"We must forget to remember."*
+
+Every AI memory system focuses on storing more. Agentic Memories is designed to also **forget well** — because that's what brains actually do, and for good reason.
+
+Perfect recall is not a superpower — it's a disability. Patients with hyperthymesia (total autobiographical recall) report being overwhelmed by irrelevant detail, unable to generalize or prioritize. The brain's forgetting mechanisms aren't bugs; they're features that enable:
+
+- **Signal over noise** — Pruning low-importance memories surfaces what actually matters. Agentic Memories applies TTL-based decay: episodic memories with importance < 0.3 are pruned after 90 days; low-intensity emotional memories fade after 60 days.
+- **Generalization** — Consolidating many similar memories into a single "golden record" mirrors how the hippocampus replays and compresses episodes during sleep. The compaction pipeline clusters semantically similar memories (cosine similarity > 0.75) and merges them via LLM into distilled summaries.
+- **Efficient retrieval** — Fewer, higher-quality memories mean faster search and more relevant results. Deduplication across ChromaDB, episodic, and emotional tables keeps the memory store lean.
+- **Emotional regulation** — Not every fleeting mood deserves permanent storage. Emotional memories below an intensity threshold are allowed to fade naturally, while high-arousal events are preserved — exactly as McGaugh's research predicts.
+
+This is implemented today via the compaction system (`POST /v1/maintenance/compact`), which runs TTL cleanup, deduplication, and LLM-powered consolidation in a single LangGraph pipeline. The result: a memory system that gets **sharper** over time, not just bigger.
+
 ---
 
 ## 🚀 Features
@@ -1305,13 +1320,16 @@ docker compose logs -f api   # Follow API logs
 - [ ] **Emotional pattern predictions** (service exists, endpoint pending)
 - [ ] **Skill recommendations based on prerequisites** (pending)
 
-### 🚧 Phase 5: Memory Consolidation & Forgetting (PENDING)
+### ✅ Phase 5: Memory Consolidation & Forgetting (COMPLETE — advanced features upcoming)
 
-- [ ] **Nightly consolidation job** (promote important short-term → semantic)
-- [ ] **Forgetting mechanism** with Ebbinghaus curve
-- [ ] **Memory compression** (detailed episodes → summaries)
+- [x] **Consolidation job** — LLM-powered clustering + merging related memories into golden records (`POST /v1/maintenance/compact`)
+- [x] **TTL-based forgetting** — Expired short-term cleanup (ChromaDB + TimescaleDB), low-importance episodic pruning (< 0.3, > 90 days), low-intensity emotional pruning (< 0.2, > 60 days)
+- [x] **Memory compression** — Clusters of 3-10 similar memories consolidated into single summaries
+- [x] **Deduplication** — Cosine-similarity dedup across ChromaDB, episodic, and emotional tables
+- [ ] **Scheduled consolidation** (currently manual trigger only, no nightly cron)
+- [ ] **Ebbinghaus forgetting curves** (current decay is threshold-based, not exponential)
 - [ ] **Spaced repetition** for skill retention
-- [ ] **Emotional decay** over time
+- [ ] **Continuous emotional decay** over time
 
 ### 🚧 Phase 6: Narrative & Prediction (PARTIAL)
 
