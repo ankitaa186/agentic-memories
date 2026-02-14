@@ -1465,61 +1465,37 @@ docker compose logs -f api   # Follow API logs
 - [x] Portfolio summary endpoint
 - [x] Redis caching for short-term layer
 
-### ✅ Phase 4: Advanced Cognitive Features (COMPLETE — advanced features upcoming)
+### ✅ Phase 4: Advanced Cognitive Features (COMPLETE)
 
 - [x] Episodic memory service
 - [x] Emotional memory service with pattern detection
 - [x] Procedural memory with skill progressions
 - [x] Portfolio service with intent detection
-- [x] Emotional pattern predictions (service method implemented, API endpoint upcoming)
-- [x] Skill recommendations based on prerequisites (service method implemented, API endpoint upcoming)
-- [ ] **Semantic memory service** (pending — semantic memories stored via generic pipeline)
-- [ ] **Identity memory service** (pending — identity data lives in profile system)
-- [ ] **Graph retrieval using Neo4j** (pending)
+- [x] Emotional pattern predictions (service method implemented)
+- [x] Skill recommendations based on prerequisites (service method implemented)
 
-### ✅ Phase 5: Memory Consolidation & Forgetting (COMPLETE — advanced features upcoming)
+### ✅ Phase 5: Memory Consolidation & Forgetting (COMPLETE)
 
 - [x] **Consolidation job** — LLM-powered clustering + merging related memories into golden records (`POST /v1/maintenance/compact`)
 - [x] **TTL-based forgetting** — Expired short-term cleanup (ChromaDB + TimescaleDB), low-importance episodic pruning (< 0.3, > 90 days), low-intensity emotional pruning (< 0.2, > 60 days)
 - [x] **Memory compression** — Clusters of 3-10 similar memories consolidated into single summaries
 - [x] **Deduplication** — Cosine-similarity dedup across ChromaDB, episodic, and emotional tables
 - [x] **Scheduled consolidation** — APScheduler daily cron at 00:00 UTC + on-demand via `POST /v1/maintenance/compact`
-- [ ] **Ebbinghaus forgetting curves** (current decay is threshold-based, not exponential)
-- [ ] **Spaced repetition** for skill retention
-- [ ] **Continuous emotional decay** over time
 
-### ✅ Phase 6: Narrative & Prediction (COMPLETE — advanced features upcoming)
+### ✅ Phase 6: Narrative & Reconstruction (COMPLETE)
 
 - [x] Narrative construction with hybrid retrieval (`POST /v1/narrative`)
 - [x] Gap-filling with LLM inference (ReconstructionService fills gaps during narrative generation)
 - [x] Emotional pattern recognition (service method in EmotionalMemoryService)
 - [x] Causal chain schema (`triggered_by`, `led_to` fields in episodic memories)
-- [ ] **Causal relationship queries** (schema exists, no traversal API)
-- [ ] **Life story API** (complete narrative timeline)
-- [ ] **Predictive engine** (anticipate needs)
-- [ ] **Behavioral pattern recognition** (emotional patterns done, behavioral pending)
 
-### 🚧 Phase 7: Privacy & Security (PARTIAL)
+### ✅ Phase 7: Data Lifecycle & Deletion (COMPLETE)
 
 - [x] **Memory deletion** — Cross-storage delete via `DELETE /v1/memories/{memory_id}` (ChromaDB + episodic + emotional + procedural)
 - [x] **Profile deletion** — `DELETE /v1/profile` with cascade across all profile tables
 - [x] **Portfolio deletion** — `DELETE /v1/portfolio` and `DELETE /v1/portfolio/holding/{ticker}`
-- [ ] **Memory edit endpoint** (view and delete exist, edit pending)
-- [ ] **Consent management system**
-- [ ] **Memory sensitivity scoring**
-- [ ] **Encryption for sensitive memories**
-- [ ] **Audit logs** for memory access
-- [ ] **GDPR compliance** (right to be forgotten)
 
-### 🚧 Phase 8: Advanced Graph Features (PENDING)
-
-- [ ] **Neo4j integration** (not yet deployed)
-- [ ] **Skill dependency traversal**
-- [ ] **Portfolio correlation analysis**
-- [ ] **Social relationship graphs**
-- [ ] **Learning path recommendations**
-
-### ✅ Phase 9: Profile & Persona Intelligence (COMPLETE)
+### ✅ Phase 8: Profile & Persona Intelligence (COMPLETE)
 
 - [x] **Profile extraction** — Auto-populated from conversations during ingestion (27 fields, 8 categories)
 - [x] **Profile CRUD** — `GET /v1/profile`, `PUT /v1/profile/{category}/{field}`, `DELETE /v1/profile`
@@ -1528,7 +1504,7 @@ docker compose logs -f api   # Follow API logs
 - [x] **Weighted retrieval** — Custom weight profiles per persona (semantic, temporal, importance, emotional)
 - [x] **Explainability** — Source links and applied weight profiles in persona retrieval responses
 
-### ✅ Phase 10: Orchestrator & Proactive Intelligence (COMPLETE)
+### ✅ Phase 9: Orchestrator & Proactive Intelligence (COMPLETE)
 
 - [x] **Orchestrator message streaming** — `POST /v1/orchestrator/message` with adaptive throttling
 - [x] **Orchestrator retrieval** — `POST /v1/orchestrator/retrieve` for query-only retrieval
@@ -1538,7 +1514,7 @@ docker compose logs -f api   # Follow API logs
 - [x] **Intents & scheduling** — Full CRUD for scheduled intents with cron, interval, and event-based triggers
 - [x] **Intent execution** — Claim, fire, cooldown logic, and execution history tracking
 
-### ✅ Phase 11: Web UI (COMPLETE)
+### ✅ Phase 10: Web UI (COMPLETE)
 
 - [x] Memory browser with timeline
 - [x] Store interface for ingestion
@@ -1548,7 +1524,7 @@ docker compose logs -f api   # Follow API logs
 - [x] Responsive design with Tailwind CSS
 - [x] Playwright E2E tests
 
-### ✅ Phase 12: CI/CD & DevOps (COMPLETE)
+### ✅ Phase 11: CI/CD & DevOps (COMPLETE)
 
 - [x] **GitHub Actions CI** — Linting (ruff), unit + integration tests, Docker build + push
 - [x] **Secret scanning** — Gitleaks integration with allowlist configuration
@@ -1556,15 +1532,60 @@ docker compose logs -f api   # Follow API logs
 - [x] **Deployment pipeline** — `.github/workflows/deploy.yml`
 - [x] **Test reporting** — JUnit XML result reporting
 
-### ✅ Phase 13: Testing & Evaluation (COMPLETE — advanced features upcoming)
+### ✅ Phase 12: Testing & Evaluation (COMPLETE)
 
 - [x] Health check tests
 - [x] API integration tests
 - [x] E2E tests (Python + Playwright)
 - [x] **LLM evaluation suite** — Extraction quality metrics (precision, recall, F1, calibration) in `tests/evals/`
-- [ ] **Retrieval evaluation** (relevance metrics, ranking quality)
-- [ ] **Performance benchmarks** (query latency)
-- [ ] **Load testing** (concurrent users)
+
+---
+
+### Upcoming Phases
+
+### 🔮 Phase 13: Advanced Forgetting & Retention
+
+- [ ] **Ebbinghaus forgetting curves** — Exponential decay based on review intervals (current: threshold-based)
+- [ ] **Spaced repetition** for skill retention
+- [ ] **Continuous emotional decay** over time
+
+### 🔮 Phase 14: Prediction & Behavioral Intelligence
+
+- [ ] **Predictive engine** — Anticipate user needs based on patterns
+- [ ] **Behavioral pattern recognition** — Complement existing emotional patterns
+- [ ] **Causal relationship queries** — Traverse `triggered_by`/`led_to` chains via API
+- [ ] **Life story API** — Complete narrative timeline from all memories
+
+### 🔮 Phase 15: Dedicated Memory Services
+
+- [ ] **Semantic memory service** — Dedicated service (currently stored via generic pipeline)
+- [ ] **Identity memory service** — Dedicated service (currently lives in profile system)
+- [ ] **Emotional prediction API endpoint** — Expose existing `predict_emotional_response()` service method
+- [ ] **Skill recommendation API endpoint** — Expose existing `recommend_next_skills()` service method
+- [ ] **Memory edit endpoint** — Edit existing memories (view and delete already exist)
+
+### 🔮 Phase 16: Graph Intelligence (Neo4j)
+
+- [ ] **Neo4j integration** — Deploy and connect graph database
+- [ ] **Skill dependency traversal** — Graph-based skill chain queries
+- [ ] **Portfolio correlation analysis** — Cross-holding relationship graphs
+- [ ] **Social relationship graphs** — People and interaction mapping
+- [ ] **Learning path recommendations** — Graph-powered skill progression suggestions
+
+### 🔮 Phase 17: Privacy & Compliance
+
+- [ ] **Consent management system** — Opt-in/out controls per memory type
+- [ ] **Memory sensitivity scoring** — Auto-classify sensitive content
+- [ ] **Encryption for sensitive memories** — At-rest encryption for high-sensitivity data
+- [ ] **Audit logs** — Track all memory access and modifications
+- [ ] **GDPR compliance** — Right to be forgotten, data export, retention policies
+
+### 🔮 Phase 18: Performance & Scale
+
+- [ ] **Retrieval evaluation** — Relevance metrics, ranking quality benchmarks
+- [ ] **Performance benchmarks** — Query latency profiling
+- [ ] **Load testing** — Concurrent user benchmarks
+- [ ] **Sub-100ms simple queries** — Performance optimization target
 
 ---
 
@@ -1593,15 +1614,12 @@ docker compose logs -f api   # Follow API logs
 
 ### Planned
 
-- [ ] **Neo4j integration** - Graph-based queries for relationships
-- [ ] **Semantic & Identity services** - Dedicated services for these memory layers
-- [ ] **Privacy controls** - Consent management, encryption, sensitivity scoring
-- [ ] **Predictive intelligence** - Anticipate user needs
-- [ ] **Behavioral pattern recognition** - Complement existing emotional patterns
-- [ ] **Ebbinghaus forgetting curves** - Exponential decay (current: threshold-based)
-- [ ] **Causal relationship queries** - Traverse triggered_by/led_to chains
-- [ ] **Performance optimization** - Sub-100ms simple queries, retrieval benchmarks
-- [ ] **Load testing** - Concurrent user benchmarks
+- [ ] **Phase 13: Advanced Forgetting** - Ebbinghaus curves, spaced repetition, emotional decay
+- [ ] **Phase 14: Prediction & Behavior** - Predictive engine, behavioral patterns, causal queries, life story API
+- [ ] **Phase 15: Dedicated Services** - Semantic/identity memory services, expose prediction & recommendation APIs
+- [ ] **Phase 16: Graph Intelligence** - Neo4j deployment, skill traversal, portfolio correlation, relationship graphs
+- [ ] **Phase 17: Privacy & Compliance** - Consent management, encryption, sensitivity scoring, audit logs, GDPR
+- [ ] **Phase 18: Performance & Scale** - Retrieval benchmarks, load testing, sub-100ms query target
 
 ---
 
