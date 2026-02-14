@@ -1,1066 +1,751 @@
-# 🤖 **Complete Guide: Injecting Memories into Chatbots with Agentic Memories**
+# Integration Guide
 
-## **📋 Table of Contents**
-1. [Quick Start Guide](#quick-start-guide)
-2. [Architecture Overview](#architecture-overview)
-3. [Integration Patterns](#integration-patterns)
-4. [Persona-Aware Chatbots](#persona-aware-chatbots)
-5. [Streaming Memory Orchestrator](#streaming-memory-orchestrator)
-6. [Advanced Features](#advanced-features)
-7. [Production Deployment](#production-deployment)
-8. [Troubleshooting](#troubleshooting)
+Give your AI agent persistent memory in under 5 minutes.
+
+Agentic Memories is a REST API. You store memories by sending conversations in, and retrieve them by querying. Everything below assumes the service is running at `http://localhost:8080` (see [Quick Start](../../README.md#-quick-start) to get there).
 
 ---
 
-## **🚀 Quick Start Guide**
+## Table of Contents
 
-### **Step 1: Setup Agentic Memories**
-```bash
-# Clone and start the system
-git clone <agentic-memories-repo>
-cd agentic-memories
-docker compose up -d
-
-# Verify it's running
-curl http://localhost:8080/health
-```
-
-### **Step 2: Basic Chatbot Integration**
-```python
-import requests
-import json
-
-class SimpleMemoryChatbot:
-    def __init__(self, api_url="http://localhost:8080"):
-        self.api_url = api_url
-        self.session = requests.Session()
-    
-    def store_conversation(self, user_id: str, messages: list):
-        """Store conversation as memories"""
-        response = self.session.post(
-            f"{self.api_url}/v1/store",
-            json={
-                "user_id": user_id,
-                "history": messages
-            }
-        )
-        return response.json()
-    
-    def get_memories(self, user_id: str, query: str, limit: int = 5):
-        """Retrieve relevant memories"""
-        response = self.session.get(
-            f"{self.api_url}/v1/retrieve",
-            params={
-                "user_id": user_id,
-                "query": query,
-                "limit": limit
-            }
-        )
-        return response.json()
-    
-    def chat(self, user_id: str, message: str):
-        """Main chat function"""
-        # 1. Store user message
-        self.store_conversation(user_id, [{"role": "user", "content": message}])
-        
-        # 2. Get relevant memories
-        memories = self.get_memories(user_id, message)
-        
-        # 3. Generate response (replace with your LLM)
-        context = self.build_context(memories)
-        response = self.generate_response(message, context)
-        
-        # 4. Store bot response
-        self.store_conversation(user_id, [{"role": "assistant", "content": response}])
-        
-        return response
-    
-    def build_context(self, memories):
-        """Build context from memories"""
-        context_parts = []
-        for memory in memories.get("results", []):
-            context_parts.append(f"- {memory['content']}")
-        return "\n".join(context_parts)
-    
-    def generate_response(self, message: str, context: str):
-        """Generate response using your LLM"""
-        # Replace this with your actual LLM call
-        return f"Based on your memories: {context[:100]}... I understand you're asking about: {message}"
-
-# Usage
-chatbot = SimpleMemoryChatbot()
-response = chatbot.chat("user123", "Tell me about my recent investments")
-print(response)
-```
+1. [Quickstart: 3 Calls to Persistent Memory](#1-quickstart-3-calls-to-persistent-memory)
+2. [Storing Memories](#2-storing-memories)
+   - [Option A: Orchestrator (recommended)](#option-a-orchestrator-endpoint-recommended)
+   - [Option B: Direct Memory Storage](#option-b-direct-memory-storage)
+   - [Option C: Transcript Ingestion](#option-c-transcript-ingestion-v1store)
+3. [Retrieving Memories](#3-retrieving-memories)
+   - [Basic Retrieval](#basic-retrieval)
+   - [User Profile](#user-profile)
+   - [Portfolio](#portfolio)
+   - [Structured Retrieval](#structured-retrieval)
+   - [Narrative Construction](#narrative-construction)
+   - [Persona-Aware Retrieval](#persona-aware-retrieval)
+4. [Compaction & Maintenance](#4-compaction--maintenance)
+5. [Full Integration Example](#5-full-integration-example)
+6. [Endpoint Reference Cheat Sheet](#6-endpoint-reference-cheat-sheet)
 
 ---
 
-## **🏗️ Architecture Overview**
+## 1. Quickstart: 3 Calls to Persistent Memory
 
-### **Memory Flow Diagram**
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   User Input    │───▶│   Memory Store   │───▶│   Persona       │
-│                 │    │   (ChromaDB)     │    │   Detection     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Context       │    │   Multi-Tier     │    │   Dynamic       │
-│   Retrieval     │◀───│   Summarization  │◀───│   Weighting     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│   LLM Response   │
-│   Generation    │
-└─────────────────┘
-```
+This is the absolute minimum to give your agent memory. One call to store, one to retrieve, done.
 
-### **Key Components**
-- **Memory Storage**: ChromaDB + TimescaleDB + Redis
-- **Persona Detection**: Automatic persona classification
-- **Multi-Tier Summarization**: Raw → Episodic → Arc
-- **Dynamic Weighting**: Persona-specific scoring
-- **State Management**: Persistent user context
-
----
-
-## **🔧 Integration Patterns**
-
-### **Pattern 1: Basic Memory Injection**
-```python
-class BasicMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    def process_message(self, user_id: str, message: str) -> str:
-        # Store conversation
-        self._store_message(user_id, message)
-        
-        # Retrieve context
-        context = self._get_context(user_id, message)
-        
-        # Generate response
-        response = self._generate_response(message, context)
-        
-        # Store response
-        self._store_message(user_id, response, role="assistant")
-        
-        return response
-    
-    def _store_message(self, user_id: str, content: str, role: str = "user"):
-        self.session.post(f"{self.memory_api}/v1/store", json={
-            "user_id": user_id,
-            "history": [{"role": role, "content": content}]
-        })
-    
-    def _get_context(self, user_id: str, query: str) -> str:
-        response = self.session.get(f"{self.memory_api}/v1/retrieve", params={
-            "user_id": user_id,
-            "query": query,
-            "limit": 5
-        })
-        
-        memories = response.json().get("results", [])
-        return "\n".join([f"- {mem['content']}" for mem in memories])
-    
-    def _generate_response(self, message: str, context: str) -> str:
-        prompt = f"""
-        Context from user's memories:
-        {context}
-        
-        User message: {message}
-        
-        Respond as a helpful assistant with access to the user's memory context.
-        """
-        return self.llm.generate(prompt)
-```
-
-### **Pattern 2: Persona-Aware Integration**
-```python
-class PersonaAwareChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-        self.persona_detector = PersonaDetector()
-    
-    def process_message(self, user_id: str, message: str) -> str:
-        # Detect persona
-        persona = self.persona_detector.detect(message)
-        
-        # Store with persona context
-        self._store_with_persona(user_id, message, persona)
-        
-        # Retrieve with persona awareness
-        context = self._get_persona_context(user_id, message, persona)
-        
-        # Generate persona-aware response
-        response = self._generate_persona_response(message, context, persona)
-        
-        # Store response
-        self._store_with_persona(user_id, response, persona, role="assistant")
-        
-        return response
-    
-    def _store_with_persona(self, user_id: str, content: str, persona: str, role: str = "user"):
-        self.session.post(f"{self.memory_api}/v1/store", json={
-            "user_id": user_id,
-            "history": [{"role": role, "content": content}],
-            "persona_context": {"forced_persona": persona}
-        })
-    
-    def _get_persona_context(self, user_id: str, query: str, persona: str) -> dict:
-        response = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": query,
-            "persona_context": {
-                "forced_persona": persona,
-                "mood": "conversational"
-            },
-            "granularity": "episodic",
-            "include_narrative": True,
-            "limit": 5
-        })
-        return response.json()
-    
-    def _generate_persona_response(self, message: str, context: dict, persona: str) -> str:
-        memories = context.get("results", {}).get("memories", [])
-        narrative = context.get("results", {}).get("narrative", "")
-        
-        prompt = f"""
-        Persona: {persona}
-        
-        User's recent activities: {narrative}
-        
-        Relevant memories:
-        {chr(10).join([f"- {mem['content']}" for mem in memories])}
-        
-        User message: {message}
-        
-        Respond as a {persona} specialist with access to the user's memory context.
-        """
-        return self.llm.generate(prompt)
-
-class PersonaDetector:
-    def detect(self, message: str) -> str:
-        message_lower = message.lower()
-        
-        # Financial persona
-        if any(keyword in message_lower for keyword in [
-            "invest", "stock", "portfolio", "trading", "finance", "money", "budget"
-        ]):
-            return "finance"
-        
-        # Health persona
-        if any(keyword in message_lower for keyword in [
-            "fitness", "health", "exercise", "gym", "diet", "workout"
-        ]):
-            return "health"
-        
-        # Work persona
-        if any(keyword in message_lower for keyword in [
-            "work", "project", "meeting", "deadline", "career"
-        ]):
-            return "work"
-        
-        return "identity"
-```
-
-### **Pattern 3: Advanced Multi-Persona Integration**
-```python
-class MultiPersonaChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-        self.conversation_cache = {}
-    
-    def process_message(self, user_id: str, message: str) -> str:
-        # Get conversation history
-        conversation = self.conversation_cache.get(user_id, [])
-        conversation.append({"role": "user", "content": message})
-        
-        # Get multi-persona context
-        contexts = self._get_multi_persona_context(user_id, message)
-        
-        # Generate comprehensive response
-        response = self._generate_multi_persona_response(message, contexts, conversation)
-        
-        # Update conversation
-        conversation.append({"role": "assistant", "content": response})
-        self.conversation_cache[user_id] = conversation[-10:]  # Keep last 10 messages
-        
-        # Store in long-term memory
-        self._store_conversation(user_id, conversation[-2:])
-        
-        return response
-    
-    def _get_multi_persona_context(self, user_id: str, query: str) -> dict:
-        personas = ["finance", "health", "work", "identity"]
-        contexts = {}
-        
-        for persona in personas:
-            response = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-                "user_id": user_id,
-                "query": query,
-                "persona_context": {"forced_persona": persona},
-                "granularity": "episodic",
-                "include_narrative": True,
-                "limit": 3
-            })
-            contexts[persona] = response.json()
-        
-        return contexts
-    
-    def _generate_multi_persona_response(self, message: str, contexts: dict, conversation: list) -> str:
-        # Build comprehensive context
-        context_parts = []
-        for persona, context in contexts.items():
-            memories = context.get("results", {}).get("memories", [])
-            if memories:
-                context_parts.append(f"\n{persona.title()} context:")
-                for mem in memories:
-                    context_parts.append(f"- {mem['content']}")
-        
-        # Build conversation history
-        conversation_text = "\n".join([
-            f"{msg['role']}: {msg['content']}" 
-            for msg in conversation[-5:]  # Last 5 messages
-        ])
-        
-        prompt = f"""
-        Conversation history:
-        {conversation_text}
-        
-        User's memories across personas:
-        {chr(10).join(context_parts)}
-        
-        Current message: {message}
-        
-        Respond as a helpful assistant with access to the user's comprehensive memory context.
-        """
-        
-        return self.llm.generate(prompt)
-    
-    def _store_conversation(self, user_id: str, messages: list):
-        self.session.post(f"{self.memory_api}/v1/store", json={
-            "user_id": user_id,
-            "history": messages
-        })
-```
-
----
-
-## **🎯 Persona-Aware Chatbots**
-
-### **Financial Advisor Chatbot**
-```python
-class FinancialAdvisorChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    def get_financial_advice(self, user_id: str, query: str) -> str:
-        # Get financial context
-        context = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": query,
-            "persona_context": {
-                "forced_persona": "finance",
-                "mood": "analytical"
-            },
-            "granularity": "episodic",
-            "include_narrative": True,
-            "explain": True,
-            "limit": 10
-        }).json()
-        
-        # Extract portfolio data
-        portfolio_info = self._extract_portfolio_info(context)
-        
-        # Generate financial advice
-        prompt = f"""
-        User's financial history: {context.get('results', {}).get('narrative', '')}
-        
-        Portfolio information: {portfolio_info}
-        
-        User query: {query}
-        
-        Provide personalized financial advice based on their investment history and current portfolio.
-        """
-        
-        return self.llm.generate(prompt)
-    
-    def _extract_portfolio_info(self, context: dict) -> str:
-        memories = context.get("results", {}).get("memories", [])
-        portfolio_items = []
-        
-        for memory in memories:
-            metadata = memory.get("metadata", {})
-            if "portfolio" in metadata:
-                portfolio_items.append(f"- {memory['content']}")
-        
-        return "\n".join(portfolio_items)
-```
-
-### **Health Coach Chatbot**
-```python
-class HealthCoachChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    def get_health_advice(self, user_id: str, query: str) -> str:
-        # Get health context
-        context = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": query,
-            "persona_context": {
-                "forced_persona": "health",
-                "mood": "motivated"
-            },
-            "granularity": "episodic",
-            "include_narrative": True,
-            "limit": 8
-        }).json()
-        
-        # Extract emotional context
-        emotional_context = self._extract_emotional_context(context)
-        
-        # Generate health advice
-        prompt = f"""
-        User's health journey: {context.get('results', {}).get('narrative', '')}
-        
-        Emotional context: {emotional_context}
-        
-        User query: {query}
-        
-        Provide personalized health and fitness advice based on their journey and current emotional state.
-        """
-        
-        return self.llm.generate(prompt)
-    
-    def _extract_emotional_context(self, context: dict) -> str:
-        memories = context.get("results", {}).get("memories", [])
-        emotional_items = []
-        
-        for memory in memories:
-            if memory.get("emotional_signature"):
-                emotional_items.append(f"- {memory['content']} (emotion: {memory['emotional_signature']})")
-        
-        return "\n".join(emotional_items)
-```
-
----
-
-## **⚡ Streaming Memory Orchestrator**
-
-The new adaptive orchestrator lets you stream chat events without manually
-micromanaging storage or retrieval.  The orchestrator ingests every message,
-automatically batches or compresses them based on volume, and pushes relevant
-memories back to your runtime the moment they become useful.
-
-### **Why use the orchestrator?**
-
-- **Cost-aware ingestion:** message bursts are merged into batched transcripts so
-  vector upserts stay affordable.
-- **Stateful retrieval:** it tracks recent turns and suppresses duplicate memory
-  injections, preventing the LLM from seeing stale context repeatedly.
-- **Simple integration surface:** you stream `MessageEvent` instances and listen
-  for `MemoryInjection` callbacks.
-
-### **Quick start**
-
-```python
-from src.memory_orchestrator import AdaptiveMemoryOrchestrator, MessageEvent, MessageRole
-
-orchestrator = AdaptiveMemoryOrchestrator()
-
-async def on_memory(injection):
-    # Push injected memory to your LLM context window
-    await chatbot.push_memory(injection.content)
-
-conversation_id = session.conversation_id
-subscription = orchestrator.subscribe_injections(
-    on_memory, conversation_id=conversation_id
-)
-try:
-    for idx, turn in enumerate(conversation_stream()):
-        event = MessageEvent(
-            conversation_id=conversation_id,
-            message_id=turn.get("id"),
-            role=MessageRole(turn["role"]),
-            content=turn["content"],
-            metadata={"user_id": turn["user_id"]},
-        )
-        await orchestrator.stream_message(event)
-finally:
-    await orchestrator.shutdown()
-    subscription.close()
-```
-
-Always scope the subscription with the active `conversation_id` so only memories
-for that chat stream are delivered back to your runtime. This prevents
-concurrent sessions from surfacing unrelated injections when multiple users are
-connected simultaneously.
-
-### **Batch ingestion from existing transcripts**
-
-If you already rely on `TranscriptRequest` payloads, the
-`ChatRuntimeBridge` converts them into streaming events for you:
-
-```python
-from src.schemas import Message, TranscriptRequest
-from src.services.chat_runtime import ChatRuntimeBridge
-
-history = [
-    Message(role="user", content="How is my savings goal looking?"),
-    Message(role="assistant", content="You're 60% of the way there."),
-]
-
-bridge = ChatRuntimeBridge()
-injections = await bridge.run_with_injections(
-    TranscriptRequest(user_id="user-123", history=history)
-)
-for injection in injections:
-    print("retrieved memory", injection.memory_id, injection.content)
-```
-
-### **Tuning policies**
-
-`AdaptiveMemoryOrchestrator` accepts `IngestionPolicy` and `RetrievalPolicy`
-overrides if you need bespoke thresholds.  For example:
-
-```python
-from datetime import timedelta
-from src.memory_orchestrator.policies import IngestionPolicy, RetrievalPolicy
-
-orchestrator = AdaptiveMemoryOrchestrator(
-    ingestion_policy=IngestionPolicy(
-        low_volume_cutoff=4,
-        high_volume_cutoff=12,
-        medium_volume_batch_size=4,
-        flush_interval=timedelta(seconds=15),
-    ),
-    retrieval_policy=RetrievalPolicy(min_similarity=0.65, max_injections_per_message=2),
-)
-```
-
-These knobs let you trade off cost, latency, and context richness without
-rewriting your chatbot logic.
-
-### **Accessing the orchestrator over HTTP**
-
-If you cannot host the orchestrator in-process, the API exposes three helper
-endpoints:
-
-- `POST /v1/orchestrator/message` streams a single chat turn and immediately
-  returns any injected memories.
-- `POST /v1/orchestrator/transcript` accepts the existing `TranscriptRequest`
-  payload and returns every memory injection emitted while replaying that
-  transcript through the orchestrator.
-- `POST /v1/orchestrator/retrieve` fetches the top memories for a
-  conversation/query pair without emitting a new streamed turn.
-
-Example request for the streaming endpoint:
+**Store a conversation turn:**
 
 ```bash
 curl -X POST http://localhost:8080/v1/orchestrator/message \
   -H 'Content-Type: application/json' \
   -d '{
-        "conversation_id": "chat-42",
-        "role": "user",
-        "content": "Any updates on my savings goal?",
-        "metadata": {"user_id": "user-123"},
-        "flush": true
-      }'
+    "conversation_id": "session-1",
+    "role": "user",
+    "content": "I just got promoted to senior engineer at Stripe!",
+    "metadata": {"user_id": "user_123"},
+    "flush": true
+  }'
 ```
 
-To retrieve memories on demand, issue a separate call:
+**Retrieve relevant memories:**
 
 ```bash
-curl -X POST http://localhost:8080/v1/orchestrator/retrieve \
-  -H 'Content-Type: application/json' \
-  -d '{
-        "conversation_id": "chat-42",
-        "query": "budget status",
-        "metadata": {"user_id": "user-123"},
-        "limit": 5
-      }'
+curl 'http://localhost:8080/v1/retrieve?user_id=user_123&query=career&limit=5'
 ```
 
-The response contains a list of memory injections that mirror the
-`MemoryInjection` dataclass exposed in the Python client:
+**Inject into your LLM prompt:**
+
+```python
+import requests
+
+BASE = "http://localhost:8080"
+
+def chat(user_id: str, message: str) -> str:
+    # 1. Store the message
+    requests.post(f"{BASE}/v1/orchestrator/message", json={
+        "conversation_id": f"session-{user_id}",
+        "role": "user",
+        "content": message,
+        "metadata": {"user_id": user_id},
+        "flush": True,
+    })
+
+    # 2. Retrieve relevant memories
+    memories = requests.get(f"{BASE}/v1/retrieve", params={
+        "user_id": user_id,
+        "query": message,
+        "limit": 5,
+    }).json()
+
+    # 3. Build context and call your LLM
+    context = "\n".join(f"- {m['content']}" for m in memories.get("results", []))
+
+    return call_your_llm(
+        system=f"You have the following memories about this user:\n{context}",
+        user=message,
+    )
+```
+
+That's it. Your agent now remembers across sessions. Everything below is about doing it better.
+
+---
+
+## 2. Storing Memories
+
+Three ways to get data in, ordered from most to least recommended.
+
+### Option A: Orchestrator Endpoint (recommended)
+
+**`POST /v1/orchestrator/message`**
+
+The orchestrator is the best way to store memories for most integrations. You stream conversation turns in real-time and the orchestrator handles everything: batching messages during high-volume bursts, deduplicating, embedding, and persisting across all storage backends.
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "conversation_id": "chat-42",
+    "role": "user",
+    "content": "I just bought 50 shares of NVDA at $130",
+    "metadata": {"user_id": "user_123"},
+    "flush": true
+  }'
+```
+
+**Request fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `conversation_id` | string | yes | Groups messages by session |
+| `role` | string | yes | `"user"`, `"assistant"`, `"system"`, or `"tool"` |
+| `content` | string | yes | The message text |
+| `metadata` | object | no | Must include `user_id` for retrieval |
+| `flush` | bool | no | `true` = persist immediately. `false` = let the orchestrator batch. Default `false` |
+
+**Response:** Returns any memories surfaced by this turn.
 
 ```json
 {
   "injections": [
     {
       "memory_id": "mem-abc123",
-      "content": "You reached 60% of your savings goal last week.",
+      "content": "User previously mentioned watching NVDA closely.",
       "source": "long_term",
       "channel": "inline",
       "score": 0.91,
-      "metadata": {
-        "layer": "semantic",
-        "conversation_id": "chat-42"
-      }
+      "metadata": {"layer": "semantic", "conversation_id": "chat-42"}
     }
   ]
 }
 ```
 
-## **🚀 Advanced Features**
+**Why this is the best option:**
+- Cost-aware: batches messages during bursts so you don't overload vector upserts
+- Stateful: tracks recent turns and suppresses duplicate memory injections
+- Two-in-one: stores *and* retrieves in a single call
+- Conversation-scoped: memories are isolated per `conversation_id`
 
-### **1. Memory Summarization**
-```python
-class SummarizedMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    def get_summarized_context(self, user_id: str, query: str, granularity: str = "arc") -> str:
-        """Get summarized context at different granularities"""
-        response = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": query,
-            "granularity": granularity,  # "raw", "episodic", "arc"
-            "include_narrative": True,
-            "limit": 20
-        })
-        
-        context = response.json()
-        return context.get("results", {}).get("narrative", "")
-    
-    def chat_with_summary(self, user_id: str, message: str) -> str:
-        # Get arc-level summary for broad context
-        arc_context = self.get_summarized_context(user_id, message, "arc")
-        
-        # Get episodic details for specific context
-        episodic_context = self.get_summarized_context(user_id, message, "episodic")
-        
-        prompt = f"""
-        User's life story (arc): {arc_context}
-        
-        Recent activities (episodic): {episodic_context}
-        
-        Current message: {message}
-        
-        Respond with deep understanding of their journey and recent activities.
-        """
-        
-        return self.llm.generate(prompt)
+**Set `flush: true`** when you want guaranteed persistence (end of conversation, important messages). Leave it `false` during rapid exchanges and the orchestrator will batch optimally.
+
+**Batch replay** an existing transcript:
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/transcript \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "history": [
+      {"role": "user", "content": "I started learning Rust last week"},
+      {"role": "assistant", "content": "That is exciting! What are you building?"},
+      {"role": "user", "content": "A CLI tool for my team at work"}
+    ]
+  }'
 ```
 
-### **2. Explainable AI Integration**
-```python
-class ExplainableMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    def chat_with_explanation(self, user_id: str, message: str) -> dict:
-        """Get response with explanation of memory retrieval"""
-        response = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": message,
-            "include_narrative": True,
-            "explain": True,
-            "limit": 5
-        })
-        
-        context = response.json()
-        
-        # Generate response
-        bot_response = self.llm.generate(f"""
-        Context: {context.get('results', {}).get('narrative', '')}
-        User message: {message}
-        Respond helpfully.
-        """)
-        
-        # Return response with explanation
-        return {
-            "response": bot_response,
-            "explanation": {
-                "persona": context.get("persona", {}),
-                "weights": context.get("explainability", {}).get("weights", {}),
-                "source_memories": context.get("explainability", {}).get("source_links", [])
-            }
-        }
+**Retrieve without storing** a new turn:
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/retrieve \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "conversation_id": "chat-42",
+    "query": "investments",
+    "metadata": {"user_id": "user_123"},
+    "limit": 5
+  }'
 ```
 
-### **3. Stateful Conversation Management**
+---
+
+### Option B: Direct Memory Storage
+
+**`POST /v1/memories/direct`**
+
+Use this when you already know exactly what memory to store and don't need LLM extraction. Sub-3-second latency. Great for explicit user statements, structured data, or when your own application logic has already parsed the information.
+
+```bash
+curl -X POST http://localhost:8080/v1/memories/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "content": "User prefers morning meetings between 9am-12pm",
+    "layer": "semantic",
+    "type": "explicit",
+    "importance": 0.8
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "memory_id": "mem_a1b2c3d4e5f6",
+  "message": "Memory stored successfully",
+  "storage": {"chromadb": true}
+}
+```
+
+**Typed storage** is triggered by setting optional fields. The memory is always stored in ChromaDB and additionally routed to specialized tables:
+
+```bash
+# Episodic memory (stored in episodic_memories table)
+curl -X POST http://localhost:8080/v1/memories/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "content": "Had a great 1:1 with manager about promotion path",
+    "layer": "episodic",
+    "event_timestamp": "2025-01-15T10:30:00Z",
+    "event_type": "meeting",
+    "location": "Office",
+    "participants": ["Alice", "Manager"],
+    "importance": 0.9
+  }'
+
+# Emotional memory (stored in emotional_memories table)
+curl -X POST http://localhost:8080/v1/memories/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "content": "Feeling excited about the new role",
+    "layer": "emotional",
+    "emotional_state": "excited",
+    "valence": 0.8,
+    "arousal": 0.7,
+    "trigger_event": "Got promoted"
+  }'
+
+# Procedural memory (stored in procedural_memories table)
+curl -X POST http://localhost:8080/v1/memories/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "content": "Learning Kubernetes for container orchestration",
+    "layer": "procedural",
+    "skill_name": "Kubernetes",
+    "proficiency_level": "beginner"
+  }'
+```
+
+**When to use direct storage over the orchestrator:**
+- You've already extracted the memory content yourself
+- You need to store typed memories (episodic events, emotions, skills)
+- You want deterministic, low-latency writes without LLM processing
+
+---
+
+### Option C: Transcript Ingestion (`/v1/store`)
+
+**`POST /v1/store`**
+
+The full LLM-powered ingestion pipeline. Sends a conversation through a LangGraph pipeline that evaluates worthiness, extracts multiple memory types, classifies, enriches, and stores across all backends. This is the most thorough but slowest path.
+
+```bash
+curl -X POST http://localhost:8080/v1/store \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "history": [
+      {"role": "user", "content": "I just got back from a 2-week trip to Japan. Visited Tokyo, Kyoto, and Osaka. The ramen in Fukuoka was incredible. I am thinking of moving there."}
+    ]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "memories_created": 4,
+  "ids": ["mem_001", "mem_002", "mem_003", "mem_004"],
+  "summary": "Stored: 2 episodic, 1 emotional, 1 semantic.",
+  "memories": [
+    {"id": "mem_001", "content": "User traveled to Japan for 2 weeks", "layer": "episodic", "type": "explicit", "confidence": 0.95},
+    {"id": "mem_002", "content": "User visited Tokyo, Kyoto, Osaka, and Fukuoka", "layer": "episodic", "type": "explicit", "confidence": 0.92},
+    {"id": "mem_003", "content": "User enjoyed ramen in Fukuoka", "layer": "emotional", "type": "implicit", "confidence": 0.85},
+    {"id": "mem_004", "content": "User is considering relocating to Japan", "layer": "semantic", "type": "explicit", "confidence": 0.88}
+  ]
+}
+```
+
+**What the pipeline does:**
+1. **Worthiness check** -- filters trivial messages ("ok", "thanks", etc.)
+2. **Memory extraction** -- LLM extracts episodic, semantic, procedural, and emotional memories in parallel
+3. **Classification** -- assigns layers, types, and confidence scores
+4. **Enrichment** -- adds sentiment analysis, persona tags, metadata
+5. **Parallel storage** -- writes to ChromaDB, TimescaleDB, PostgreSQL simultaneously
+
+**When to use `/v1/store`:**
+- Backfilling historical conversations
+- When you want the LLM to figure out what's worth remembering
+- Batch processing where latency doesn't matter
+
+### Storage comparison
+
+| | Orchestrator (recommended) | Direct | Store (legacy) |
+|---|---|---|---|
+| **Endpoint** | `POST /v1/orchestrator/message` | `POST /v1/memories/direct` | `POST /v1/store` |
+| **Latency** | ~1-3s | <3s | 10-60s |
+| **LLM extraction** | Yes (full pipeline) | No | Yes (full pipeline) |
+| **Batching** | Adaptive throttling | N/A | None |
+| **Also retrieves** | Yes (returns injections) | No | No |
+| **Best for** | All use cases | Pre-formatted data | One-off backfill |
+
+---
+
+## 3. Retrieving Memories
+
+Multiple retrieval endpoints serve different use cases. Start with basic retrieval and use the others when you need specialized data.
+
+### Basic Retrieval
+
+**`GET /v1/retrieve`**
+
+Fast semantic search across all stored memories. This is your go-to for most use cases.
+
+```bash
+curl 'http://localhost:8080/v1/retrieve?user_id=user_123&query=cooking&limit=10'
+```
+
+**Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `user_id` | string | required | User identifier |
+| `query` | string | optional | Search query (omit for all memories) |
+| `layer` | string | optional | Filter: `short-term`, `semantic`, `episodic`, `long-term` |
+| `type` | string | optional | Filter: `explicit` or `implicit` |
+| `persona` | string | optional | Force persona: `finance`, `health`, `work`, etc. |
+| `sort` | string | optional | `newest` or `oldest` (by timestamp) |
+| `limit` | int | 50 | Results per page (max 1000) |
+| `offset` | int | 0 | Pagination offset |
+
+**Response:**
+
+```json
+{
+  "results": [
+    {
+      "id": "mem_abc",
+      "content": "User learned to make sourdough bread over 3 days",
+      "layer": "episodic",
+      "type": "explicit",
+      "score": 0.94,
+      "importance": 0.8,
+      "persona_tags": ["cooking", "hobbies"],
+      "metadata": {}
+    }
+  ],
+  "pagination": {"limit": 10, "offset": 0, "total": 1},
+  "finance": null
+}
+```
+
+Queries with financial content automatically include portfolio data in the `finance` field.
+
+---
+
+### User Profile
+
+**`GET /v1/profile`**
+
+Returns a structured profile automatically extracted from conversations. Fields are organized into categories: `basics`, `preferences`, `goals`, `interests`, `background`.
+
+```bash
+# Full profile
+curl 'http://localhost:8080/v1/profile?user_id=user_123'
+
+# Single category
+curl 'http://localhost:8080/v1/profile/basics?user_id=user_123'
+
+# Completeness metrics
+curl 'http://localhost:8080/v1/profile/completeness?user_id=user_123'
+```
+
+**Response (full profile):**
+
+```json
+{
+  "user_id": "user_123",
+  "completeness_pct": 42.86,
+  "populated_fields": 9,
+  "total_fields": 21,
+  "profile": {
+    "basics": {
+      "name": {"value": "Sarah Martinez", "last_updated": "2025-11-17T10:30:45+00:00"},
+      "age": {"value": 28, "last_updated": "2025-11-17T10:30:45+00:00"},
+      "occupation": {"value": "software engineer", "last_updated": "2025-11-17T10:30:45+00:00"}
+    },
+    "preferences": {
+      "communication_style": {"value": "direct", "last_updated": "2025-11-17T10:30:45+00:00"}
+    },
+    "goals": {},
+    "interests": {},
+    "background": {}
+  }
+}
+```
+
+Profiles are populated automatically during ingestion. You can also write fields manually:
+
+```bash
+curl -X PUT http://localhost:8080/v1/profile/basics/location \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "value": "San Francisco, CA"}'
+```
+
+---
+
+### Portfolio
+
+**`GET /v1/portfolio/summary`**
+
+Structured financial holdings extracted from conversations.
+
+```bash
+curl 'http://localhost:8080/v1/portfolio/summary?user_id=user_123'
+```
+
+**Response:**
+
+```json
+{
+  "user_id": "user_123",
+  "holdings": [
+    {"ticker": "NVDA", "shares": 50.0, "avg_price": 130.00, "asset_name": null, "first_acquired": null, "last_updated": null},
+    {"ticker": "AAPL", "shares": 100.0, "avg_price": 175.00, "asset_name": null, "first_acquired": null, "last_updated": null}
+  ],
+  "total_holdings": 2
+}
+```
+
+CRUD operations for holdings:
+
+```bash
+# Add holding
+curl -X POST http://localhost:8080/v1/portfolio/holding \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "ticker": "TSLA", "shares": 25, "avg_price": 250.00}'
+
+# Update holding
+curl -X PUT http://localhost:8080/v1/portfolio/holding/TSLA \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "shares": 50}'
+
+# Delete holding
+curl -X DELETE 'http://localhost:8080/v1/portfolio/holding/TSLA?user_id=user_123'
+```
+
+---
+
+### Structured Retrieval
+
+**`POST /v1/retrieve/structured`**
+
+Returns memories organized into categories by an LLM: `emotions`, `behaviors`, `personal`, `professional`, `habits`, `skills_tools`, `projects`, `relationships`, `learning_journal`, `finance`, `other`.
+
+```bash
+curl -X POST http://localhost:8080/v1/retrieve/structured \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "query": "career and skills", "limit": 50}'
+```
+
+**Response (abbreviated):**
+
+```json
+{
+  "professional": [
+    {"id": "mem_001", "content": "User is a senior engineer at Stripe", "score": 0.95}
+  ],
+  "skills_tools": [
+    {"id": "mem_002", "content": "User is learning Kubernetes", "score": 0.88}
+  ],
+  "learning_journal": [
+    {"id": "mem_003", "content": "Started Rust last week, building a CLI tool", "score": 0.82}
+  ],
+  "emotions": [],
+  "behaviors": [],
+  "personal": [],
+  "habits": [],
+  "projects": [],
+  "relationships": [],
+  "other": [],
+  "finance": null
+}
+```
+
+---
+
+### Narrative Construction
+
+**`POST /v1/narrative`**
+
+Generates a coherent story from memories using hybrid retrieval (ChromaDB + TimescaleDB + PostgreSQL). Useful for generating summaries, life timelines, or onboarding context.
+
+```bash
+curl -X POST http://localhost:8080/v1/narrative \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "query": "What happened this quarter?",
+    "start_time": "2025-01-01T00:00:00Z",
+    "end_time": "2025-03-31T23:59:59Z",
+    "limit": 25
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "user_id": "user_123",
+  "narrative": "In Q1 2025, the user transitioned into a senior role at Stripe, began learning Rust for a team CLI project, and traveled to Japan for two weeks...",
+  "summary": "Key themes: career growth, travel, skill development",
+  "sources": [
+    {"id": "mem_001", "content": "Got promoted to senior engineer", "type": "episodic"},
+    {"id": "mem_003", "content": "Started learning Rust", "type": "procedural"}
+  ]
+}
+```
+
+---
+
+### Persona-Aware Retrieval
+
+**`POST /v1/retrieve`** (POST variant)
+
+Retrieves memories weighted by persona context. The system auto-detects or accepts a forced persona (e.g., `finance`, `health`, `work`) and adjusts scoring weights accordingly.
+
+```bash
+curl -X POST http://localhost:8080/v1/retrieve \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "query": "How is my portfolio performing?",
+    "persona_context": {"forced_persona": "finance"},
+    "granularity": "episodic",
+    "include_narrative": true,
+    "explain": true,
+    "limit": 10
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "persona": {"selected": "finance", "confidence": 0.95},
+  "results": {
+    "granularity": "episodic",
+    "memories": [
+      {"id": "mem_005", "content": "Bought 50 shares of NVDA at $130", "score": 0.92}
+    ],
+    "narrative": "The user has been actively building a tech-focused portfolio..."
+  },
+  "explainability": {
+    "weights": {"semantic": 0.4, "temporal": 0.2, "importance": 0.3, "emotional": 0.1},
+    "source_links": [{"id": "mem_005", "score": 0.92}]
+  }
+}
+```
+
+---
+
+## 4. Compaction & Maintenance
+
+Memory compaction runs behind the scenes. The system automatically consolidates, decays, and archives memories to keep retrieval fast and relevant. You don't need to manage this, but you can trigger maintenance manually if needed:
+
+```bash
+# Trigger compaction for a specific user
+curl -X POST 'http://localhost:8080/v1/maintenance/compact?user_id=user_123'
+
+# Trigger compaction for all users
+curl -X POST http://localhost:8080/v1/maintenance/compact_all \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+
+# Run specific maintenance jobs
+curl -X POST http://localhost:8080/v1/maintenance \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jobs": ["ttl_cleanup", "promotion", "compaction"],
+    "since_hours": 24
+  }'
+```
+
+**What compaction does:**
+- Consolidates similar memories into summaries
+- Applies decay factors to reduce stale memory relevance
+- Promotes important short-term memories to long-term storage
+- Archives old memories to keep the active set lean
+
+To delete individual memories, use the direct deletion endpoint:
+
+```bash
+curl -X DELETE 'http://localhost:8080/v1/memories/mem_abc123?user_id=user_123'
+```
+
+> **Note:** The `POST /v1/forget` endpoint exists but is currently a stub (not yet implemented). It accepts `scopes` and `dry_run` but does not perform any actual deletion.
+
+---
+
+## 5. Full Integration Example
+
+A complete Python integration showing the recommended pattern: orchestrator for storage, basic retrieval for context injection.
+
 ```python
-class StatefulMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
+import requests
+from typing import Optional
+
+class AgenticMemoryClient:
+    """Minimal client for integrating Agentic Memories into any AI agent."""
+
+    def __init__(self, base_url: str = "http://localhost:8080"):
+        self.base = base_url
         self.session = requests.Session()
-        self.user_states = {}
-    
-    def chat_with_state(self, user_id: str, message: str) -> str:
-        # Get current state
-        current_state = self.user_states.get(user_id, {})
-        
-        # Get memories with state context
-        context = self.session.post(f"{self.memory_api}/v1/retrieve", json={
-            "user_id": user_id,
-            "query": message,
-            "persona_context": {
-                "active_personas": current_state.get("active_personas", []),
-                "mood": current_state.get("mood", "neutral")
-            },
-            "include_narrative": True,
-            "limit": 5
+
+    # -- Storage (Orchestrator) --
+
+    def store_message(self, user_id: str, conversation_id: str,
+                      role: str, content: str, flush: bool = False):
+        """Stream a conversation turn into memory."""
+        return self.session.post(f"{self.base}/v1/orchestrator/message", json={
+            "conversation_id": conversation_id,
+            "role": role,
+            "content": content,
+            "metadata": {"user_id": user_id},
+            "flush": flush,
         }).json()
-        
-        # Update state based on response
-        new_state = self._update_state(current_state, context, message)
-        self.user_states[user_id] = new_state
-        
-        # Generate response
-        response = self.llm.generate(f"""
-        User's current state: {new_state}
-        Context: {context.get('results', {}).get('narrative', '')}
-        Message: {message}
-        Respond appropriately.
-        """)
-        
-        return response
-    
-    def _update_state(self, current_state: dict, context: dict, message: str) -> dict:
-        # Update based on persona selection
-        selected_persona = context.get("persona", {}).get("selected", "identity")
-        
-        # Update mood based on emotional content
-        mood = self._detect_mood(message, context)
-        
-        return {
-            "active_personas": [selected_persona],
-            "mood": mood,
-            "last_updated": datetime.now().isoformat()
-        }
-    
-    def _detect_mood(self, message: str, context: dict) -> str:
-        # Simple mood detection based on message content
-        if any(word in message.lower() for word in ["happy", "excited", "great"]):
-            return "positive"
-        elif any(word in message.lower() for word in ["sad", "worried", "stressed"]):
-            return "negative"
-        return "neutral"
-```
 
----
-
-## **🏭 Production Deployment**
-
-### **1. Docker Integration**
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# Copy chatbot code
-COPY chatbot/ ./chatbot/
-
-# Environment variables
-ENV MEMORY_API_URL=http://agentic-memories:8080
-ENV LLM_API_KEY=your_llm_key
-
-# Run chatbot
-CMD ["python", "chatbot/main.py"]
-```
-
-### **2. Kubernetes Deployment**
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: memory-chatbot
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: memory-chatbot
-  template:
-    metadata:
-      labels:
-        app: memory-chatbot
-    spec:
-      containers:
-      - name: chatbot
-        image: your-registry/memory-chatbot:latest
-        env:
-        - name: MEMORY_API_URL
-          value: "http://agentic-memories-service:8080"
-        - name: LLM_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: llm-secrets
-              key: api-key
-        ports:
-        - containerPort: 8000
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: memory-chatbot-service
-spec:
-  selector:
-    app: memory-chatbot
-  ports:
-  - port: 8000
-    targetPort: 8000
-  type: LoadBalancer
-```
-
-### **3. Monitoring and Logging**
-```python
-import logging
-import time
-from functools import wraps
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def monitor_performance(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        try:
-            result = func(*args, **kwargs)
-            duration = time.time() - start_time
-            logger.info(f"{func.__name__} completed in {duration:.2f}s")
-            return result
-        except Exception as e:
-            logger.error(f"{func.__name__} failed: {str(e)}")
-            raise
-    return wrapper
-
-class MonitoredMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-    
-    @monitor_performance
-    def process_message(self, user_id: str, message: str) -> str:
-        # Your chatbot logic here
-        pass
-```
-
----
-
-## **🔧 Troubleshooting**
-
-### **Common Issues and Solutions**
-
-#### **1. Memory API Connection Issues**
-```python
-class RobustMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-        self.fallback_mode = False
-    
-    def _safe_api_call(self, method: str, url: str, **kwargs):
-        """Make API call with fallback handling"""
-        try:
-            response = getattr(self.session, method)(url, **kwargs)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"API call failed: {e}, using fallback mode")
-            self.fallback_mode = True
-            return None
-    
-    def process_message(self, user_id: str, message: str) -> str:
-        if not self.fallback_mode:
-            # Try to get memories
-            memories = self._safe_api_call(
-                "post", f"{self.memory_api}/v1/retrieve",
-                json={"user_id": user_id, "query": message, "limit": 5}
-            )
-            
-            if memories:
-                context = self._build_context(memories)
-            else:
-                context = "No memory context available"
-        else:
-            context = "Memory system unavailable"
-        
-        # Generate response
-        prompt = f"""
-        Context: {context}
-        User message: {message}
-        Respond helpfully.
-        """
-        
-        return self.llm.generate(prompt)
-```
-
-#### **2. Memory Storage Failures**
-```python
-class ResilientMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = requests.Session()
-        self.local_cache = {}  # Fallback storage
-    
-    def _store_message_safe(self, user_id: str, content: str, role: str = "user"):
-        """Store message with fallback to local cache"""
-        try:
-            response = self.session.post(f"{self.memory_api}/v1/store", json={
-                "user_id": user_id,
-                "history": [{"role": role, "content": content}]
-            })
-            response.raise_for_status()
-            return True
-        except requests.exceptions.RequestException:
-            # Fallback to local cache
-            if user_id not in self.local_cache:
-                self.local_cache[user_id] = []
-            self.local_cache[user_id].append({"role": role, "content": content})
-            logger.warning(f"Stored message locally for user {user_id}")
-            return False
-    
-    def _get_memories_safe(self, user_id: str, query: str):
-        """Get memories with fallback to local cache"""
-        try:
-            response = self.session.get(f"{self.memory_api}/v1/retrieve", params={
-                "user_id": user_id,
-                "query": query,
-                "limit": 5
-            })
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException:
-            # Fallback to local cache
-            local_memories = self.local_cache.get(user_id, [])
-            return {"results": local_memories[-5:]}  # Last 5 messages
-```
-
-#### **3. Performance Optimization**
-```python
-import asyncio
-import aiohttp
-from typing import List, Dict
-
-class AsyncMemoryChatbot:
-    def __init__(self, llm_client, memory_api_url="http://localhost:8080"):
-        self.llm = llm_client
-        self.memory_api = memory_api_url
-        self.session = None
-    
-    async def __aenter__(self):
-        self.session = aiohttp.ClientSession()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.session.close()
-    
-    async def process_message_async(self, user_id: str, message: str) -> str:
-        """Process message asynchronously"""
-        # Store and retrieve in parallel
-        store_task = self._store_message_async(user_id, message)
-        retrieve_task = self._get_memories_async(user_id, message)
-        
-        await store_task
-        memories = await retrieve_task
-        
-        # Generate response
-        context = self._build_context(memories)
-        response = await self._generate_response_async(message, context)
-        
-        # Store response
-        await self._store_message_async(user_id, response, role="assistant")
-        
-        return response
-    
-    async def _store_message_async(self, user_id: str, content: str, role: str = "user"):
-        async with self.session.post(f"{self.memory_api}/v1/store", json={
+    def store_direct(self, user_id: str, content: str,
+                     layer: str = "semantic", **kwargs):
+        """Store a pre-formatted memory directly (no LLM extraction)."""
+        return self.session.post(f"{self.base}/v1/memories/direct", json={
             "user_id": user_id,
-            "history": [{"role": role, "content": content}]
-        }) as response:
-            return await response.json()
-    
-    async def _get_memories_async(self, user_id: str, query: str):
-        async with self.session.get(f"{self.memory_api}/v1/retrieve", params={
+            "content": content,
+            "layer": layer,
+            **kwargs,
+        }).json()
+
+    # -- Retrieval --
+
+    def recall(self, user_id: str, query: str, limit: int = 5):
+        """Retrieve relevant memories for a query."""
+        return self.session.get(f"{self.base}/v1/retrieve", params={
             "user_id": user_id,
             "query": query,
-            "limit": 5
-        }) as response:
-            return await response.json()
-    
-    async def _generate_response_async(self, message: str, context: str) -> str:
-        # Implement async LLM call
-        return await self.llm.generate_async(f"Context: {context}\nMessage: {message}")
+            "limit": limit,
+        }).json()
+
+    def get_profile(self, user_id: str):
+        """Get the user's extracted profile."""
+        resp = self.session.get(f"{self.base}/v1/profile", params={"user_id": user_id})
+        return resp.json() if resp.status_code == 200 else None
+
+    def get_portfolio(self, user_id: str):
+        """Get the user's portfolio holdings."""
+        resp = self.session.get(f"{self.base}/v1/portfolio/summary", params={"user_id": user_id})
+        return resp.json() if resp.status_code == 200 else None
+
+    def get_structured(self, user_id: str, query: Optional[str] = None, limit: int = 50):
+        """Get memories organized by category."""
+        return self.session.post(f"{self.base}/v1/retrieve/structured", json={
+            "user_id": user_id,
+            "query": query,
+            "limit": limit,
+        }).json()
+
+    # -- Deletion --
+
+    def delete_memory(self, memory_id: str, user_id: str):
+        """Delete a specific memory across all storage backends."""
+        return self.session.delete(
+            f"{self.base}/v1/memories/{memory_id}",
+            params={"user_id": user_id},
+        ).json()
+
+
+# ---- Usage ----
+
+memory = AgenticMemoryClient()
+USER = "user_123"
+CONV = "session-abc"
+
+# Store both sides of the conversation
+memory.store_message(USER, CONV, "user", "I just landed a new job at Google!")
+memory.store_message(USER, CONV, "assistant", "Congratulations! What role?", flush=True)
+
+# Later, retrieve context for a new conversation
+results = memory.recall(USER, "career updates")
+context = "\n".join(f"- {r['content']}" for r in results.get("results", []))
+
+# Feed into your LLM
+prompt = f"""You have these memories about the user:
+{context}
+
+User: How's everything going?
+"""
 ```
 
 ---
 
-## **📊 Best Practices**
+## 6. Endpoint Reference Cheat Sheet
 
-### **1. Memory Management**
-- **Store conversations regularly** to build rich memory
-- **Use appropriate granularity** (raw for details, episodic for events, arc for life story)
-- **Implement memory cleanup** for old, irrelevant memories
-- **Monitor memory usage** and implement limits
+### Storage
 
-### **2. Persona Detection**
-- **Train persona detection models** on your specific use cases
-- **Use multiple signals** (keywords, context, user behavior)
-- **Implement fallback personas** for edge cases
-- **Allow manual persona override** for users
+| Endpoint | Method | Use Case |
+|----------|--------|----------|
+| `/v1/orchestrator/message` | POST | Stream chat turns (recommended) |
+| `/v1/orchestrator/transcript` | POST | Replay a full transcript |
+| `/v1/memories/direct` | POST | Store pre-formatted memories |
+| `/v1/store` | POST | Legacy unthrottled ingestion (use orchestrator instead) |
 
-### **3. Performance Optimization**
-- **Cache frequently accessed memories**
-- **Use async operations** for better throughput
-- **Implement connection pooling** for API calls
-- **Monitor and optimize** response times
+### Retrieval
 
-### **4. Error Handling**
-- **Implement graceful degradation** when memory system is unavailable
-- **Use local caching** as fallback
-- **Log errors** for debugging and improvement
-- **Provide user feedback** when systems are down
+| Endpoint | Method | Use Case |
+|----------|--------|----------|
+| `/v1/retrieve` | GET | Semantic search (fast, primary) |
+| `/v1/retrieve` | POST | Persona-aware retrieval |
+| `/v1/retrieve/structured` | POST | Categorized memory view |
+| `/v1/narrative` | POST | Story/timeline generation |
+| `/v1/orchestrator/retrieve` | POST | Retrieve within orchestrator context |
+| `/v1/profile` | GET | User profile data |
+| `/v1/profile/{category}` | GET | Single profile category |
+| `/v1/portfolio/summary` | GET | Financial holdings |
 
----
+### Management
 
-## **🎯 Conclusion**
+| Endpoint | Method | Use Case |
+|----------|--------|----------|
+| `/v1/memories/{id}` | DELETE | Delete a memory |
+| `/v1/forget` | POST | Bulk forget by scope (stub — not yet implemented) |
+| `/v1/maintenance` | POST | Trigger maintenance jobs |
+| `/v1/maintenance/compact` | POST | Compact a user's memories |
+| `/v1/profile/{cat}/{field}` | PUT | Update profile field |
+| `/v1/portfolio/holding` | POST/PUT/DELETE | Manage holdings |
 
-This comprehensive guide provides everything you need to inject memories into your chatbots using Agentic Memories. The system offers:
+### System
 
-- **Rich memory storage** with multi-tier summarization
-- **Persona-aware retrieval** for contextually appropriate responses
-- **Explainable AI** for transparency and debugging
-- **Production-ready** deployment patterns
-- **Robust error handling** and fallback mechanisms
-
-Start with the basic integration and gradually add advanced features as your needs grow. The persona-aware retrieval system will significantly improve your chatbot's ability to provide personalized, contextually relevant responses! 🚀
-
----
-
-## **📚 Additional Resources**
-
-- **API Documentation**: `/docs` endpoint when running Agentic Memories
-- **Example Implementations**: See the `examples/` directory
-- **Performance Tuning**: Monitor logs and adjust parameters
-- **Community Support**: Join our Discord for help and updates
-
-**Happy Building!** 🎉
+| Endpoint | Method | Use Case |
+|----------|--------|----------|
+| `/health` | GET | Quick health check |
+| `/health/full` | GET | All backend health |
+| `/v1/me` | GET | Current user info |
+| `/docs` | GET | Swagger UI |

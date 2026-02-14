@@ -1755,6 +1755,7 @@ def portfolio_summary(
         response = PortfolioSummaryResponse(
             user_id=user_id,
             holdings=holdings[:limit],
+            total_holdings=len(db_holdings),
             counts_by_asset_type=counts_by_asset_type,
         )
 
@@ -1762,7 +1763,7 @@ def portfolio_summary(
         if trace:
             try:
                 trace.update(
-                    output={"holdings_count": len(holdings), "source": "postgres"}
+                    output={"holdings_count": len(db_holdings), "source": "postgres"}
                 )
             except Exception:
                 pass
@@ -1863,6 +1864,7 @@ def portfolio_summary(
     response = PortfolioSummaryResponse(
         user_id=user_id,
         holdings=holdings[:limit],
+        total_holdings=len(holdings),
         counts_by_asset_type=counts_by_asset_type,
     )
 

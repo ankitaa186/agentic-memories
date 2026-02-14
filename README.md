@@ -338,6 +338,168 @@ curl "http://localhost:8080/v1/retrieve?user_id=demo_user&query=bread&limit=5" |
 
 ---
 
+## 📖 Integration Guide
+
+Give your AI agent persistent memory in under 5 minutes. Store conversation turns, retrieve relevant context, inject into your LLM. For the full detailed guide with advanced patterns, see [docs/internal/CHATBOT_INTEGRATION_GUIDE.md](docs/internal/CHATBOT_INTEGRATION_GUIDE.md).
+
+### Quickstart: 3 Calls to Persistent Memory
+
+```bash
+# 1. Store a conversation turn (orchestrator — recommended)
+curl -X POST http://localhost:8080/v1/orchestrator/message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "conversation_id": "session-1",
+    "role": "user",
+    "content": "I just got promoted to senior engineer at Stripe!",
+    "metadata": {"user_id": "user_123"},
+    "flush": true
+  }'
+
+# 2. Retrieve relevant memories
+curl 'http://localhost:8080/v1/retrieve?user_id=user_123&query=career&limit=5'
+
+# 3. Inject into your LLM prompt
+```
+
+```python
+import requests
+
+BASE = "http://localhost:8080"
+
+def chat(user_id: str, message: str) -> str:
+    # Store
+    requests.post(f"{BASE}/v1/orchestrator/message", json={
+        "conversation_id": f"session-{user_id}",
+        "role": "user",
+        "content": message,
+        "metadata": {"user_id": user_id},
+        "flush": True,
+    })
+
+    # Retrieve
+    memories = requests.get(f"{BASE}/v1/retrieve", params={
+        "user_id": user_id, "query": message, "limit": 5,
+    }).json()
+    context = "\n".join(f"- {m['content']}" for m in memories.get("results", []))
+
+    # Inject into your LLM
+    return call_your_llm(
+        system=f"You have these memories about this user:\n{context}",
+        user=message,
+    )
+```
+
+### Storing Memories — 3 Options
+
+| | Orchestrator (recommended) | Direct Memory | Store (legacy) |
+|---|---|---|---|
+| **Endpoint** | `POST /v1/orchestrator/message` | `POST /v1/memories/direct` | `POST /v1/store` |
+| **Latency** | ~1-3s | <3s | 10-60s |
+| **LLM extraction** | Yes (full pipeline) | No | Yes (full pipeline) |
+| **Batching** | Adaptive throttling | N/A | None |
+| **Returns memories** | Yes (injections) | No | No |
+| **Best for** | All use cases | Pre-formatted data | One-off backfill |
+
+**Orchestrator** (`POST /v1/orchestrator/message`) — The best default. Runs the full LLM ingestion pipeline (worthiness check, extraction, classification, enrichment) with adaptive throttling that batches messages based on conversation speed. Returns relevant memories in the same call. Set `flush: true` for immediate persistence.
+
+```bash
+curl -X POST http://localhost:8080/v1/orchestrator/message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "conversation_id": "chat-42",
+    "role": "user",
+    "content": "I just bought 50 shares of NVDA at $130",
+    "metadata": {"user_id": "user_123"},
+    "flush": true
+  }'
+```
+
+**Direct Memory** (`POST /v1/memories/direct`) — Fast, deterministic storage for pre-formatted memories. Supports typed storage (episodic, emotional, procedural) via optional fields.
+
+```bash
+curl -X POST http://localhost:8080/v1/memories/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "content": "User prefers morning meetings between 9am-12pm",
+    "layer": "semantic",
+    "type": "explicit",
+    "importance": 0.8
+  }'
+```
+
+**Store Pipeline** (`POST /v1/store`) — Largely superseded by the orchestrator. Runs the same full LLM ingestion pipeline but without throttling or batching — every call triggers immediate processing. Use only for one-off backfill of historical transcripts where adaptive throttling is unnecessary.
+
+```bash
+curl -X POST http://localhost:8080/v1/store \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_id": "user_123",
+    "history": [
+      {"role": "user", "content": "I just got back from a 2-week trip to Japan. The ramen in Fukuoka was incredible."}
+    ]
+  }'
+```
+
+### Retrieving Memories
+
+| Endpoint | Method | Use Case |
+|----------|--------|----------|
+| `/v1/retrieve` | GET | Semantic search — fast, your go-to for most use cases |
+| `/v1/retrieve` | POST | Persona-aware retrieval with weighted scoring |
+| `/v1/retrieve/structured` | POST | Memories organized into categories by LLM |
+| `/v1/narrative` | POST | Coherent story/timeline from hybrid retrieval |
+| `/v1/orchestrator/retrieve` | POST | Retrieve within orchestrator session context |
+| `/v1/profile` | GET | Structured user profile (auto-extracted from conversations) |
+| `/v1/portfolio/summary` | GET | Financial holdings |
+
+**Basic retrieval** — semantic search across all stored memories:
+
+```bash
+curl 'http://localhost:8080/v1/retrieve?user_id=user_123&query=cooking&limit=10'
+```
+
+**User profile** — structured data extracted automatically from conversations:
+
+```bash
+curl 'http://localhost:8080/v1/profile?user_id=user_123'
+```
+
+**Portfolio** — financial holdings:
+
+```bash
+curl 'http://localhost:8080/v1/portfolio/summary?user_id=user_123'
+```
+
+**Structured retrieval** — memories categorized into emotions, professional, skills, habits, etc.:
+
+```bash
+curl -X POST http://localhost:8080/v1/retrieve/structured \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "query": "career and skills", "limit": 50}'
+```
+
+**Narrative** — generate a coherent story from memories over a time range:
+
+```bash
+curl -X POST http://localhost:8080/v1/narrative \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user_123", "query": "What happened this quarter?", "start_time": "2025-01-01T00:00:00Z", "end_time": "2025-03-31T23:59:59Z"}'
+```
+
+### Compaction Runs Behind the Scenes
+
+Memory compaction runs automatically. The system consolidates similar memories, applies decay factors, promotes important short-term memories to long-term, and archives stale data. You don't need to manage this — retrieval stays fast and relevant over time. If needed, trigger it manually:
+
+```bash
+curl -X POST 'http://localhost:8080/v1/maintenance/compact?user_id=user_123'
+```
+
+See the [full Integration Guide](docs/internal/CHATBOT_INTEGRATION_GUIDE.md) for detailed examples, the complete Python client, typed storage patterns, persona-aware retrieval, and the endpoint reference cheat sheet.
+
+---
+
 ## 📚 API Documentation
 
 ### Core Endpoints
