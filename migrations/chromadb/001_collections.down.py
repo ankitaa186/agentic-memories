@@ -14,7 +14,9 @@ import urllib.error
 from typing import Optional, Tuple
 
 
-def _request(url: str, *, method: str = "GET", data: Optional[dict] = None, timeout: int = 5) -> Tuple[int, str]:
+def _request(
+    url: str, *, method: str = "GET", data: Optional[dict] = None, timeout: int = 5
+) -> Tuple[int, str]:
     """Minimal HTTP helper using stdlib."""
     headers = {"Content-Type": "application/json"}
     body = json.dumps(data).encode() if data else None

@@ -16,7 +16,9 @@ import urllib.error
 from typing import Optional, Tuple
 
 
-def _request(url: str, *, method: str = "GET", data: Optional[dict] = None, timeout: int = 5) -> Tuple[int, str]:
+def _request(
+    url: str, *, method: str = "GET", data: Optional[dict] = None, timeout: int = 5
+) -> Tuple[int, str]:
     """Minimal HTTP helper using stdlib."""
     headers = {"Content-Type": "application/json"}
     body = json.dumps(data).encode() if data else None
@@ -48,7 +50,9 @@ def main() -> None:
 
     # Create tenant (idempotent)
     try:
-        status, body = _request(f"{base_url}/tenants", method="POST", data={"name": tenant})
+        status, body = _request(
+            f"{base_url}/tenants", method="POST", data={"name": tenant}
+        )
         if status in (200, 201, 409):  # 409 = already exists
             print(f"✅ Ensured tenant exists: {tenant}")
         else:

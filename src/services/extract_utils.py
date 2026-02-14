@@ -120,7 +120,10 @@ def _call_llm_json(
                         model=EXTRACTION_MODEL,
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": json.dumps(user_payload, default=str)},
+                            {
+                                "role": "user",
+                                "content": json.dumps(user_payload, default=str),
+                            },
                         ],
                         response_format=None
                         if expect_array
@@ -164,7 +167,10 @@ def _call_llm_json(
                         model=EXTRACTION_MODEL,
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": json.dumps(user_payload, default=str)},
+                            {
+                                "role": "user",
+                                "content": json.dumps(user_payload, default=str),
+                            },
                         ],
                         response_format=None
                         if expect_array
