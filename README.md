@@ -58,13 +58,14 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
                          │
 ┌─────────────────────────────────────────────────────────┐
 │                MEMORY LAYERS                            │
-│  Episodic | Semantic | Procedural | Emotional | Somatic │
+│  Episodic | Semantic | Procedural | Emotional | Portfolio │
 └─────────────────────────────────────────────────────────┘
                          ▲
                          │
 ┌─────────────────────────────────────────────────────────┐
 │              HYBRID STORAGE SYSTEMS                     │
-│  TimescaleDB | Neo4j | ChromaDB | PostgreSQL | Redis   │
+│  TimescaleDB | ChromaDB | PostgreSQL | Redis | Neo4j*  │
+│  (* Neo4j planned — not yet deployed)                  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -76,7 +77,7 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 | Facts without context | **Experiences with emotional weight** |
 | Simple search | **Reconstructive retrieval** (fills gaps like humans) |
 | Infinite retention | **Graceful forgetting** (Ebbinghaus curve) |
-| Single database | **Polyglot persistence** (5 specialized databases) |
+| Single database | **Polyglot persistence** (4 specialized databases) |
 | Reactive queries | **Predictive intelligence** |
 | No narrative capability | **Coherent life story construction** |
 
@@ -94,7 +95,7 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 
 ### 🎯 Core Capabilities
 
-- **🧠 Intelligent Memory Extraction** - Unified LangGraph pipeline extracts multiple memory types from conversations using LLMs (GPT-4, Grok)
+- **🧠 Intelligent Memory Extraction** - Unified LangGraph pipeline extracts multiple memory types from conversations using LLMs (OpenAI, Grok)
 - **📊 Multi-Modal Memory Types**
   - **Episodic**: Life events with temporal, spatial, and emotional context
   - **Semantic**: Facts, concepts, and declarative knowledge
@@ -127,7 +128,7 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
   - Redis caching for hot paths
   
 - **🔄 Robust Data Management**
-  - Versioned migrations for 5 database types
+  - Versioned migrations for 3 database types (TimescaleDB, PostgreSQL, ChromaDB)
   - Enhanced migration system with rollback support
   - Dry-run mode and validation
   - Migration history tracking and locking
@@ -202,8 +203,8 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 │ • ChromaDB      │                  │ • Langfuse (LLM)    │
 │ • TimescaleDB   │                  │ • Structured Logs   │
 │ • PostgreSQL    │                  │ • Health Metrics    │
-│ • Neo4j         │                  └─────────────────────┘
-│ • Redis         │
+│ • Redis         │                  └─────────────────────┘
+│ • Neo4j (soon)  │
 └─────────────────┘
 ```
 
@@ -214,8 +215,8 @@ Unlike traditional memory systems that treat data as static records, Agentic Mem
 | **ChromaDB** | Vector embeddings | **All retrieval** | Memories with semantic search |
 | **TimescaleDB** | Time-series data | Temporal queries | Episodic, emotional, portfolio snapshots |
 | **PostgreSQL** | Structured data | Procedural, portfolio | Skills, holdings, transactions |
-| **Neo4j** | Graph relationships | (Future) | Skill chains, correlations |
 | **Redis** | Hot cache | Short-term layer | Transient memories |
+| **Neo4j** *(planned)* | Graph relationships | (Future) | Skill chains, correlations |
 
 **Why Polyglot Persistence?**
 - ✅ Each database optimized for its data type
@@ -395,7 +396,7 @@ def chat(user_id: str, message: str) -> str:
 | | Orchestrator (recommended) | Direct Memory | Store (legacy) |
 |---|---|---|---|
 | **Endpoint** | `POST /v1/orchestrator/message` | `POST /v1/memories/direct` | `POST /v1/store` |
-| **Latency** | ~1-3s | <3s | 10-60s |
+| **Latency** | ~10-30s | <3s | 10-60s |
 | **LLM extraction** | Yes (full pipeline) | No | Yes (full pipeline) |
 | **Batching** | Adaptive throttling | N/A | None |
 | **Returns memories** | Yes (injections) | No | No |
@@ -528,9 +529,9 @@ Extracts and stores memories from conversation history. Automatically detects me
 **Response**:
 ```json
 {
-  "memories_created": 3,
-  "ids": ["mem_abc", "mem_def", "mem_ghi"],
-  "summary": "Stored: 1 episodic, 1 emotional, 1 portfolio.",
+  "memories_created": 2,
+  "ids": ["mem_abc", "mem_def"],
+  "summary": "Stored: 1 episodic, 1 emotional.",
   "memories": [...]
 }
 ```
@@ -558,7 +559,9 @@ Fast semantic search using ChromaDB.
 - `query` (optional): Search query (omit for all memories)
 - `layer` (optional): Filter by layer (`short-term`, `semantic`, `episodic`)
 - `type` (optional): Filter by type (`explicit`, `implicit`)
-- `limit` (default: 10): Results per page
+- `persona` (optional): Force a specific persona for retrieval
+- `sort` (optional): Sort order — `newest` or `oldest`
+- `limit` (default: 50, max: 1000): Results per page
 - `offset` (default: 0): Pagination offset
 
 **Response**:
@@ -574,13 +577,7 @@ Fast semantic search using ChromaDB.
         "portfolio": "{\"ticker\":\"AAPL\",\"shares\":100,...}"
       }
     }
-  ],
-  "finance": {
-    "portfolio": {
-      "holdings": [{"ticker": "AAPL", "shares": 100, ...}],
-      "counts_by_asset_type": {"public_equity": 1}
-    }
-  }
+  ]
 }
 ```
 
@@ -662,33 +659,37 @@ Structured portfolio data from PostgreSQL (with ChromaDB fallback).
 ```json
 {
   "user_id": "user_123",
+  "total_holdings": 1,
   "holdings": [
     {
       "ticker": "AAPL",
+      "asset_name": "Apple Inc.",
       "shares": 100,
-      "avg_price": 175,
-      "position": "long",
-      "intent": "buy"
+      "avg_price": 175.0,
+      "first_acquired": "2025-01-15T10:30:00Z",
+      "last_updated": "2025-01-15T10:30:00Z"
     }
-  ],
-  "counts_by_asset_type": {
-    "public_equity": 1
-  }
+  ]
 }
 ```
+
+> **Note**: Portfolio holdings are managed via explicit CRUD calls (`POST /v1/portfolio/holding`), not auto-extracted from the ingestion pipeline.
 
 ---
 
 #### 🔹 Profile Management
 
-Profile CRUD APIs provide read and write access to user profile data extracted from conversations. Profiles are automatically populated during ingestion (Story 1.2) and can be manually edited via these endpoints.
+Profile CRUD APIs provide read and write access to user profile data extracted from conversations. Profiles are automatically populated during ingestion and can be manually edited via these endpoints.
 
 **Profile Categories**:
-- `basics`: name, age, location, occupation, education, family_status
-- `preferences`: communication_style, likes, dislikes, favorites, work_style
-- `goals`: short_term, long_term, aspirations
-- `interests`: hobbies, topics, activities
-- `background`: history, experiences, skills, achievements
+- `basics`: name, birthday, location, occupation, family_status
+- `preferences`: communication_style, food_preferences, love_language, gift_preferences
+- `goals`: short_term, long_term, bucket_list
+- `interests`: hobbies, learning_areas, favorite_topics
+- `background`: skills, education_history, work_history, current_employer
+- `health`: allergies, dietary_needs
+- `personality`: personality_type, stress_response, social_battery
+- `values`: life_values, philanthropy, spiritual_alignment
 
 ##### GET /v1/profile - Get Complete Profile
 
@@ -705,9 +706,9 @@ Returns complete user profile with all categories and confidence scores.
 ```json
 {
   "user_id": "user_123",
-  "completeness_pct": 42.86,
+  "completeness_pct": 33.33,
   "populated_fields": 9,
-  "total_fields": 21,
+  "total_fields": 27,
   "last_updated": "2025-11-17T10:30:45.123456+00:00",
   "created_at": "2025-11-17T10:25:12.654321+00:00",
   "profile": {
@@ -854,15 +855,15 @@ Returns profile completeness statistics.
 ```json
 {
   "user_id": "user_123",
-  "overall_completeness_pct": 42.86,
+  "overall_completeness_pct": 33.33,
   "populated_fields": 9,
-  "total_fields": 21
+  "total_fields": 27
 }
 ```
 
 **Notes**:
-- Completeness = (populated_fields / 21 total expected fields) × 100
-- Expected fields: basics(6) + preferences(5) + goals(3) + interests(3) + background(4) = 21 total
+- Completeness = (populated_fields / 27 total expected fields) × 100
+- Expected fields: basics(5) + preferences(4) + goals(3) + interests(3) + background(4) + health(2) + personality(3) + values(3) = 27 total
 
 **HTTP Status Codes**:
 - `200`: Success
@@ -914,8 +915,8 @@ Features:
 - 📊 **Memory Browser**: Visual timeline of all memories
 - 🔍 **Semantic Search**: Find memories by meaning
 - 📈 **Portfolio Dashboard**: Track financial holdings
+- 👤 **Profile Viewer**: Structured user profile data
 - 🏥 **Health Monitor**: Real-time service status
-- 🎯 **Debug Console**: Inspect LLM traces with Langfuse
 
 ---
 
@@ -1000,22 +1001,9 @@ CREATE TABLE portfolio_holdings (
 );
 ```
 
-### Graph Relationships (Neo4j)
+### Graph Relationships (Neo4j — planned)
 
-```cypher
-// Skill dependencies
-CREATE CONSTRAINT skill_id_unique FOR (s:Skill) REQUIRE s.id IS UNIQUE;
-CREATE INDEX skill_user FOR (s:Skill) ON (s.user_id);
-
-// Relationships
-(Skill)-[:REQUIRES]->(Skill)
-(Skill)-[:LEADS_TO]->(Skill)
-(User)-[:KNOWS]->(Skill)
-
-// Portfolio correlations (future)
-(Holding)-[:CORRELATES_WITH]->(Holding)
-(Holding)-[:IN_SECTOR]->(Sector)
-```
+> Neo4j integration is planned for a future release. It will enable graph-based queries for skill dependencies, portfolio correlations, and social relationship graphs.
 
 ---
 
@@ -1033,7 +1021,6 @@ agentic-memories/
 │   ├── dependencies/             # Database clients
 │   │   ├── chroma.py
 │   │   ├── timescale.py
-│   │   ├── neo4j_client.py
 │   │   └── redis_client.py
 │   └── services/                 # Business logic
 │       ├── unified_ingestion_graph.py   # LangGraph extraction pipeline
@@ -1052,7 +1039,6 @@ agentic-memories/
 │   ├── generate.sh              # Migration generator
 │   ├── timescaledb/             # TimescaleDB migrations
 │   ├── postgres/                # PostgreSQL migrations
-│   ├── neo4j/                   # Neo4j migrations
 │   └── chromadb/                # ChromaDB migrations
 ├── ui/                          # React web interface
 │   ├── src/
@@ -1115,7 +1101,7 @@ See [migrations/README.md](migrations/README.md) for full documentation.
 | `LLM_PROVIDER` | ✅ | `openai` | Extraction model provider: `openai` or `xai` (Grok) |
 | `OPENAI_API_KEY` | ✅ | - | OpenAI API key (always required — used for embeddings) |
 | `XAI_API_KEY` | ✅ (if xai) | - | xAI API key (only if using Grok for extraction) |
-| `EXTRACTION_MODEL_OPENAI` | ❌ | `gpt-4o` | OpenAI model for extraction |
+| `EXTRACTION_MODEL_OPENAI` | ❌ | `gpt-5` | OpenAI model for extraction |
 | `EXTRACTION_MODEL_XAI` | ❌ | `grok-4-fast-reasoning` | xAI model for extraction |
 | `POSTGRES_PASSWORD` | ❌ | `changeme` | Password for TimescaleDB (used by docker-compose) |
 | `LANGFUSE_PUBLIC_KEY` | ❌ | - | Langfuse public key (for tracing) |
@@ -1140,10 +1126,10 @@ docker compose logs -f api   # Follow API logs
 
 ### Core Documentation
 
-- [**Architecture Deep Dive**](restructure_v2.md) - Complete v2 vision and design
-- [**Retrieval Data Flow**](RETRIEVAL_DATA_FLOW.md) - How data is fetched
-- [**Comprehensive Data Sources**](COMPREHENSIVE_DATA_SOURCES.md) - Database usage analysis
-- [**Deployment Results**](DEPLOYMENT_TEST_RESULTS.md) - Testing and verification
+- [**Architecture Deep Dive**](docs/internal/restructure_v2.md) - Complete v2 vision and design
+- [**Retrieval Data Flow**](docs/internal/RETRIEVAL_DATA_FLOW.md) - How data is fetched
+- [**Comprehensive Data Sources**](docs/internal/COMPREHENSIVE_DATA_SOURCES.md) - Database usage analysis
+- [**Deployment Results**](docs/internal/DEPLOYMENT_TEST_RESULTS.md) - Testing and verification
 - [**Migration Guide**](migrations/README.md) - Database migration system
 
 ### API Reference
@@ -1279,7 +1265,7 @@ docker compose logs -f api   # Follow API logs
 ### ✅ Phase 1: Core Infrastructure (COMPLETE)
 
 - [x] FastAPI application with health checks
-- [x] Multi-database connectivity (5 databases)
+- [x] Multi-database connectivity (4 databases)
 - [x] Environment configuration
 - [x] Docker deployment
 - [x] Migration system (enhanced with rollback)
@@ -1347,7 +1333,7 @@ docker compose logs -f api   # Follow API logs
 
 ### 🚧 Phase 8: Advanced Graph Features (PENDING)
 
-- [ ] **Neo4j read queries** (currently write-only)
+- [ ] **Neo4j integration** (not yet deployed)
 - [ ] **Skill dependency traversal**
 - [ ] **Portfolio correlation analysis**
 - [ ] **Social relationship graphs**
@@ -1377,7 +1363,7 @@ docker compose logs -f api   # Follow API logs
 
 ## 🎯 Roadmap
 
-### Q4 2024
+### Completed
 
 - ✅ Core infrastructure and database setup
 - ✅ Memory extraction pipeline (LangGraph)
@@ -1385,30 +1371,21 @@ docker compose logs -f api   # Follow API logs
 - ✅ Narrative construction
 - ✅ Portfolio tracking
 - ✅ Web UI
+- ✅ Profile extraction and management
+- ✅ Orchestrator with adaptive throttling
+- ✅ CI/CD pipeline with secret scanning
 
-### Q1 2025
+### Planned
 
 - [ ] **Consolidation engine** - Nightly memory strengthening
 - [ ] **Forgetting mechanism** - Graceful decay with retention policies
-- [ ] **Neo4j retrieval** - Graph-based queries
+- [ ] **Neo4j integration** - Graph-based queries for relationships
 - [ ] **Semantic & Identity services** - Complete all memory layers
 - [ ] **Privacy controls** - Consent management and encryption
-
-### Q2 2025
-
 - [ ] **Predictive intelligence** - Anticipate user needs
 - [ ] **Pattern recognition** - Behavioral and emotional patterns
 - [ ] **Advanced narrative** - Gap-filling and causal chains
 - [ ] **Performance optimization** - Sub-100ms simple queries
-- [ ] **Multi-tenant support** - Production-ready for SaaS
-
-### Q3 2025
-
-- [ ] **Social memory** - Relationship graphs and shared memories
-- [ ] **Learning recommendations** - Skill paths based on graph traversal
-- [ ] **Emotional coaching** - Mood tracking and interventions
-- [ ] **Mobile app** - iOS/Android native interfaces
-- [ ] **Plugin ecosystem** - Integrate with popular chatbot platforms
 
 ---
 
@@ -1483,7 +1460,6 @@ Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) for de
 - [LangChain/LangGraph](https://www.langchain.com/) - LLM orchestration
 - [ChromaDB](https://www.trychroma.com/) - Vector database
 - [TimescaleDB](https://www.timescale.com/) - Time-series PostgreSQL
-- [Neo4j](https://neo4j.com/) - Graph database
 - [Langfuse](https://langfuse.com/) - LLM observability
 - [React](https://react.dev/) + [Tailwind CSS](https://tailwindcss.com/) - Web UI
 
