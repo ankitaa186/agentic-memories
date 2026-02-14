@@ -392,16 +392,16 @@ def chat(user_id: str, message: str) -> str:
 
 ### Storing Memories — 3 Options
 
-| | Orchestrator (recommended) | Direct Memory | Store Pipeline |
+| | Orchestrator (recommended) | Direct Memory | Store (legacy) |
 |---|---|---|---|
 | **Endpoint** | `POST /v1/orchestrator/message` | `POST /v1/memories/direct` | `POST /v1/store` |
 | **Latency** | ~1-3s | <3s | 10-60s |
-| **LLM extraction** | No | No | Yes (full pipeline) |
-| **Batching** | Automatic | N/A | N/A |
+| **LLM extraction** | Yes (full pipeline) | No | Yes (full pipeline) |
+| **Batching** | Adaptive throttling | N/A | None |
 | **Returns memories** | Yes (injections) | No | No |
-| **Best for** | Real-time chat | Pre-formatted data | Bulk/historical import |
+| **Best for** | All use cases | Pre-formatted data | One-off backfill |
 
-**Orchestrator** (`POST /v1/orchestrator/message`) — The best default. Streams conversation turns, batches during bursts, deduplicates, and returns relevant memories in the same call. Set `flush: true` for immediate persistence.
+**Orchestrator** (`POST /v1/orchestrator/message`) — The best default. Runs the full LLM ingestion pipeline (worthiness check, extraction, classification, enrichment) with adaptive throttling that batches messages based on conversation speed. Returns relevant memories in the same call. Set `flush: true` for immediate persistence.
 
 ```bash
 curl -X POST http://localhost:8080/v1/orchestrator/message \
@@ -429,7 +429,7 @@ curl -X POST http://localhost:8080/v1/memories/direct \
   }'
 ```
 
-**Store Pipeline** (`POST /v1/store`) — Full LLM-powered ingestion. Evaluates worthiness, extracts multiple memory types, classifies, enriches, and stores across all backends. Best for historical backfill.
+**Store Pipeline** (`POST /v1/store`) — Largely superseded by the orchestrator. Runs the same full LLM ingestion pipeline but without throttling or batching — every call triggers immediate processing. Use only for one-off backfill of historical transcripts where adaptive throttling is unnecessary.
 
 ```bash
 curl -X POST http://localhost:8080/v1/store \
