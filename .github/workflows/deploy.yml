@@ -16,6 +16,8 @@ jobs:
   deploy:
     # NOTE: This workflow requires a self-hosted runner configured for your
     # deployment target. See: https://docs.github.com/en/actions/hosting-your-own-runners
+    # Restrict to repo owner to prevent abuse on public repos with self-hosted runners
+    if: github.actor == github.repository_owner
     runs-on: self-hosted
     env:
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/agentic-memories' }}
