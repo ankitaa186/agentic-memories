@@ -1755,6 +1755,7 @@ def portfolio_summary(
         response = PortfolioSummaryResponse(
             user_id=user_id,
             holdings=holdings[:limit],
+            total_holdings=len(holdings),
             counts_by_asset_type=counts_by_asset_type,
         )
 
@@ -1863,6 +1864,7 @@ def portfolio_summary(
     response = PortfolioSummaryResponse(
         user_id=user_id,
         holdings=holdings[:limit],
+        total_holdings=len(holdings),
         counts_by_asset_type=counts_by_asset_type,
     )
 

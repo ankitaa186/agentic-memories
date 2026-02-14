@@ -432,7 +432,7 @@ curl 'http://localhost:8080/v1/portfolio/summary?user_id=user_123'
     {"ticker": "NVDA", "shares": 50.0, "avg_price": 130.00, "asset_name": null, "first_acquired": null, "last_updated": null},
     {"ticker": "AAPL", "shares": 100.0, "avg_price": 175.00, "asset_name": null, "first_acquired": null, "last_updated": null}
   ],
-  "total_holdings": 0
+  "total_holdings": 2
 }
 ```
 
