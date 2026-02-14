@@ -467,8 +467,10 @@ mkdir -p ./data/timescaledb ./data/chromadb
 echo -e "${GREEN}✓ Data directories ready (./data/)${NC}"
 
 # ChromaDB configuration — local vars for host-side health checks only.
-# Do NOT export CHROMA_HOST; docker-compose.yml defaults it to "chromadb"
-# (the service name) inside the container.
+# .env was sourced with `set -a`, so CHROMA_HOST may be exported as "chromadb".
+# Unexport it so "localhost" (needed for host-side curl checks) does not leak
+# into docker compose and override the container-internal service name.
+unset CHROMA_HOST
 CHROMA_HOST="localhost"
 CHROMA_PORT="${CHROMA_PORT:-8000}"
 CHROMA_TENANT="${CHROMA_TENANT:-agentic-memories}"
