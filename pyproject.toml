@@ -1,0 +1,47 @@
+[project]
+name = "agentic-memories"
+version = "0.1.0"
+# TODO: Target Python 3.14 after ensuring all dependencies are compatible / are updated.
+requires-python = "==3.12.*"
+dependencies = [
+  "fastapi==0.111.0",
+  "uvicorn[standard]==0.30.1",
+  "chromadb==1.4.0",
+  "openai==1.40.0",
+  "redis==5.0.6",
+  # TODO: switched to `~=` from `>=` as v3.0 has breaking changes:
+  #       PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed.
+  #       Use `json_schema_extra` instead. (Extra keys: 'example'). Deprecated in Pydantic V2.0 to be removed in V3.0.
+  #       See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  "pydantic~=2.9",
+  "apscheduler==3.10.4",
+  "httpx==0.27.0",
+  "python-dotenv==1.0.1",
+  "pytest==8.3.2",
+  "langgraph==0.2.25",
+  "langgraph-checkpoint==1.0.12",
+  "langchain-core==0.3.0",
+  "langchain==0.3.0",
+  "python-jose[cryptography]==3.3.0",
+  "psycopg[binary]",
+  "psycopg-pool==3.2.1",
+  "langfuse>=3.10.0",
+  "debugpy==1.8.0",
+  "croniter==2.0.1",
+]
+
+[dependency-groups]
+dev = [
+  "ruff~=0.14.14"
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# https://docs.astral.sh/ruff/rules/
+# TODO: Enable additional linting rules in future PRs, currently set to default.
+select = ["E4", "E7", "E9", "F"]
