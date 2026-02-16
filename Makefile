@@ -197,7 +197,6 @@ check-loki: ## Verify Loki Docker plugin is installed
 # ============================================================
 
 lint: venv ## Check linting (ruff). Use FIX=1 to auto-fix
-	$(VENV) if ! command -v ruff >/dev/null 2>&1; then pip install -q "ruff~=0.15.0"; fi
 ifdef FIX
 	$(VENV) ruff check --fix .
 else
@@ -205,7 +204,6 @@ else
 endif
 
 format: venv ## Check formatting (ruff). Use FIX=1 to apply fixes
-	$(VENV) if ! command -v ruff >/dev/null 2>&1; then pip install -q "ruff~=0.15.0"; fi
 ifdef FIX
 	$(VENV) ruff format .
 else
