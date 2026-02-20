@@ -207,14 +207,20 @@ RUFF_VERSION ?= 0.15.0
 
 ensure-ruff: venv
 	@$(VENV) if ! command -v ruff >/dev/null 2>&1; then \
-       if [ -n "$(UV_AVAILABLE)" ]; then \
-          echo "Installing ruff using \`uv pip install\`"; \
-          uv pip install "ruff~=$(RUFF_VERSION)"; \
-       else \
-          echo "Installing ruff using \`pip install\`"; \
-          . .venv/bin/activate && pip install "ruff~=$(RUFF_VERSION)"; \
-       fi; \
-    fi
+	  if command -v uv >/dev/null 2>&1; then \
+	    echo "Installing ruff using \`uv pip install\`"; \
+	    if [ -z "$(RUFF_VERSION)" ]; then \
+	      echo "Error: RUFF_VERSION is empty"; exit 1; \
+	    fi; \
+	    uv pip install "ruff~=$(RUFF_VERSION)"; \
+	  else \
+	    echo "Installing ruff using \`pip install\`"; \
+	    if [ -z "$(RUFF_VERSION)" ]; then \
+	      echo "Error: RUFF_VERSION is empty"; exit 1; \
+	    fi; \
+	    pip install "ruff~=$(RUFF_VERSION)"; \
+	  fi; \
+	fi
 
 lint: ensure-ruff ## Check linting (ruff). Use FIX=1 to auto-fix
 ifdef FIX
