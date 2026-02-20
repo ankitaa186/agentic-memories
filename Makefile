@@ -1,6 +1,6 @@
 # Makefile for agentic-memories
 
-.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile test-coverage start stop clean clean-all lint format logs docker-logs docker-shell docker-test gh gh-read gh-diff gh-download gh-upload gh-write migrate
+.PHONY: help install venv test test-unit test-integration test-e2e test-all test-fast test-intents test-intents-e2e test-memory test-profile test-coverage start stop clean clean-all ensure-ruff lint format logs docker-logs docker-shell docker-test gh gh-read gh-diff gh-download gh-upload gh-write migrate requirements.txt
 
 # Detect uv or fallback to pip
 UV_AVAILABLE := $(shell command -v uv 2>/dev/null)
@@ -68,15 +68,23 @@ clean-all: clean ## Clean everything including venv
 # Activate venv for all test commands
 VENV := . .venv/bin/activate &&
 
+# Used to regenerate file on demand. Dockerfile relies on this being up-to-date.
+# Dockerfile can be updated to use https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
+# with a flags on whether or not to include dev / test dependencies, to avoid the need to maintain a separate
+# requirements.txt file.
+requirements.txt: pyproject.toml
+	@uv sync
+	@uv export --no-hashes --no-dev --format requirements.txt --output-file requirements.txt
+
 # Ensure venv exists and dependencies are installed
-.venv/bin/activate: requirements.txt
+.venv/bin/activate:
 ifdef UV_AVAILABLE
 	@if [ ! -d ".venv" ]; then \
 		echo "Creating virtual environment with uv (Python $(PYTHON_VERSION))..."; \
 		uv venv --python $(PYTHON_VERSION); \
 	fi
 	@echo "Installing dependencies with uv..."
-	@uv pip install -q -r requirements.txt
+	@uv sync
 else
 	@echo "uv not found, using pip (install uv for faster installs: curl -LsSf https://astral.sh/uv/install.sh | sh)"
 	@if [ ! -d ".venv" ]; then \
@@ -168,7 +176,11 @@ docker-shell: ## Open shell in Docker container (use SERVICE=name)
 docker-test: ## Run tests inside Docker container
 	docker compose $(COMPOSE_FILES) exec api pytest tests/unit tests/integration -v
 
+ifneq ($(strip $(UV_AVAILABLE)),)
+docker-rebuild: requirements.txt ## Rebuild Docker containers (use ENV=prod for production)
+else
 docker-rebuild: ## Rebuild Docker containers (use ENV=prod for production)
+endif
 	@echo "Rebuilding containers..."
 	@docker compose $(COMPOSE_FILES) build --no-cache
 	@echo "Containers rebuilt."
@@ -190,16 +202,34 @@ check-loki: ## Verify Loki Docker plugin is installed
 # CODE QUALITY
 # ============================================================
 
-lint: venv ## Check linting (ruff). Use FIX=1 to auto-fix
-	$(VENV) pip install -q ruff
+# Match this version to version defined in pyproject.toml
+RUFF_VERSION ?= 0.15.0
+
+ensure-ruff: venv
+	@$(VENV) if ! command -v ruff >/dev/null 2>&1; then \
+	  if command -v uv >/dev/null 2>&1; then \
+	    echo "Installing ruff using \`uv pip install\`"; \
+	    if [ -z "$(RUFF_VERSION)" ]; then \
+	      echo "Error: RUFF_VERSION is empty"; exit 1; \
+	    fi; \
+	    uv pip install "ruff~=$(RUFF_VERSION)"; \
+	  else \
+	    echo "Installing ruff using \`pip install\`"; \
+	    if [ -z "$(RUFF_VERSION)" ]; then \
+	      echo "Error: RUFF_VERSION is empty"; exit 1; \
+	    fi; \
+	    pip install "ruff~=$(RUFF_VERSION)"; \
+	  fi; \
+	fi
+
+lint: ensure-ruff ## Check linting (ruff). Use FIX=1 to auto-fix
 ifdef FIX
 	$(VENV) ruff check --fix .
 else
 	$(VENV) ruff check .
 endif
 
-format: venv ## Check formatting (ruff). Use FIX=1 to apply fixes
-	$(VENV) pip install -q ruff
+format: ensure-ruff ## Check formatting (ruff). Use FIX=1 to apply fixes
 ifdef FIX
 	$(VENV) ruff format .
 else
