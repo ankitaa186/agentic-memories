@@ -70,7 +70,7 @@ VENV := . .venv/bin/activate &&
 
 # Used to regenerate file on demand. Dockerfile relies on this being up-to-date.
 # Dockerfile can be updated to use https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
-# with a flags on weather or not to include dev / test dependencies, to avoid the need to maintain a separate
+# with a flags on whether or not to include dev / test dependencies, to avoid the need to maintain a separate
 # requirements.txt file.
 requirements.txt: pyproject.toml
 	@uv sync
