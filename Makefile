@@ -197,14 +197,28 @@ check-loki: ## Verify Loki Docker plugin is installed
 # CODE QUALITY
 # ============================================================
 
-lint: venv ## Check linting (ruff). Use FIX=1 to auto-fix
+# Match this version to version defined in pyproject.toml
+RUFF_VERSION ?= 0.15.0
+
+ensure-ruff: venv
+	@$(VENV) if ! command -v ruff >/dev/null 2>&1; then \
+       if [ -n "$(UV_AVAILABLE)" ]; then \
+          echo "Installing ruff using \`uv pip install\`"; \
+          uv pip install "ruff~=$(RUFF_VERSION)"; \
+       else \
+          echo "Installing ruff using \`pip install\`"; \
+          . .venv/bin/activate && pip install "ruff~=$(RUFF_VERSION)"; \
+       fi; \
+    fi
+
+lint: ensure-ruff ## Check linting (ruff). Use FIX=1 to auto-fix
 ifdef FIX
 	$(VENV) ruff check --fix .
 else
 	$(VENV) ruff check .
 endif
 
-format: venv ## Check formatting (ruff). Use FIX=1 to apply fixes
+format: ensure-ruff ## Check formatting (ruff). Use FIX=1 to apply fixes
 ifdef FIX
 	$(VENV) ruff format .
 else
