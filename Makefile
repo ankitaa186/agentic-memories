@@ -71,9 +71,9 @@ VENV := . .venv/bin/activate &&
 # includes all requirements (including dev) as `requirements.txt` is used for all environments (including local)
 # without uv. Dockerfile can be updated to use https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
 # with a flags on weather or not to include dev / test dependencies.
-requirements.txt:
+requirements.txt: pyproject.toml
 	@uv sync
-	@uv export --no-hashes --format requirements.txt --output-file requirements.txt
+	@uv export --no-hashes --no-dev --format requirements.txt --output-file requirements.txt
 
 # Ensure venv exists and dependencies are installed
 .venv/bin/activate:
