@@ -68,9 +68,10 @@ clean-all: clean ## Clean everything including venv
 # Activate venv for all test commands
 VENV := . .venv/bin/activate &&
 
-# includes all requirements (including dev) as `requirements.txt` is used for all environments (including local)
-# without uv. Dockerfile can be updated to use https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
-# with a flags on weather or not to include dev / test dependencies.
+# Used to regenerate file on demand. Dockerfile relies on this being up-to-date.
+# Dockerfile can be updated to use https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
+# with a flags on weather or not to include dev / test dependencies, to avoid the need to maintain a separate
+# requirements.txt file.
 requirements.txt: pyproject.toml
 	@uv sync
 	@uv export --no-hashes --no-dev --format requirements.txt --output-file requirements.txt
@@ -175,7 +176,11 @@ docker-shell: ## Open shell in Docker container (use SERVICE=name)
 docker-test: ## Run tests inside Docker container
 	docker compose $(COMPOSE_FILES) exec api pytest tests/unit tests/integration -v
 
+ifneq ($(strip $(UV_AVAILABLE)),)
+docker-rebuild: requirements.txt ## Rebuild Docker containers (use ENV=prod for production)
+else
 docker-rebuild: ## Rebuild Docker containers (use ENV=prod for production)
+endif
 	@echo "Rebuilding containers..."
 	@docker compose $(COMPOSE_FILES) build --no-cache
 	@echo "Containers rebuilt."
