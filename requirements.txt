@@ -57,6 +57,8 @@ colorama==0.4.6 ; os_name == 'nt' or sys_platform == 'win32'
     #   uvicorn
 croniter==2.0.1
     # via agentic-memories
+debugpy==1.8.0
+    # via agentic-memories (dev debugging)
 cryptography==46.0.5
     # via python-jose
 distro==1.9.0
