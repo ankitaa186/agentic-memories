@@ -26,12 +26,12 @@ dependencies = [
   "psycopg-pool==3.2.1",
   "langfuse==3.14.2",
   "croniter==2.0.1",
+  "debugpy==1.8.0",  # Required for Docker dev mode (docker-entrypoint.sh)
 ]
 
 [dependency-groups]
 dev = [
   "ruff~=0.15.0",
-  "debugpy==1.8.0",
 ]
 test = [
   "pytest==8.3.2",

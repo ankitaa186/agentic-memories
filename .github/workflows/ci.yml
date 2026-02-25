@@ -38,6 +38,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Verify requirements.txt is in sync with pyproject.toml
+        run: |
+          uv export --no-hashes --no-dev --format requirements.txt --output-file /tmp/requirements.txt
+          diff requirements.txt /tmp/requirements.txt || {
+            echo "::error::requirements.txt is out of sync with pyproject.toml. Run 'make requirements.txt' and commit."
+            exit 1
+          }
+
       - name: Install ruff
         run: pip install ruff
 
