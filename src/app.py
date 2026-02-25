@@ -1729,7 +1729,7 @@ def portfolio_summary(
             holding_dict = {
                 "asset_type": h.get("asset_type"),
                 "ticker": h.get("ticker"),
-                "name": h.get("asset_name"),
+                "asset_name": h.get("asset_name"),
                 "shares": h.get("shares"),
                 "avg_price": h.get("avg_price"),
                 "current_price": h.get("current_price"),
@@ -1743,7 +1743,8 @@ def portfolio_summary(
                 "time_horizon": h.get("time_horizon"),
                 "notes": h.get("notes"),
                 "source_memory_id": h.get("source_memory_id"),
-                "updated_at": h.get("last_updated"),
+                "first_acquired": h.get("first_acquired"),
+                "last_updated": h.get("last_updated"),
             }
             holdings.append(holding_dict)
             at = holding_dict.get("asset_type") or "unknown"

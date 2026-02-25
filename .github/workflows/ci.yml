@@ -44,7 +44,10 @@ jobs:
       - name: Verify requirements.txt is in sync with pyproject.toml
         run: |
           uv export --no-hashes --no-dev --format requirements.txt --output-file /tmp/requirements.txt
-          diff requirements.txt /tmp/requirements.txt || {
+          # Strip auto-generated header comment (contains output path which differs)
+          tail -n +3 requirements.txt > /tmp/req-current.txt
+          tail -n +3 /tmp/requirements.txt > /tmp/req-expected.txt
+          diff /tmp/req-current.txt /tmp/req-expected.txt || {
             echo "::error::requirements.txt is out of sync with pyproject.toml. Run 'make requirements.txt' and commit."
             exit 1
           }
