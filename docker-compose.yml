@@ -54,6 +54,7 @@ services:
       - "6379:6379"
   timescaledb:
     image: timescale/timescaledb:latest-pg14
+    user: "${DOCKER_UID:-0}:${DOCKER_GID:-0}"
     restart: unless-stopped
     shm_size: ${POSTGRES_SHM_SIZE:-2gb}
     command:

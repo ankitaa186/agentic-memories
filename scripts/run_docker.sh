@@ -466,6 +466,16 @@ export ENV
 mkdir -p ./data/timescaledb ./data/chromadb
 echo -e "${GREEN}✓ Data directories ready (./data/)${NC}"
 
+# ── Fix for Docker Desktop on macOS ──────────────────────────────────────────
+# Docker Desktop's VirtioFS cannot chown bind-mounted files, which causes the
+# PostgreSQL entrypoint to crash-loop.  Running the container as the host user
+# makes the entrypoint skip chown, and PostgreSQL sees matching file ownership.
+# On Linux, Docker runs natively and chown works fine, so we leave it default.
+if [ "$(uname -s)" = "Darwin" ]; then
+    export DOCKER_UID=$(id -u)
+    export DOCKER_GID=$(id -g)
+fi
+
 # ChromaDB configuration — local vars for host-side health checks only.
 # .env was sourced with `set -a`, so CHROMA_HOST may be exported as "chromadb".
 # Unexport it so "localhost" (needed for host-side curl checks) does not leak
