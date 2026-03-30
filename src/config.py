@@ -92,7 +92,7 @@ def get_timescale_dsn() -> Optional[str]:
 
 @lru_cache(maxsize=1)
 def get_extraction_model_name() -> str:
-    # Provider-aware default: OpenAI → gpt-5, xAI → grok-4-fast-reasoning
+    # Provider-aware default: OpenAI → gpt-5.2, xAI → grok-4-fast-reasoning
     env_val = os.getenv("EXTRACTION_MODEL")
     if env_val and env_val.strip() != "":
         return env_val
@@ -101,13 +101,13 @@ def get_extraction_model_name() -> str:
         env_val = os.getenv("EXTRACTION_MODEL_OPENAI")
         if env_val and env_val.strip() != "":
             return env_val
-        return "gpt-5"
+        return "gpt-5.2"
     if provider in {"xai", "grok"}:  # accept alias "grok" for backward compatibility
         env_val = os.getenv("EXTRACTION_MODEL_XAI")
         if env_val and env_val.strip() != "":
             return env_val
         return "grok-4-fast-reasoning"
-    return "gpt-5"
+    return "gpt-5.2"
 
 
 @lru_cache(maxsize=1)
