@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import logging
+import time as _time
 from datetime import datetime, timedelta, timezone
+
+import numpy as np
 
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
@@ -45,52 +48,138 @@ def ttl_cleanup() -> int:
 def simple_deduplicate(
     user_id: str, similarity_threshold: float = 0.85, limit: int = 10000
 ) -> Dict[str, int]:
-    """Naive per-user dedup: compare embeddings and remove near-duplicates.
+    """Per-user dedup: compare embeddings and remove near-duplicates.
 
-    Threshold lowered from 0.90 to 0.80 (Story 4.3) to catch semantic duplicates
-    that are worded differently (e.g., "User likes Buffett" vs "User admires Buffett").
+    Reuses embeddings stored in ChromaDB instead of re-running the embedding
+    model for every memory (which previously dominated runtime — ~6 minutes
+    for 765 memories). Falls back to `generate_embedding` only for records
+    that are missing an embedding.
+
+    Uses a numpy similarity matrix and a single greedy pass: for each kept
+    memory, any later memory with cosine similarity >= threshold is marked
+    for deletion. The earlier ID always wins (oldest-by-fetch-order survives).
 
     Returns stats dict with 'scanned' and 'removed' counts.
     """
+    logger.info("[forget.dedup.start] user_id=%s limit=%s", user_id, limit)
     col = _get_collection()
     try:
+        _t_fetch = _time.perf_counter()
         res = col.get(
-            where={"user_id": user_id}, limit=limit, include=["documents", "metadatas"]
+            where={"user_id": user_id},
+            limit=limit,
+            include=["documents", "metadatas", "embeddings"],
         )  # type: ignore[attr-defined]
-        ids = res.get("ids", [])
-        docs = res.get("documents", [])
+        ids = list(res.get("ids", []) or [])
+        docs = res.get("documents", []) or []
+        raw_embs = res.get("embeddings", []) or []
         N = len(ids)
+        has_embeddings = 0
+        for i in range(N):
+            raw = raw_embs[i] if i < len(raw_embs) else None
+            if raw is not None:
+                try:
+                    if len(list(raw)) > 0:
+                        has_embeddings += 1
+                except TypeError:
+                    pass
+        missing_embeddings = N - has_embeddings
+        logger.info(
+            "[forget.dedup.fetched] user_id=%s count=%s has_embeddings=%s missing_embeddings=%s latency_ms=%s",
+            user_id,
+            N,
+            has_embeddings,
+            missing_embeddings,
+            int((_time.perf_counter() - _t_fetch) * 1000),
+        )
         if N <= 1:
             return {"scanned": N, "removed": 0}
+
+        # Coerce embeddings, regenerating only when missing
         embs: List[List[float]] = []
-        for doc in docs:
+        regenerated = 0
+        for i in range(N):
+            raw = raw_embs[i] if i < len(raw_embs) else None
+            if raw is not None:
+                try:
+                    embs.append(list(raw))
+                    continue
+                except TypeError:
+                    pass
+            doc = docs[i] if i < len(docs) else ""
             try:
-                embs.append(generate_embedding(doc) or [])
+                emb = generate_embedding(doc) if doc else None
+                embs.append(list(emb) if emb else [])
+                if emb:
+                    regenerated += 1
             except Exception:
                 embs.append([])
-        removed: List[str] = []
-        for i in range(N):
-            if ids[i] in removed:
+
+        # Filter to rows with a consistent embedding dimension
+        dims = [len(e) for e in embs]
+        nonzero = [d for d in dims if d > 0]
+        if not nonzero:
+            return {"scanned": N, "removed": 0}
+        modal_dim = max(set(nonzero), key=nonzero.count)
+        keep = [i for i, d in enumerate(dims) if d == modal_dim]
+        if len(keep) <= 1:
+            return {"scanned": N, "removed": 0}
+
+        kept_ids = [ids[i] for i in keep]
+        _t_matrix = _time.perf_counter()
+        matrix = np.asarray([embs[i] for i in keep], dtype=np.float32)
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        matrix = matrix / norms
+        logger.info(
+            "[forget.dedup.matrix] user_id=%s n=%s dim=%s modal_dim=%s latency_ms=%s",
+            user_id,
+            matrix.shape[0],
+            matrix.shape[1],
+            modal_dim,
+            int((_time.perf_counter() - _t_matrix) * 1000),
+        )
+
+        _t_sim = _time.perf_counter()
+        sim = matrix @ matrix.T  # cosine similarity (rows are unit vectors)
+        _n_sim = sim.shape[0]
+        if _n_sim > 1:
+            _iu = np.triu_indices(_n_sim, k=1)
+            _off = sim[_iu]
+            _max_sim = float(_off.max()) if _off.size > 0 else 0.0
+            _mean_sim = float(_off.mean()) if _off.size > 0 else 0.0
+        else:
+            _max_sim = 0.0
+            _mean_sim = 0.0
+        logger.info(
+            "[forget.dedup.sim] user_id=%s latency_ms=%s max_sim=%.3f mean_sim=%.3f",
+            user_id,
+            int((_time.perf_counter() - _t_sim) * 1000),
+            _max_sim,
+            _mean_sim,
+        )
+
+        # Greedy single-pass dedup: for each surviving i, drop any j>i above threshold
+        n = matrix.shape[0]
+        dropped = np.zeros(n, dtype=bool)
+        # Mask the lower triangle + diagonal so we only consider j > i
+        upper = np.triu(sim >= similarity_threshold, k=1)
+        for i in range(n):
+            if dropped[i]:
                 continue
-            for j in range(i + 1, N):
-                if ids[j] in removed:
-                    continue
-                a = embs[i]
-                b = embs[j]
-                if not a or not b or len(a) != len(b):
-                    continue
-                dot = sum(x * y for x, y in zip(a, b))
-                na = sum(x * x for x in a) ** 0.5
-                nb = sum(y * y for y in b) ** 0.5
-                if na <= 0 or nb <= 0:
-                    continue
-                cos = dot / (na * nb)
-                if cos >= similarity_threshold:
-                    removed.append(ids[j])
+            dup_js = np.where(upper[i] & ~dropped)[0]
+            if dup_js.size > 0:
+                dropped[dup_js] = True
+
+        removed = [kept_ids[i] for i in range(n) if dropped[i]]
         if removed:
             col.delete(ids=removed)  # type: ignore[attr-defined]
             logger.info(
-                "[forget.dedup] user_id=%s removed=%s of %s", user_id, len(removed), N
+                "[forget.dedup] user_id=%s removed=%s of %s regenerated=%s",
+                user_id,
+                len(removed),
+                N,
+                regenerated,
             )
         return {"scanned": N, "removed": len(removed)}
     except Exception as exc:

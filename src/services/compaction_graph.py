@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import logging
 import json
+import os
 import time as _time
 
+import numpy as np
 from langgraph.graph import StateGraph, END  # type: ignore
 
 from src.services.compaction_ops import (
@@ -27,99 +29,183 @@ from src.services.prompts import CONSOLIDATION_PROMPT
 logger = logging.getLogger("agentic_memories.compaction_graph")
 
 
+def _get_cluster_config() -> Tuple[float, int, int]:
+    """Read cluster tuning parameters from environment.
+
+    Returns (threshold, min_cluster_size, max_cluster_size).
+    Defaults are tuned slightly looser than the original (0.75/3/10) because
+    high-dimensional embeddings (3072d) compress cosine similarity into a
+    narrow band, so 0.75 was producing zero clusters in practice.
+    """
+    try:
+        threshold = float(os.getenv("COMPACTION_CLUSTER_THRESHOLD", "0.72"))
+    except ValueError:
+        threshold = 0.72
+    try:
+        min_size = int(os.getenv("COMPACTION_CLUSTER_MIN_SIZE", "3"))
+    except ValueError:
+        min_size = 3
+    try:
+        max_size = int(os.getenv("COMPACTION_CLUSTER_MAX_SIZE", "10"))
+    except ValueError:
+        max_size = 10
+    if min_size < 2:
+        min_size = 2
+    if max_size < min_size:
+        max_size = min_size
+    return threshold, min_size, max_size
+
+
 def _cluster_memories(
-    memories: List[Dict[str, Any]], threshold: float = 0.75
+    memories: List[Dict[str, Any]], threshold: Optional[float] = None
 ) -> List[List[Dict[str, Any]]]:
     """Cluster memories by embedding similarity.
 
-    Groups memories with cosine similarity > threshold into clusters.
-    Requires minimum 5 memories to attempt clustering.
-    Returns only clusters with 3-10 memories (skip pairs, prevent over-merging).
+    Reuses embeddings already attached to each memory dict (populated by
+    `_fetch_user_memories`) and only falls back to `generate_embedding` for
+    records that are missing one — this avoids the costly per-memory LLM call
+    that previously dominated runtime.
+
+    Uses numpy for the pairwise cosine similarity matrix and applies a greedy
+    complete-linkage merge. Threshold and min/max cluster size are configurable
+    via env vars (see `_get_cluster_config`).
 
     Args:
-            memories: List of memory dicts with 'id', 'content', 'metadata'
-            threshold: Similarity threshold for clustering (default 0.75)
+            memories: List of memory dicts with 'id', 'content', 'metadata',
+                      and optionally 'embedding'
+            threshold: Optional override for similarity threshold
 
     Returns:
             List of clusters, where each cluster is a list of memory dicts
     """
-    if len(memories) < 5:
+    cfg_threshold, min_cluster_size, max_cluster_size = _get_cluster_config()
+    if threshold is None:
+        threshold = cfg_threshold
+
+    logger.info(
+        "[cluster.start] memories=%s threshold=%.3f min_size=%s max_size=%s",
+        len(memories),
+        threshold,
+        min_cluster_size,
+        max_cluster_size,
+    )
+
+    if len(memories) < max(min_cluster_size, 2):
         return []
 
-    # Generate embeddings for all memories
+    # Collect embeddings, reusing whatever is already attached
+    _t_embed = _time.perf_counter()
     embeddings: List[List[float]] = []
     valid_memories: List[Dict[str, Any]] = []
+    reused = 0
+    regenerated = 0
 
     for mem in memories:
         content = mem.get("content", "")
         if not content:
             continue
+
+        emb = mem.get("embedding")
+        if emb is not None and len(emb) > 0:
+            embeddings.append(list(emb))
+            valid_memories.append(mem)
+            reused += 1
+            continue
+
         try:
-            emb = generate_embedding(content)
-            if emb:
-                embeddings.append(emb)
+            new_emb = generate_embedding(content)
+            if new_emb:
+                embeddings.append(new_emb)
                 valid_memories.append(mem)
+                regenerated += 1
         except Exception as e:
             logger.warning("[cluster.embed.error] id=%s error=%s", mem.get("id"), e)
             continue
 
-    if len(valid_memories) < 3:
+    n = len(valid_memories)
+    if n < min_cluster_size:
         return []
 
-    # Compute similarity matrix and cluster using greedy approach
-    n = len(valid_memories)
-    used = set()
+    logger.info(
+        "[cluster.embed] reused=%s regenerated=%s total=%s latency_ms=%s",
+        reused,
+        regenerated,
+        n,
+        int((_time.perf_counter() - _t_embed) * 1000),
+    )
+
+    # Build a (n x d) embedding matrix, dropping rows whose dimension doesn't
+    # match the modal dimension (defensive — should be rare).
+    dims = [len(e) for e in embeddings]
+    if not dims:
+        return []
+    modal_dim = max(set(dims), key=dims.count)
+    keep_idx = [i for i, d in enumerate(dims) if d == modal_dim]
+    if len(keep_idx) < min_cluster_size:
+        return []
+    valid_memories = [valid_memories[i] for i in keep_idx]
+    matrix = np.asarray([embeddings[i] for i in keep_idx], dtype=np.float32)
+
+    # Normalize rows so dot product == cosine similarity
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    matrix = matrix / norms
+
+    _t_sim = _time.perf_counter()
+    sim = matrix @ matrix.T  # (n x n) cosine similarity
+    _n_sim = sim.shape[0]
+    if _n_sim > 1:
+        _iu = np.triu_indices(_n_sim, k=1)
+        _off = sim[_iu]
+        _max_off = float(_off.max()) if _off.size > 0 else 0.0
+        _mean_off = float(_off.mean()) if _off.size > 0 else 0.0
+    else:
+        _max_off = 0.0
+        _mean_off = 0.0
+    logger.info(
+        "[cluster.sim] n=%s dim=%s latency_ms=%s max_offdiag=%.3f mean_offdiag=%.3f",
+        _n_sim,
+        matrix.shape[1],
+        int((_time.perf_counter() - _t_sim) * 1000),
+        _max_off,
+        _mean_off,
+    )
+
+    # Greedy complete-linkage clustering
+    n = matrix.shape[0]
+    used = np.zeros(n, dtype=bool)
     clusters: List[List[Dict[str, Any]]] = []
 
     for i in range(n):
-        if i in used:
+        if used[i]:
             continue
 
-        cluster = [valid_memories[i]]
-        used.add(i)
+        cluster_idx = [i]
+        used[i] = True
 
         for j in range(i + 1, n):
-            if j in used:
+            if used[j]:
                 continue
+            if len(cluster_idx) >= max_cluster_size:
+                break
+            # Complete linkage: j must be similar to ALL members of cluster
+            if float(sim[j, cluster_idx].min()) >= threshold:
+                cluster_idx.append(j)
+                used[j] = True
 
-            # Compute cosine similarity
-            a, b = embeddings[i], embeddings[j]
-            if len(a) != len(b):
-                continue
+        if min_cluster_size <= len(cluster_idx) <= max_cluster_size:
+            clusters.append([valid_memories[k] for k in cluster_idx])
 
-            dot = sum(x * y for x, y in zip(a, b))
-            na = sum(x * x for x in a) ** 0.5
-            nb = sum(y * y for y in b) ** 0.5
-
-            if na <= 0 or nb <= 0:
-                continue
-
-            cos_sim = dot / (na * nb)
-
-            if cos_sim >= threshold:
-                # Check similarity with ALL cluster members (complete linkage)
-                is_similar_to_all = True
-                for k_idx, k_mem in enumerate(cluster):
-                    if k_idx == 0:
-                        continue  # Already checked with i
-                    k_orig_idx = valid_memories.index(k_mem)
-                    k_emb = embeddings[k_orig_idx]
-                    dot_k = sum(x * y for x, y in zip(k_emb, b))
-                    na_k = sum(x * x for x in k_emb) ** 0.5
-                    cos_k = dot_k / (na_k * nb) if na_k > 0 else 0
-                    if cos_k < threshold:
-                        is_similar_to_all = False
-                        break
-
-                if is_similar_to_all and len(cluster) < 10:  # Max cluster size
-                    cluster.append(valid_memories[j])
-                    used.add(j)
-
-        # Only keep clusters with 3-10 memories
-        if 3 <= len(cluster) <= 10:
-            clusters.append(cluster)
-
-    logger.info("[cluster] found=%s clusters from %s memories", len(clusters), n)
+    _sizes = sorted((len(c) for c in clusters), reverse=True)
+    logger.info(
+        "[cluster] found=%s clusters from %s memories (threshold=%.3f min=%s max=%s) sizes=%s",
+        len(clusters),
+        n,
+        threshold,
+        min_cluster_size,
+        max_cluster_size,
+        _sizes,
+    )
     return clusters
 
 
@@ -135,6 +221,11 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
     """
     from src.services.extract_utils import _call_llm_json
     from datetime import datetime
+
+    logger.info(
+        "[consolidate.start] user_id=%s cluster_size=%s", user_id, len(cluster)
+    )
+    _t_consolidate = _time.perf_counter()
 
     # Format memories for prompt with timestamps for conflict resolution
     # Sort by timestamp (oldest first) so LLM sees chronological order
@@ -222,10 +313,11 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
         )
 
         logger.info(
-            "[consolidate.success] user_id=%s sources=%s content_len=%s",
+            "[consolidate.success] user_id=%s sources=%s content_len=%s latency_ms=%s",
             user_id,
             len(source_ids),
             len(content),
+            int((_time.perf_counter() - _t_consolidate) * 1000),
         )
 
         return {"memory": memory, "source_ids": source_ids}
@@ -238,24 +330,54 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
 def _fetch_user_memories(
     user_id: str, limit: int = 200, offset: int = 0
 ) -> List[Dict[str, Any]]:
-    """Fetch a batch of user memories with ids, content, and metadata.
-    Best-effort using v2 collection get.
+    """Fetch a batch of user memories with ids, content, metadata, and embeddings.
+    Best-effort using v2 collection get. Embeddings are included so downstream
+    consumers (clustering, dedup) can avoid re-running the embedding model.
     """
+    _t_fetch = _time.perf_counter()
     col = _get_collection()
     res = col.get(
         where={"user_id": user_id},
         limit=limit,
         offset=offset,
-        include=["documents", "metadatas"],
+        include=["documents", "metadatas", "embeddings"],
     )  # type: ignore[attr-defined]
     ids = res.get("ids", [])
     docs = res.get("documents", [])
     metas = res.get("metadatas", [])
+    embs = res.get("embeddings", []) or []
     items: List[Dict[str, Any]] = []
+    has_embeddings = 0
     for i, mid in enumerate(ids or []):
         if i >= len(docs) or i >= len(metas):
             continue
-        items.append({"id": mid, "content": docs[i], "metadata": metas[i]})
+        emb = None
+        if i < len(embs):
+            raw = embs[i]
+            if raw is not None:
+                # Chroma may return numpy arrays — coerce to plain list of floats
+                try:
+                    emb = list(raw)
+                except TypeError:
+                    emb = None
+        if emb is not None and len(emb) > 0:
+            has_embeddings += 1
+        items.append(
+            {
+                "id": mid,
+                "content": docs[i],
+                "metadata": metas[i],
+                "embedding": emb,
+            }
+        )
+    logger.info(
+        "[graph.fetch] user_id=%s requested_limit=%s returned=%s has_embeddings=%s latency_ms=%s",
+        user_id,
+        limit,
+        len(items),
+        has_embeddings,
+        int((_time.perf_counter() - _t_fetch) * 1000),
+    )
     return items
 
 
@@ -521,7 +643,7 @@ def build_compaction_graph() -> StateGraph:
             return state
 
         # 2. Cluster by embedding similarity
-        clusters = _cluster_memories(memories, threshold=0.75)
+        clusters = _cluster_memories(memories)
 
         if not clusters:
             logger.info(
@@ -538,8 +660,16 @@ def build_compaction_graph() -> StateGraph:
         sources_removed = 0
         dry_run = state.get("dry_run", False)
 
-        for cluster in clusters:
+        for _cluster_idx, cluster in enumerate(clusters):
             result = _consolidate_cluster(user_id, cluster)
+
+            logger.info(
+                "[graph.consolidate.progress] user_id=%s done=%s of %s consolidated_so_far=%s",
+                user_id,
+                _cluster_idx + 1,
+                len(clusters),
+                consolidated_count,
+            )
 
             if result.get("memory") and result.get("source_ids"):
                 if dry_run:
