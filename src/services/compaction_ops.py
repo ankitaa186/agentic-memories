@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import logging
+import os
 import time as _time
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +13,31 @@ from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.services.embedding_utils import generate_embedding
 from src.services.retrieval import _standard_collection_name
+
+
+def _get_episodic_ttl_config() -> Tuple[float, int]:
+    """Read episodic TimescaleDB TTL thresholds from environment.
+
+    Returns (score_lt, age_days). A row is eligible for deletion when
+    `importance_score < score_lt AND event_timestamp < now() - age_days`.
+
+    Defaults (0.6 / 180d) were chosen empirically: in the live corpus they
+    target the bottom ~8% of records — primarily low-confidence
+    conversation summaries the upstream summarizer marked at 0.5 — while
+    leaving mid-tier and high-importance records untouched. Override via
+    env vars when tuning retention pressure.
+    """
+    try:
+        score_lt = float(os.getenv("TIMESCALE_TTL_EPISODIC_SCORE_LT", "0.6"))
+    except ValueError:
+        score_lt = 0.6
+    try:
+        age_days = int(os.getenv("TIMESCALE_TTL_EPISODIC_AGE_DAYS", "180"))
+    except ValueError:
+        age_days = 180
+    if age_days < 1:
+        age_days = 1
+    return score_lt, age_days
 
 
 logger = logging.getLogger("agentic_memories.compaction_ops")
@@ -357,7 +383,9 @@ def deduplicate_emotional(user_id: str, limit: int = 1000) -> Dict[str, int]:
 def ttl_cleanup_timescale() -> int:
     """TTL-based cleanup of stale TimescaleDB memories.
 
-    - Episodic: delete where importance_score < 0.3 AND older than 90 days
+    - Episodic: delete where importance_score < TIMESCALE_TTL_EPISODIC_SCORE_LT
+                AND older than TIMESCALE_TTL_EPISODIC_AGE_DAYS
+                (defaults 0.6 / 180d — see `_get_episodic_ttl_config`)
     - Emotional: delete where intensity < 0.2 AND older than 60 days
 
     Returns total number of rows deleted.
@@ -367,18 +395,20 @@ def ttl_cleanup_timescale() -> int:
         logger.warning("[forget.ttl_timescale] no TimescaleDB connection")
         return 0
 
+    score_lt, age_days = _get_episodic_ttl_config()
+
     total_deleted = 0
     try:
         with conn.cursor() as cur:
-            # Episodic TTL: low importance + old
-            cutoff_episodic = datetime.now(timezone.utc) - timedelta(days=90)
+            # Episodic TTL: low importance + old (configurable thresholds)
+            cutoff_episodic = datetime.now(timezone.utc) - timedelta(days=age_days)
             cur.execute(
                 """
 				DELETE FROM episodic_memories
-				WHERE importance_score < 0.3
+				WHERE importance_score < %s
 				  AND event_timestamp < %s
 			""",
-                (cutoff_episodic,),
+                (score_lt, cutoff_episodic),
             )
             episodic_deleted = cur.rowcount
 
@@ -398,10 +428,12 @@ def ttl_cleanup_timescale() -> int:
 
         total_deleted = episodic_deleted + emotional_deleted
         logger.info(
-            "[forget.ttl_timescale] episodic_deleted=%s emotional_deleted=%s total=%s",
+            "[forget.ttl_timescale] episodic_deleted=%s emotional_deleted=%s total=%s episodic_score_lt=%.2f episodic_age_days=%s",
             episodic_deleted,
             emotional_deleted,
             total_deleted,
+            score_lt,
+            age_days,
         )
         return total_deleted
     except Exception as exc:

@@ -17,6 +17,7 @@ from typing import Dict
 
 from fastapi import APIRouter, HTTPException, Query
 
+from src.config import get_default_short_term_ttl_seconds
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.models import Memory
@@ -441,6 +442,20 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
         }
     )
 
+    # Default a TTL for short-term records so the compaction sweep can
+    # actually expire them. Without this, direct-API ingestion produced
+    # immortal short-term memories (none of the other layers get a TTL).
+    # Callers can override the default via DirectMemoryRequest.ttl_seconds;
+    # the field is ignored for non-short-term layers since they never expire.
+    if body.layer == "short-term":
+        ttl_seconds = (
+            body.ttl_seconds
+            if body.ttl_seconds is not None
+            else get_default_short_term_ttl_seconds()
+        )
+    else:
+        ttl_seconds = None
+
     # Build Memory object
     memory = Memory(
         id=memory_id,
@@ -455,6 +470,7 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
         persona_tags=body.persona_tags[:10] if body.persona_tags else [],
         embedding=embedding,
         timestamp=datetime.now(timezone.utc),
+        ttl=ttl_seconds,
         metadata=metadata,
     )
 

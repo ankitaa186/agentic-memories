@@ -598,6 +598,16 @@ class DirectMemoryRequest(BaseModel):
         description="Additional metadata key-value pairs",
         example={"source": "chat", "session_id": "abc123"},
     )
+    ttl_seconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional TTL in seconds. Only meaningful when layer='short-term'. "
+            "If omitted, short-term records use SHORT_TERM_TTL_SECONDS (default "
+            "60 days). Non-short-term layers ignore this field."
+        ),
+        example=86400,
+    )
 
     # Optional episodic fields (triggers episodic_memories table storage)
     event_timestamp: Optional[datetime] = Field(

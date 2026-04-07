@@ -152,10 +152,16 @@ def get_layer_threshold() -> float:
 
 @lru_cache(maxsize=1)
 def get_default_short_term_ttl_seconds() -> int:
+    # 60 days. "Short-term" means the human notion of "not permanent" — quotes,
+    # transient context, recent reports — not literal seconds. The previous 1h
+    # default was a placeholder that was never enforced on the direct-API path
+    # and is far too aggressive for an assistant whose users expect to recall
+    # things from a few weeks ago. Override via SHORT_TERM_TTL_SECONDS env var
+    # or per-request via DirectMemoryRequest.ttl_seconds.
     try:
-        return int(os.getenv("SHORT_TERM_TTL_SECONDS", "3600"))
+        return int(os.getenv("SHORT_TERM_TTL_SECONDS", str(60 * 24 * 3600)))
     except ValueError:
-        return 3600
+        return 60 * 24 * 3600
 
 
 @lru_cache(maxsize=1)
