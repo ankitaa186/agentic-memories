@@ -1035,15 +1035,12 @@ def store_transcript(body: TranscriptRequest) -> StoreResponse:
     ids = final_state.get("memory_ids", [])
 
     # Bump Redis namespace for this user to invalidate short-term caches
+    # Note: recent_users / all_users activity tracking is now in upsert_memories()
+    # so both /v1/store and orchestrator paths are covered.
     try:
         redis = get_redis_client()
         if redis is not None:
             redis.incr(f"mem:ns:{body.user_id}")
-            # Record daily activity for compaction trigger (UTC date key)
-            day_key = datetime.now(timezone.utc).strftime("%Y%m%d")
-            redis.sadd(f"recent_users:{day_key}", body.user_id)
-            # Also track all users set
-            redis.sadd("all_users", body.user_id)
     except Exception:
         pass
     items = [

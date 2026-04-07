@@ -6,9 +6,11 @@ import hashlib
 import time
 import uuid
 import json
+from datetime import datetime, timezone
 
 import logging
 from src.dependencies.chroma import get_chroma_client
+from src.dependencies.redis_client import get_redis_client
 from src.models import Memory
 from src.services.retrieval import _standard_collection_name
 
@@ -118,6 +120,17 @@ def upsert_memories(user_id: str, memories: List[Memory]) -> List[str]:
         len(ids),
         collection_name,
     )
+
+    # Record user activity for compaction scheduler
+    try:
+        redis = get_redis_client()
+        if redis is not None:
+            day_key = datetime.now(timezone.utc).strftime("%Y%m%d")
+            redis.sadd(f"recent_users:{day_key}", user_id)
+            redis.sadd("all_users", user_id)
+    except Exception:
+        pass
+
     return ids
 
 

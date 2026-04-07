@@ -54,6 +54,8 @@ stop: ## Stop Docker containers (use ENV=prod for production)
 	@echo "Stopping Agentic Memories services..."
 	@docker compose $(COMPOSE_FILES) down
 
+restart: stop start ## Restart Docker containers (use ENV=prod for production)
+
 clean: ## Clean up logs, results, and volumes
 	rm -rf tests/e2e/logs/ tests/e2e/results/
 	@docker compose $(COMPOSE_FILES) down -v

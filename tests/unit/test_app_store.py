@@ -70,8 +70,7 @@ def test_store_transcript_returns_summary_and_updates_cache(
 
     namespace_key = f"mem:ns:{payload['user_id']}"
     assert redis_stub.counters[namespace_key] == 1
-    day_key = datetime.now(timezone.utc).strftime("%Y%m%d")
-    assert payload["user_id"] in redis_stub.sets[f"recent_users:{day_key}"]
-    assert payload["user_id"] in redis_stub.sets["all_users"]
+    # Activity tracking (recent_users / all_users) is now in upsert_memories(),
+    # tested separately; this test mocks run_unified_ingestion so storage is skipped.
 
     run_unified_ingestion.assert_called_once()
