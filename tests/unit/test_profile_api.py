@@ -86,9 +86,16 @@ def test_get_profile_success(api_client, mock_profile_service, monkeypatch):
         "last_updated": "2024-11-16T12:00:00Z",
         "created_at": "2024-11-01T10:00:00Z",
         "profile": {
+            "basics": {"name": "John Doe", "age": 30},
+            "preferences": {},
+            "goals": {},
+            "interests": {},
+            "background": {},
+        },
+        "field_metadata": {
             "basics": {
-                "name": {"value": "John Doe", "last_updated": "2024-11-16T12:00:00Z"},
-                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"},
+                "name": {"last_updated": "2024-11-16T12:00:00Z"},
+                "age": {"last_updated": "2024-11-16T12:00:00Z"},
             },
             "preferences": {},
             "goals": {},
@@ -108,6 +115,10 @@ def test_get_profile_success(api_client, mock_profile_service, monkeypatch):
     assert data["populated_fields"] == 15
     assert "profile" in data
     assert "basics" in data["profile"]
+    # Default response: raw values, no metadata block
+    assert data["profile"]["basics"]["name"] == "John Doe"
+    assert data["profile"]["basics"]["age"] == 30
+    assert data.get("field_metadata") is None
 
 
 def test_get_profile_not_found(api_client, mock_profile_service, monkeypatch):
@@ -125,15 +136,19 @@ def test_get_profile_category_success(api_client, mock_profile_service, monkeypa
     mock_profile_service.profiles["test-user-123"] = {
         "user_id": "test-user-123",
         "profile": {
+            "basics": {"name": "John Doe", "age": 30},
+            "preferences": {"communication_style": "direct"},
+            "goals": {},
+            "interests": {},
+            "background": {},
+        },
+        "field_metadata": {
             "basics": {
-                "name": {"value": "John Doe", "last_updated": "2024-11-16T12:00:00Z"},
-                "age": {"value": 30, "last_updated": "2024-11-16T12:00:00Z"},
+                "name": {"last_updated": "2024-11-16T12:00:00Z"},
+                "age": {"last_updated": "2024-11-16T12:00:00Z"},
             },
             "preferences": {
-                "communication_style": {
-                    "value": "direct",
-                    "last_updated": "2024-11-16T12:00:00Z",
-                }
+                "communication_style": {"last_updated": "2024-11-16T12:00:00Z"}
             },
             "goals": {},
             "interests": {},
@@ -149,7 +164,9 @@ def test_get_profile_category_success(api_client, mock_profile_service, monkeypa
     assert data["category"] == "basics"
     assert data["user_id"] == "test-user-123"
     assert "name" in data["fields"]
-    assert data["fields"]["name"]["value"] == "John Doe"
+    assert data["fields"]["name"] == "John Doe"
+    assert data["fields"]["age"] == 30
+    assert data.get("field_metadata") is None
 
 
 def test_get_profile_category_invalid(api_client, mock_profile_service, monkeypatch):
@@ -440,6 +457,198 @@ def test_serialize_field_value():
     assert _serialize_field_value([1, 2, 3]) == "[1, 2, 3]"
     assert _serialize_field_value({"key": "value"}) == '{"key": "value"}'
     assert _serialize_field_value("hello") == "hello"
+
+
+# Tests for raw-value response shape and include_metadata flag
+def _seed_full_profile(mock_profile_service, user_id="u1"):
+    mock_profile_service.profiles[user_id] = {
+        "user_id": user_id,
+        "completeness_pct": 50.0,
+        "populated_fields": 6,
+        "total_fields": 25,
+        "last_updated": "2026-04-14T10:00:00+00:00",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "profile": {
+            "basics": {
+                "name": "Ankit",
+                "age": 41,
+                "married": True,
+                "children": [{"relation": "daughter", "name": "Ava"}],
+            },
+            "preferences": {"food_preferences": ["sushi", "pasta"]},
+            "goals": {},
+            "interests": {"hobbies": ["3d printing"]},
+            "background": {},
+            "health": {},
+            "personality": {},
+            "values": {},
+        },
+        "field_metadata": {
+            "basics": {
+                "name": {"last_updated": "2026-04-10T00:00:00+00:00"},
+                "age": {"last_updated": "2026-04-11T00:00:00+00:00"},
+                "married": {"last_updated": "2026-04-12T00:00:00+00:00"},
+                "children": {"last_updated": "2026-04-13T00:00:00+00:00"},
+            },
+            "preferences": {
+                "food_preferences": {"last_updated": "2026-04-09T00:00:00+00:00"}
+            },
+            "goals": {},
+            "interests": {
+                "hobbies": {"last_updated": "2026-04-08T00:00:00+00:00"}
+            },
+            "background": {},
+            "health": {},
+            "personality": {},
+            "values": {},
+        },
+    }
+
+
+def test_get_profile_returns_raw_values_all_types(api_client, mock_profile_service):
+    """Default response returns raw values for str/int/bool/list[str]/list[dict]."""
+    _seed_full_profile(mock_profile_service)
+    with patch("src.routers.profile._profile_service", mock_profile_service):
+        resp = api_client.get("/v1/profile?user_id=u1")
+    assert resp.status_code == 200
+    p = resp.json()["profile"]
+    assert p["basics"]["name"] == "Ankit"
+    assert p["basics"]["age"] == 41
+    assert p["basics"]["married"] is True
+    assert p["basics"]["children"] == [{"relation": "daughter", "name": "Ava"}]
+    assert p["preferences"]["food_preferences"] == ["sushi", "pasta"]
+    # No envelope leakage
+    assert not isinstance(p["basics"]["name"], dict)
+
+
+def test_get_profile_omits_metadata_by_default(api_client, mock_profile_service):
+    _seed_full_profile(mock_profile_service)
+    with patch("src.routers.profile._profile_service", mock_profile_service):
+        resp = api_client.get("/v1/profile?user_id=u1")
+    assert resp.json().get("field_metadata") is None
+
+
+def test_get_profile_with_include_metadata_true(api_client, mock_profile_service):
+    """include_metadata=true returns nested-mirror field_metadata block."""
+    _seed_full_profile(mock_profile_service)
+    with patch("src.routers.profile._profile_service", mock_profile_service):
+        resp = api_client.get("/v1/profile?user_id=u1&include_metadata=true")
+    assert resp.status_code == 200
+    body = resp.json()
+    # Raw values still present
+    assert body["profile"]["basics"]["name"] == "Ankit"
+    # Metadata mirrors structure
+    fm = body["field_metadata"]
+    assert fm["basics"]["name"]["last_updated"] == "2026-04-10T00:00:00+00:00"
+    assert fm["preferences"]["food_preferences"]["last_updated"] == "2026-04-09T00:00:00+00:00"
+
+
+def test_get_profile_category_with_include_metadata(api_client, mock_profile_service):
+    """Category endpoint returns its slice of field_metadata when requested."""
+    _seed_full_profile(mock_profile_service)
+    with patch("src.routers.profile._profile_service", mock_profile_service):
+        resp = api_client.get(
+            "/v1/profile/basics?user_id=u1&include_metadata=true"
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["fields"]["name"] == "Ankit"
+    assert body["field_metadata"]["name"]["last_updated"] == "2026-04-10T00:00:00+00:00"
+    # No leakage of other categories
+    assert "preferences" not in body["field_metadata"]
+
+
+def test_get_profile_category_omits_metadata_by_default(api_client, mock_profile_service):
+    _seed_full_profile(mock_profile_service)
+    with patch("src.routers.profile._profile_service", mock_profile_service):
+        resp = api_client.get("/v1/profile/basics?user_id=u1")
+    assert resp.json().get("field_metadata") is None
+
+
+# Tests for the extractor double-encoding fix
+def test_extractor_unwraps_double_encoded_string():
+    """LLM-emitted '"X"' string is decoded to 'X' before storage."""
+    from src.services.profile_extraction import ProfileExtractor
+
+    svc = ProfileExtractor.__new__(ProfileExtractor)
+    out = svc._validate_extractions(
+        [
+            {
+                "category": "basics",
+                "field_name": "occupation",
+                "field_value": '"Employee at Intuit"',
+                "confidence": 90,
+                "source_type": "explicit",
+                "source_memory_id": "mem_1",
+            }
+        ],
+        user_id="u1",
+    )
+    assert len(out) == 1
+    assert out[0]["field_value"] == "Employee at Intuit"
+
+
+def test_extractor_preserves_plain_string():
+    """Strings without the JSON-quote wrapper pass through untouched."""
+    from src.services.profile_extraction import ProfileExtractor
+
+    svc = ProfileExtractor.__new__(ProfileExtractor)
+    out = svc._validate_extractions(
+        [
+            {
+                "category": "basics",
+                "field_name": "occupation",
+                "field_value": "Employee at Intuit",
+                "confidence": 90,
+                "source_type": "explicit",
+                "source_memory_id": "mem_1",
+            }
+        ],
+        user_id="u1",
+    )
+    assert out[0]["field_value"] == "Employee at Intuit"
+
+
+def test_extractor_preserves_string_with_internal_quotes():
+    """Legitimate strings containing quotes are not stripped."""
+    from src.services.profile_extraction import ProfileExtractor
+
+    svc = ProfileExtractor.__new__(ProfileExtractor)
+    out = svc._validate_extractions(
+        [
+            {
+                "category": "basics",
+                "field_name": "quote",
+                "field_value": 'She said "hi" then left',
+                "confidence": 90,
+                "source_type": "explicit",
+                "source_memory_id": "mem_1",
+            }
+        ],
+        user_id="u1",
+    )
+    assert out[0]["field_value"] == 'She said "hi" then left'
+
+
+def test_extractor_does_not_unwrap_non_string_types():
+    """List values are not affected by the string-unwrap logic."""
+    from src.services.profile_extraction import ProfileExtractor
+
+    svc = ProfileExtractor.__new__(ProfileExtractor)
+    out = svc._validate_extractions(
+        [
+            {
+                "category": "interests",
+                "field_name": "hobbies",
+                "field_value": ["3d printing", "NAS"],
+                "confidence": 90,
+                "source_type": "explicit",
+                "source_memory_id": "mem_1",
+            }
+        ],
+        user_id="u1",
+    )
+    assert out[0]["field_value"] == ["3d printing", "NAS"]
 
 
 # Integration-style test (requires actual DB - mark as skipif no DB)

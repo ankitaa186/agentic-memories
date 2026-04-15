@@ -583,15 +583,19 @@ class ProfileStorageService:
             fields_rows = cursor.fetchall()
 
             # Group fields by category
-            profile_data = {
-                "basics": {},
-                "preferences": {},
-                "goals": {},
-                "interests": {},
-                "background": {},
-                "health": {},
-                "personality": {},
-                "values": {},
+            categories = (
+                "basics",
+                "preferences",
+                "goals",
+                "interests",
+                "background",
+                "health",
+                "personality",
+                "values",
+            )
+            profile_data: Dict[str, Dict[str, Any]] = {c: {} for c in categories}
+            field_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {
+                c: {} for c in categories
             }
 
             for row in fields_rows:
@@ -623,8 +627,8 @@ class ProfileStorageService:
                 else:
                     last_updated_str = None
 
-                profile_data[category][field_name] = {
-                    "value": parsed_value,
+                profile_data[category][field_name] = parsed_value
+                field_metadata[category][field_name] = {
                     "last_updated": last_updated_str,
                 }
 
@@ -653,6 +657,7 @@ class ProfileStorageService:
                 "last_updated": last_updated_str,
                 "created_at": created_at_str,
                 "profile": profile_data,
+                "field_metadata": field_metadata,
             }
 
             logger.info(

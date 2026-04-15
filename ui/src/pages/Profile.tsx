@@ -48,36 +48,22 @@ const categoryColors: Record<string, string> = {
   values: 'from-orange-500 to-orange-600',
 }
 
-// Helper to extract and format profile field values
 function formatProfileValue(value: unknown): string {
   if (value === null || value === undefined) return '—'
 
-  // Handle {value: ..., last_updated: ...} format
-  if (typeof value === 'object' && value !== null && 'value' in value) {
-    const innerValue = (value as { value: unknown }).value
-    return formatProfileValue(innerValue)
-  }
-
-  // Handle arrays
   if (Array.isArray(value)) {
     return value.map(item => {
       if (typeof item === 'object' && item !== null) {
-        // For objects in arrays, show key details
-        const entries = Object.entries(item)
-          .filter(([k]) => k !== 'last_updated')
-          .map(([k, v]) => `${k}: ${v}`)
-        return entries.join(', ')
+        return Object.entries(item).map(([k, v]) => `${k}: ${v}`).join(', ')
       }
       return String(item)
     }).join('; ')
   }
 
-  // Handle nested objects (like spouse: {name: "...", nickname: "..."})
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value)
-      .filter(([k]) => k !== 'last_updated')
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
       .map(([k, v]) => `${k}: ${v}`)
-    return entries.join(', ')
+      .join(', ')
   }
 
   return String(value)
@@ -96,7 +82,7 @@ export function Profile() {
 
   const { data: completeness } = useQuery({
     queryKey: ['completeness', userId],
-    queryFn: () => apiGet<CompletenessData>(`/v1/profile/completeness?user_id=${userId}&detailed=true`),
+    queryFn: () => apiGet<CompletenessData>(`/v1/profile/completeness?user_id=${userId}&details=true`),
     enabled: !!userId,
   })
 

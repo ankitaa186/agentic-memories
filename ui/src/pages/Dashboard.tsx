@@ -59,13 +59,8 @@ export function Dashboard() {
           <div>
             <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
               Welcome back{(() => {
-                const basics = profile?.profile?.basics
-                if (!basics) return ''
-                // Handle name as string or object with value property
-                const name = basics.name
-                if (typeof name === 'string') return `, ${name}`
-                if (name && typeof name === 'object' && 'value' in name) return `, ${(name as {value: string}).value}`
-                return ''
+                const name = profile?.profile?.basics?.name
+                return typeof name === 'string' ? `, ${name}` : ''
               })()}
             </h2>
             <p className="text-[var(--text-secondary)] mt-1">

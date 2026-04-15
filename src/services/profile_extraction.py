@@ -4,6 +4,7 @@ Extracts profile-worthy information from memories using LLM
 """
 
 from typing import List, Dict, Any
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -531,6 +532,22 @@ class ProfileExtractor:
             category = extraction.get("category")
             field_name = extraction.get("field_name")
             field_value = extraction.get("field_value")
+
+            # Defensive: LLMs occasionally return string field_values that are
+            # already JSON-encoded (e.g. '"Employee at Intuit"' instead of
+            # 'Employee at Intuit'). Without this, the spurious quotes are
+            # stored verbatim and leak to consumers. Only unwrap when the
+            # decoded result is itself a string — leave numbers/lists/dicts
+            # alone (the LLM types those correctly per the prompt schema).
+            if isinstance(field_value, str):
+                stripped = field_value.strip()
+                if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
+                    try:
+                        decoded = json.loads(stripped)
+                        if isinstance(decoded, str):
+                            field_value = decoded
+                    except (json.JSONDecodeError, ValueError):
+                        pass
 
             if not all([category, field_name, field_value is not None]):
                 logger.warning(

@@ -28,7 +28,12 @@ class UpdateFieldRequest(BaseModel):
 
 
 class ProfileResponse(BaseModel):
-    """Response model for complete profile"""
+    """Response model for complete profile.
+
+    `profile` holds raw field values keyed by category and field_name.
+    `field_metadata` mirrors that structure with per-field metadata
+    (currently `last_updated`); only present when `include_metadata=true`.
+    """
 
     user_id: str
     profile: Dict[str, Dict[str, Any]]
@@ -37,14 +42,20 @@ class ProfileResponse(BaseModel):
     total_fields: int
     last_updated: Optional[str] = None
     created_at: Optional[str] = None
+    field_metadata: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 
 
 class CategoryResponse(BaseModel):
-    """Response model for category-specific data"""
+    """Response model for category-specific data.
+
+    `fields` holds raw values; `field_metadata` is the parallel metadata
+    map for this category, only present when `include_metadata=true`.
+    """
 
     user_id: str
     category: str
     fields: Dict[str, Any]
+    field_metadata: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 class CompletenessResponse(BaseModel):
@@ -107,17 +118,24 @@ class FieldUpdateResponse(BaseModel):
 _profile_service = ProfileStorageService()
 
 
-@router.get("", response_model=ProfileResponse)
+@router.get("", response_model=ProfileResponse, response_model_exclude_none=True)
 def get_profile(
     user_id: str = Query(..., description="User identifier"),
+    include_metadata: bool = Query(
+        False,
+        description="If true, include `field_metadata` mirror with per-field timestamps",
+    ),
 ) -> ProfileResponse:
     """
     Get complete user profile with all categories.
 
-    Returns profile JSON with all categories (basics, preferences, goals, interests, background)
-    and confidence scores, along with completeness metrics.
+    Returns raw field values by default. Pass `include_metadata=true` to
+    additionally receive a `field_metadata` block mirroring the profile
+    structure with per-field `last_updated` timestamps.
     """
-    logger.info("[profile.api.get] user_id=%s", user_id)
+    logger.info(
+        "[profile.api.get] user_id=%s include_metadata=%s", user_id, include_metadata
+    )
 
     profile = _profile_service.get_profile_by_user(user_id)
 
@@ -126,6 +144,9 @@ def get_profile(
         raise HTTPException(
             status_code=404, detail=f"Profile not found for user_id: {user_id}"
         )
+
+    if not include_metadata:
+        profile.pop("field_metadata", None)
 
     return ProfileResponse(**profile)
 
@@ -229,17 +250,27 @@ def get_profile_completeness(
             release_timescale_conn(conn)
 
 
-@router.get("/{category}", response_model=CategoryResponse)
+@router.get("/{category}", response_model=CategoryResponse, response_model_exclude_none=True)
 def get_profile_category(
-    category: str, user_id: str = Query(..., description="User identifier")
+    category: str,
+    user_id: str = Query(..., description="User identifier"),
+    include_metadata: bool = Query(
+        False,
+        description="If true, include `field_metadata` map with per-field timestamps",
+    ),
 ) -> CategoryResponse:
     """
     Get category-specific profile data.
 
-    Valid categories: basics, preferences, goals, interests, background
-    Returns only that category's fields with confidence scores.
+    Returns raw field values by default. Pass `include_metadata=true` to
+    additionally receive a `field_metadata` map for this category.
     """
-    logger.info("[profile.api.get_category] user_id=%s category=%s", user_id, category)
+    logger.info(
+        "[profile.api.get_category] user_id=%s category=%s include_metadata=%s",
+        user_id,
+        category,
+        include_metadata,
+    )
 
     # Validate category
     if category not in VALID_CATEGORIES:
@@ -257,8 +288,18 @@ def get_profile_category(
         )
 
     category_data = profile.get("profile", {}).get(category, {})
+    metadata = (
+        profile.get("field_metadata", {}).get(category, {})
+        if include_metadata
+        else None
+    )
 
-    return CategoryResponse(user_id=user_id, category=category, fields=category_data)
+    return CategoryResponse(
+        user_id=user_id,
+        category=category,
+        fields=category_data,
+        field_metadata=metadata,
+    )
 
 
 @router.put("/{category}/{field_name}", response_model=FieldUpdateResponse)
