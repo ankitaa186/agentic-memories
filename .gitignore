@@ -37,8 +37,9 @@ ENV/
 .idea/
 *.code-workspace
 
-# Claude Code
-.claude/
+# Claude Code — share scrum artifacts only, keep everything else private
+.claude/*
+!.claude/scrum/
 
 # OS files
 .DS_Store
@@ -50,6 +51,7 @@ Thumbs.db
 # Persistent data (database volumes)
 data/
 data-backup/
+backups/
 
 # Node (if present)
 node_modules/
