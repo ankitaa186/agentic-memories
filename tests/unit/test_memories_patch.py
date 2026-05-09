@@ -581,6 +581,9 @@ def test_system_managed_fields_single_source_of_truth():
         "stored_in_emotional",
         "stored_in_procedural",
         "typed_table_id",
+        # Added 2026-05-08 per PR #62 review #2 — persona_tags is internally
+        # derived; PATCH must not be able to set/delete it.
+        "persona_tags",
     }
 
     from src.services._constants import SYSTEM_MANAGED_FIELDS

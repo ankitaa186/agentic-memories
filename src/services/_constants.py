@@ -32,5 +32,9 @@ SYSTEM_MANAGED_FIELDS: frozenset[str] = frozenset(
         "stored_in_emotional",
         "stored_in_procedural",
         "typed_table_id",
+        # Internally-derived; managed by ingest/extraction pipelines, not callers.
+        # Allowing PATCH metadata to set/delete persona_tags would let a caller
+        # cross-reference memories into other personas. (PR #62 review.)
+        "persona_tags",
     }
 )

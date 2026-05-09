@@ -1009,7 +1009,15 @@ def patch_memory(
             if "ttl_epoch" not in delete_keys:
                 delete_keys.append("ttl_epoch")
         else:
-            if not isinstance(ttl_value, int) or ttl_value < 1:
+            # Reject bools explicitly — `bool` is a subclass of `int` in
+            # Python, so isinstance(True, int) is True, and a payload like
+            # {"ttl_seconds": true} would coerce to a 1-second TTL. (PR #62
+            # review #7.)
+            if (
+                isinstance(ttl_value, bool)
+                or not isinstance(ttl_value, int)
+                or ttl_value < 1
+            ):
                 raise HTTPException(
                     status_code=422,
                     detail={

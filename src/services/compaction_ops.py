@@ -66,7 +66,9 @@ def ttl_cleanup(grace_seconds: int = 0) -> int:
     col = _get_collection()
     now_epoch = int(datetime.now(timezone.utc).timestamp()) - int(grace_seconds or 0)
     try:
-        res = col.get(where={"ttl_epoch": {"$lte": now_epoch}}, include=["metadatas"])  # type: ignore[attr-defined]
+        # IDs are always returned; include=[] avoids fetching metadatas we don't
+        # need for the delete (PR #62 review).
+        res = col.get(where={"ttl_epoch": {"$lte": now_epoch}}, include=[])  # type: ignore[attr-defined]
         ids = res.get("ids", [])
         flat_ids = ids if isinstance(ids, list) else []
         if flat_ids:
