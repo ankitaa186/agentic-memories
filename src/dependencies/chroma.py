@@ -220,10 +220,14 @@ class V2Collection:
         # IDs take precedence over where filter
         if ids is not None:
             data["ids"] = ids
-        elif where is not None:
+        elif where:
+            # Only include a non-empty `where` document. Chroma 1.x rejects
+            # ``where: {}`` with InvalidArgumentError; the request must omit
+            # the key entirely when there is no filter. (Live curl on
+            # 2026-05-08 surfaced this — the wrapper previously always sent
+            # ``where: {}`` on the no-filter branch, which any direct caller
+            # of ``collection.get()`` with no filters would have hit.)
             data["where"] = where
-        else:
-            data["where"] = {}
         if limit is not None:
             data["limit"] = limit
         if offset is not None:
@@ -249,6 +253,48 @@ class V2Collection:
             "metadatas": coerced_metadatas,
         }
         return self.client._make_request("POST", f"{self._endpoint_base}/upsert", data)
+
+    def update(
+        self,
+        ids: list,
+        documents: Optional[list] = None,
+        embeddings: Optional[list] = None,
+        metadatas: Optional[list] = None,
+    ):
+        """Partial-update existing documents in collection (Chroma v2 API).
+
+        Mirrors the canonical chromadb ``Collection.update`` signature: only
+        ``ids`` is required; any of ``documents`` / ``embeddings`` /
+        ``metadatas`` may be omitted (``None``) to leave that field unchanged
+        for the targeted ids. This matches the partial-PATCH semantics that
+        ``src/services/storage.py:update_chroma_record`` relies on (a PATCH
+        may update only metadata, only content, or any combination).
+
+        Wire format follows the ``upsert`` pattern: same v2 endpoint base,
+        same ``_make_request`` POST. The endpoint is
+        ``{collection_id}/update``. Metadata values are coerced to scalars
+        (lists/dicts -> JSON strings) the same way as ``upsert`` so callers
+        can pass through structured fields without surprise.
+        """
+        if not ids:
+            raise ValueError("update requires at least one id")
+        data: Dict[str, Any] = {"ids": ids}
+        if documents is not None:
+            data["documents"] = documents
+        if embeddings is not None:
+            data["embeddings"] = embeddings
+        if metadatas is not None:
+            coerced_metadatas = []
+            for md in metadatas:
+                fixed = {}
+                for k, v in (md or {}).items():
+                    if isinstance(v, (list, dict)):
+                        fixed[k] = json.dumps(v)
+                    else:
+                        fixed[k] = v
+                coerced_metadatas.append(fixed)
+            data["metadatas"] = coerced_metadatas
+        return self.client._make_request("POST", f"{self._endpoint_base}/update", data)
 
     def delete(
         self, ids: Optional[list] = None, where: Optional[Dict[str, Any]] = None
@@ -276,10 +322,10 @@ class V2Collection:
     ):
         """Query collection.
         Supports either query_texts (if server embeds) or query_embeddings (preferred)."""
-        data: Dict[str, Any] = {
-            "n_results": n_results,
-            "where": where or {},
-        }
+        data: Dict[str, Any] = {"n_results": n_results}
+        if where:
+            # Chroma 1.x rejects ``where: {}`` (see V2Collection.get docstring).
+            data["where"] = where
         if query_embeddings is not None:
             data["query_embeddings"] = query_embeddings
         elif query_texts is not None:

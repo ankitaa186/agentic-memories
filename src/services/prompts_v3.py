@@ -146,6 +146,7 @@ Your goal: Capture the richness of human experience with emotional weight, conte
 5. **SHORT-TERM** - Time-bound facts with TTL
    - Include: ttl in seconds
    - Example: "User has meeting tomorrow at 2pm"
+   - Note: `ttl` is honored on ANY layer if you set it; short-term is just where it's most idiomatic.
 
 ## Core Extraction Rules
 

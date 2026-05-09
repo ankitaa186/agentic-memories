@@ -51,12 +51,20 @@ def _get_collection() -> Any:
     return client.get_collection(_standard_collection_name())  # type: ignore[attr-defined]
 
 
-def ttl_cleanup() -> int:
+def ttl_cleanup(grace_seconds: int = 0) -> int:
     """Delete expired short-term docs based on ttl_epoch metadata.
+
+    Args:
+        grace_seconds: Subtract this many seconds from `now` before comparing
+            against `ttl_epoch`. Default `0` preserves the daily-compaction
+            behavior (delete anything with `ttl_epoch <= now`). The fast
+            eviction sweeper passes `60` to avoid racing destructively with
+            in-flight writes that just minted a short ttl.
+
     Returns number of deletions attempted.
     """
     col = _get_collection()
-    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    now_epoch = int(datetime.now(timezone.utc).timestamp()) - int(grace_seconds or 0)
     try:
         res = col.get(where={"ttl_epoch": {"$lte": now_epoch}}, include=["metadatas"])  # type: ignore[attr-defined]
         ids = res.get("ids", [])
@@ -380,13 +388,20 @@ def deduplicate_emotional(user_id: str, limit: int = 1000) -> Dict[str, int]:
             release_timescale_conn(conn)
 
 
-def ttl_cleanup_timescale() -> int:
+def ttl_cleanup_timescale(grace_seconds: int = 0) -> int:
     """TTL-based cleanup of stale TimescaleDB memories.
 
     - Episodic: delete where importance_score < TIMESCALE_TTL_EPISODIC_SCORE_LT
                 AND older than TIMESCALE_TTL_EPISODIC_AGE_DAYS
                 (defaults 0.6 / 180d — see `_get_episodic_ttl_config`)
     - Emotional: delete where intensity < 0.2 AND older than 60 days
+
+    Args:
+        grace_seconds: Subtract this many seconds from the cutoff timestamps
+            before deleting. Default `0` preserves the daily-compaction
+            behavior. The fast sweeper passes `60` to avoid racing
+            destructively with in-flight writes that just landed a row at
+            the boundary.
 
     Returns total number of rows deleted.
     """
@@ -397,11 +412,15 @@ def ttl_cleanup_timescale() -> int:
 
     score_lt, age_days = _get_episodic_ttl_config()
 
+    grace = timedelta(seconds=int(grace_seconds or 0))
+
     total_deleted = 0
     try:
         with conn.cursor() as cur:
             # Episodic TTL: low importance + old (configurable thresholds)
-            cutoff_episodic = datetime.now(timezone.utc) - timedelta(days=age_days)
+            cutoff_episodic = (
+                datetime.now(timezone.utc) - timedelta(days=age_days) - grace
+            )
             cur.execute(
                 """
 				DELETE FROM episodic_memories
@@ -413,7 +432,7 @@ def ttl_cleanup_timescale() -> int:
             episodic_deleted = cur.rowcount
 
             # Emotional TTL: low intensity + old
-            cutoff_emotional = datetime.now(timezone.utc) - timedelta(days=60)
+            cutoff_emotional = datetime.now(timezone.utc) - timedelta(days=60) - grace
             cur.execute(
                 """
 				DELETE FROM emotional_memories
