@@ -140,9 +140,15 @@ def _apply_x2_filters_to_hybrid(
             continue
         skip = False
         for mk, mv_list in metadata_filter.items():
-            # Same single-valued constraint as `_build_where_clause`.
-            target = mv_list[0] if isinstance(mv_list, list) else mv_list
-            if str(meta.get(mk, "")) != str(target):
+            # AND semantic per spec: "multiple values for the same key are
+            # AND-combined". When a single value is supplied (the route's
+            # `_build_where_clause` already 422s on conflicting duplicates),
+            # this collapses to standard equality. When duplicates somehow
+            # bypass the route guard, we require all to match — never silently
+            # pick the first one. (PR #62 review #5.)
+            values = mv_list if isinstance(mv_list, list) else [mv_list]
+            actual = str(meta.get(mk, ""))
+            if not all(actual == str(v) for v in values):
                 skip = True
                 break
         if skip:

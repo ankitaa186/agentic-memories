@@ -494,9 +494,7 @@ def _seed_full_profile(mock_profile_service, user_id="u1"):
                 "food_preferences": {"last_updated": "2026-04-09T00:00:00+00:00"}
             },
             "goals": {},
-            "interests": {
-                "hobbies": {"last_updated": "2026-04-08T00:00:00+00:00"}
-            },
+            "interests": {"hobbies": {"last_updated": "2026-04-08T00:00:00+00:00"}},
             "background": {},
             "health": {},
             "personality": {},
@@ -540,16 +538,17 @@ def test_get_profile_with_include_metadata_true(api_client, mock_profile_service
     # Metadata mirrors structure
     fm = body["field_metadata"]
     assert fm["basics"]["name"]["last_updated"] == "2026-04-10T00:00:00+00:00"
-    assert fm["preferences"]["food_preferences"]["last_updated"] == "2026-04-09T00:00:00+00:00"
+    assert (
+        fm["preferences"]["food_preferences"]["last_updated"]
+        == "2026-04-09T00:00:00+00:00"
+    )
 
 
 def test_get_profile_category_with_include_metadata(api_client, mock_profile_service):
     """Category endpoint returns its slice of field_metadata when requested."""
     _seed_full_profile(mock_profile_service)
     with patch("src.routers.profile._profile_service", mock_profile_service):
-        resp = api_client.get(
-            "/v1/profile/basics?user_id=u1&include_metadata=true"
-        )
+        resp = api_client.get("/v1/profile/basics?user_id=u1&include_metadata=true")
     assert resp.status_code == 200
     body = resp.json()
     assert body["fields"]["name"] == "Ankit"
@@ -558,7 +557,9 @@ def test_get_profile_category_with_include_metadata(api_client, mock_profile_ser
     assert "preferences" not in body["field_metadata"]
 
 
-def test_get_profile_category_omits_metadata_by_default(api_client, mock_profile_service):
+def test_get_profile_category_omits_metadata_by_default(
+    api_client, mock_profile_service
+):
     _seed_full_profile(mock_profile_service)
     with patch("src.routers.profile._profile_service", mock_profile_service):
         resp = api_client.get("/v1/profile/basics?user_id=u1")

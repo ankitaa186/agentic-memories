@@ -1955,8 +1955,10 @@ def forget(body: ForgetRequest) -> ForgetResponse:
         try:
             col = _get_collection()
             now_epoch = int(datetime.now(timezone.utc).timestamp())
+            # IDs are always returned by Chroma; include=[] avoids fetching
+            # metadatas/documents we don't need for a count. (PR #62 review.)
             res = col.get(  # type: ignore[attr-defined]
-                where={"ttl_epoch": {"$lte": now_epoch}}, include=["metadatas"]
+                where={"ttl_epoch": {"$lte": now_epoch}}, include=[]
             )
             ids = res.get("ids", []) if isinstance(res, dict) else []
             chroma_deleted = len(ids) if isinstance(ids, list) else 0

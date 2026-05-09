@@ -453,7 +453,10 @@ def search_memories(
         "expires_before",
         "metadata_filter",
     )
-    has_new_filter = any(filters.get(k) for k in new_filter_keys)
+    # `is not None` so falsy-but-real values (e.g. expires_after=0) still
+    # disable the cache; truthy check would treat 0 as filter-not-present and
+    # serve stale unfiltered cached results. (PR #62 review #8.)
+    has_new_filter = any(filters.get(k) is not None for k in new_filter_keys)
     if has_new_filter:
         use_cache = False
 
@@ -534,10 +537,12 @@ def search_memories(
         # Semantic query
         emb = generate_embedding(query) or []
         # When a timestamp filter is active alongside a semantic query,
-        # over-fetch so the post-filter has a fighting chance of returning
-        # the requested page count.
+        # fetch up to the full RETRIEVE_MAX_FETCH_CAP. The timestamp filter is
+        # applied post-fetch in Python; Chroma returns results in semantic-
+        # rank order, so a small +50 window can miss matches that fall just
+        # outside it when the filter is selective. (PR #62 review #6.)
         if has_ts_filter:
-            n_results = min(int(limit) + int(offset) + 50, get_retrieve_max_fetch_cap())
+            n_results = get_retrieve_max_fetch_cap()
         else:
             n_results = limit + offset
         if n_results < 1:

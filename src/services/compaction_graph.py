@@ -222,9 +222,7 @@ def _consolidate_cluster(user_id: str, cluster: List[Dict[str, Any]]) -> Dict[st
     from src.services.extract_utils import _call_llm_json
     from datetime import datetime
 
-    logger.info(
-        "[consolidate.start] user_id=%s cluster_size=%s", user_id, len(cluster)
-    )
+    logger.info("[consolidate.start] user_id=%s cluster_size=%s", user_id, len(cluster))
     _t_consolidate = _time.perf_counter()
 
     # Format memories for prompt with timestamps for conflict resolution

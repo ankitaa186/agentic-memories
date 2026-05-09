@@ -250,7 +250,9 @@ def get_profile_completeness(
             release_timescale_conn(conn)
 
 
-@router.get("/{category}", response_model=CategoryResponse, response_model_exclude_none=True)
+@router.get(
+    "/{category}", response_model=CategoryResponse, response_model_exclude_none=True
+)
 def get_profile_category(
     category: str,
     user_id: str = Query(..., description="User identifier"),
