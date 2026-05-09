@@ -992,9 +992,7 @@ def run_compaction_graph(
         final: Dict[str, Any] = graph.compile().invoke(initial)  # type: ignore
         final.setdefault("metrics", {})
         final["metrics"]["duration_ms"] = int((_time.perf_counter() - _t0) * 1000)
-        logger.info(
-            "[graph.done] user_id=%s metrics=%s", user_id, final.get("metrics")
-        )
+        logger.info("[graph.done] user_id=%s metrics=%s", user_id, final.get("metrics"))
 
         if _root_span is not None:
             try:

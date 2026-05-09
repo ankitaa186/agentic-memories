@@ -381,9 +381,7 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
                     }
                 )
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning(
-                    "[memories.direct] root_span.update failed: %s", exc
-                )
+                logger.warning("[memories.direct] root_span.update failed: %s", exc)
         return response
 
 

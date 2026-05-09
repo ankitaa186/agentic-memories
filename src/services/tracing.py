@@ -85,9 +85,7 @@ def root_span(
         try:
             existing_trace_id = client.get_current_trace_id()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning(
-                "[tracing.root_span] get_current_trace_id failed: %s", exc
-            )
+            logger.warning("[tracing.root_span] get_current_trace_id failed: %s", exc)
             existing_trace_id = None
         if existing_trace_id is not None:
             yield None
