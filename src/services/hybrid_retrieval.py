@@ -103,11 +103,20 @@ class HybridRetrievalService:
 
         Returns:
             List[RetrievalResult]: Ranked list of memories
-        """
-        from src.services.tracing import start_span, end_span
 
-        _span = start_span(
-            "hybrid_retrieval",
+        Story 2.1: this is the outermost wrap for the hybrid-retrieval entry
+        point. It used to call `tracing.start_span(...)` which only worked as
+        a child span (it required a pre-existing root). We now open a Langfuse
+        root span here so embedding observations from `_semantic_retrieval`
+        nest under a single trace per call. The helper is a no-op when
+        Langfuse is unavailable or when this method is invoked underneath an
+        existing parent span.
+        """
+        from src.services.tracing import root_span
+
+        with root_span(
+            name="hybrid_retrieval",
+            user_id=query.user_id,
             input={
                 "user_id": query.user_id,
                 "has_query": bool(query.query_text),
@@ -116,50 +125,55 @@ class HybridRetrievalService:
                 "strategy": query.strategy.value,
                 "limit": query.limit,
             },
-        )
+        ) as _root_span:
+            all_results = []
 
-        all_results = []
+            # 1. Semantic retrieval (query) or browse-all (no query)
+            if query.query_text:
+                semantic_results = self._semantic_retrieval(query)
+                all_results.extend(semantic_results)
+            else:
+                browse_results = self._browse_all(query)
+                all_results.extend(browse_results)
 
-        # 1. Semantic retrieval (query) or browse-all (no query)
-        if query.query_text:
-            semantic_results = self._semantic_retrieval(query)
-            all_results.extend(semantic_results)
-        else:
-            browse_results = self._browse_all(query)
-            all_results.extend(browse_results)
+            # 2. Temporal retrieval (if time range provided)
+            if query.time_range:
+                temporal_results = self._temporal_retrieval(query)
+                all_results.extend(temporal_results)
 
-        # 2. Temporal retrieval (if time range provided)
-        if query.time_range:
-            temporal_results = self._temporal_retrieval(query)
-            all_results.extend(temporal_results)
+            # 3. Emotional retrieval (if emotional context provided)
+            if query.emotional_context:
+                emotional_results = self._emotional_retrieval(query)
+                all_results.extend(emotional_results)
 
-        # 3. Emotional retrieval (if emotional context provided)
-        if query.emotional_context:
-            emotional_results = self._emotional_retrieval(query)
-            all_results.extend(emotional_results)
+            # 4. Procedural retrieval (if procedural memories requested)
+            if not query.memory_types or "procedural" in query.memory_types:
+                procedural_results = self._procedural_retrieval(query)
+                all_results.extend(procedural_results)
 
-        # 4. Procedural retrieval (if procedural memories requested)
-        if not query.memory_types or "procedural" in query.memory_types:
-            procedural_results = self._procedural_retrieval(query)
-            all_results.extend(procedural_results)
+            # 5. Deduplicate and rank results
+            unique_results = self._deduplicate_results(all_results)
+            ranked_results = self._rank_results(unique_results, query)
 
-        # 5. Deduplicate and rank results
-        unique_results = self._deduplicate_results(all_results)
-        ranked_results = self._rank_results(unique_results, query)
+            # 6. Apply filters and limits
+            filtered_results = self._apply_filters(ranked_results, query)
+            final_results = filtered_results[: query.limit]
 
-        # 6. Apply filters and limits
-        filtered_results = self._apply_filters(ranked_results, query)
-        final_results = filtered_results[: query.limit]
+            if _root_span is not None:
+                try:
+                    _root_span.update(
+                        output={
+                            "total_raw_results": len(all_results),
+                            "unique_results": len(unique_results),
+                            "final_count": len(final_results),
+                        }
+                    )
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "[hybrid_retrieval] root_span.update failed: %s", exc
+                    )
 
-        end_span(
-            output={
-                "total_raw_results": len(all_results),
-                "unique_results": len(unique_results),
-                "final_count": len(final_results),
-            }
-        )
-
-        return final_results
+            return final_results
 
     def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
         """Perform semantic search across all memory types"""
