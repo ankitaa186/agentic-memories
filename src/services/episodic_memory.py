@@ -50,19 +50,48 @@ class EpisodicMemoryService:
 
         Returns:
             bool: True if successful, False otherwise
+
+        Story 2.1: wraps the body in a Langfuse root span (`episodic_store`)
+        so the embedding observation generated inside `_store_in_chroma` nests
+        under a single parent trace per call. Skipped automatically (helper
+        returns None) when invoked from within the unified ingestion graph,
+        where a `unified_memory_ingestion` root is already active.
         """
-        try:
-            # 1. Store in TimescaleDB (primary storage)
-            self._store_in_timescale(memory)
+        from src.services.tracing import root_span
 
-            # 2. Store in ChromaDB (vector search)
-            self._store_in_chroma(memory)
+        with root_span(
+            name="episodic_store",
+            user_id=memory.user_id,
+            input={
+                "user_id": memory.user_id,
+                "memory_id": memory.id,
+                "event_type": memory.event_type,
+                "content_length": len(memory.content or ""),
+            },
+        ) as _root_span:
+            try:
+                # 1. Store in TimescaleDB (primary storage)
+                self._store_in_timescale(memory)
 
-            return True
+                # 2. Store in ChromaDB (vector search)
+                self._store_in_chroma(memory)
 
-        except Exception as e:
-            print(f"Error storing episodic memory: {e}")
-            return False
+                if _root_span is not None:
+                    try:
+                        _root_span.update(
+                            output={
+                                "memory_id": memory.id,
+                                "stored": True,
+                            }
+                        )
+                    except Exception:  # pragma: no cover - defensive
+                        pass
+
+                return True
+
+            except Exception as e:
+                print(f"Error storing episodic memory: {e}")
+                return False
 
     def _store_in_timescale(self, memory: EpisodicMemory) -> None:
         """Store memory in TimescaleDB"""
@@ -225,54 +254,77 @@ class EpisodicMemoryService:
     def _semantic_search(
         self, user_id: str, query: str, limit: int
     ) -> List[EpisodicMemory]:
-        """Perform semantic search using ChromaDB"""
-        if not self.chroma_client:
-            return []
+        """Perform semantic search using ChromaDB.
 
-        try:
-            collection = self.chroma_client.get_collection(self.collection_name)
+        Story 2.1: wraps the body in a Langfuse root span (`episodic_query`)
+        so the embedding observation from `get_embeddings([query])` nests
+        under a single parent trace per call. Skipped automatically when
+        invoked beneath an existing parent span.
+        """
+        from src.services.tracing import root_span
 
-            # Get query embeddings
-            query_embeddings = get_embeddings([query])
-            if not query_embeddings:
+        with root_span(
+            name="episodic_query",
+            user_id=user_id,
+            input={
+                "user_id": user_id,
+                "query_len": len(query or ""),
+                "limit": limit,
+            },
+        ) as _root_span:
+            if not self.chroma_client:
                 return []
 
-            # Search in ChromaDB
-            results = collection.query(
-                query_embeddings=query_embeddings,
-                n_results=limit,
-                where={"user_id": user_id},
-            )
+            try:
+                collection = self.chroma_client.get_collection(self.collection_name)
 
-            # Convert results to EpisodicMemory objects
-            memories = []
-            if results and results.get("ids") and results["ids"][0]:
-                for i, memory_id in enumerate(results["ids"][0]):
-                    metadata = results["metadatas"][0][i]
-                    memories.append(
-                        EpisodicMemory(
-                            id=memory_id,
-                            user_id=metadata["user_id"],
-                            event_timestamp=datetime.fromisoformat(
-                                metadata["timestamp"]
-                            ),
-                            event_type=metadata["event_type"],
-                            content=results["documents"][0][i],
-                            location=metadata.get("location"),
-                            participants=metadata.get("participants", []),
-                            emotional_valence=metadata.get("emotional_valence"),
-                            emotional_arousal=metadata.get("emotional_arousal"),
-                            importance_score=metadata.get("importance_score"),
-                            tags=metadata.get("tags"),
-                            metadata=metadata,
+                # Get query embeddings
+                query_embeddings = get_embeddings([query])
+                if not query_embeddings:
+                    return []
+
+                # Search in ChromaDB
+                results = collection.query(
+                    query_embeddings=query_embeddings,
+                    n_results=limit,
+                    where={"user_id": user_id},
+                )
+
+                # Convert results to EpisodicMemory objects
+                memories = []
+                if results and results.get("ids") and results["ids"][0]:
+                    for i, memory_id in enumerate(results["ids"][0]):
+                        metadata = results["metadatas"][0][i]
+                        memories.append(
+                            EpisodicMemory(
+                                id=memory_id,
+                                user_id=metadata["user_id"],
+                                event_timestamp=datetime.fromisoformat(
+                                    metadata["timestamp"]
+                                ),
+                                event_type=metadata["event_type"],
+                                content=results["documents"][0][i],
+                                location=metadata.get("location"),
+                                participants=metadata.get("participants", []),
+                                emotional_valence=metadata.get("emotional_valence"),
+                                emotional_arousal=metadata.get("emotional_arousal"),
+                                importance_score=metadata.get("importance_score"),
+                                tags=metadata.get("tags"),
+                                metadata=metadata,
+                            )
                         )
-                    )
 
-            return memories
+                if _root_span is not None:
+                    try:
+                        _root_span.update(output={"returned": len(memories)})
+                    except Exception:  # pragma: no cover - defensive
+                        pass
 
-        except Exception as e:
-            print(f"Error in semantic search: {e}")
-            return []
+                return memories
+
+            except Exception as e:
+                print(f"Error in semantic search: {e}")
+                return []
 
     def _time_range_search(
         self,

@@ -957,21 +957,17 @@ def run_compaction_graph(
             limit: Max memories to process
             skip_reextract: If True, skip expensive LLM re-extraction (default True for speed/cost)
             skip_consolidate: If True, skip memory consolidation (default False - runs by default)
-    """
-    from src.services.tracing import start_trace
 
-    # Start a trace for this compaction job
-    trace = start_trace(
-        name="compaction_job",
-        user_id=user_id,
-        metadata={
-            "dry_run": dry_run,
-            "limit": limit,
-            "skip_reextract": skip_reextract,
-            "skip_consolidate": skip_consolidate,
-            "trigger": "manual",
-        },
-    )
+    Story 2.1: this used to call `tracing.start_trace("compaction_job", ...)`
+    then `trace.update(output=...)` on completion, but never `end_trace()` —
+    leaking the span. Rewritten to use the `root_span(...)` context manager so
+    the span auto-closes (via `__exit__`) on both success and exception, the
+    embedding observations from `_cluster_memories` (line ~116) and
+    `_consolidate_cluster` (line ~306) nest under a single `compaction_run`
+    parent, and the existing nested `start_span(...)` calls in the node
+    bodies keep attaching as children via OTEL context.
+    """
+    from src.services.tracing import root_span
 
     graph = build_compaction_graph()
     _t0 = _time.perf_counter()
@@ -982,16 +978,32 @@ def run_compaction_graph(
         "skip_reextract": skip_reextract,
         "skip_consolidate": skip_consolidate,
     }
-    final: Dict[str, Any] = graph.compile().invoke(initial)  # type: ignore
-    final.setdefault("metrics", {})
-    final["metrics"]["duration_ms"] = int((_time.perf_counter() - _t0) * 1000)
-    logger.info("[graph.done] user_id=%s metrics=%s", user_id, final.get("metrics"))
 
-    # Update trace with final metrics
-    if trace:
-        try:
-            trace.update(output=final.get("metrics", {}))
-        except Exception:
-            pass
+    with root_span(
+        name="compaction_run",
+        user_id=user_id,
+        input={
+            "user_id": user_id,
+            "dry_run": dry_run,
+            "limit": limit,
+            "skip_reextract": skip_reextract,
+            "skip_consolidate": skip_consolidate,
+        },
+        metadata={"trigger": "manual"},
+    ) as _root_span:
+        final: Dict[str, Any] = graph.compile().invoke(initial)  # type: ignore
+        final.setdefault("metrics", {})
+        final["metrics"]["duration_ms"] = int((_time.perf_counter() - _t0) * 1000)
+        logger.info(
+            "[graph.done] user_id=%s metrics=%s", user_id, final.get("metrics")
+        )
 
-    return final
+        if _root_span is not None:
+            try:
+                _root_span.update(output=final.get("metrics", {}))
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "[graph.run_compaction_graph] root_span.update failed: %s", exc
+                )
+
+        return final
