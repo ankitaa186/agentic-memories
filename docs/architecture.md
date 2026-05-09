@@ -1658,6 +1658,29 @@ def health_full() -> dict:
 - **Cache Hit Rate (Expected):** 80%+ (profiles stable over short periods)
 - **Cache Warming:** Not required (lazy loading on first request)
 
+### TTL Eviction (Soft-TTL Contract)
+
+Memories with a `ttl_epoch` (set when callers pass `ttl_seconds` to the
+direct memory API) are reaped on two cadences:
+
+- **Fast eviction sweeper** (AM-X.3): an in-process APScheduler
+  `ttl_sweep` job runs every `TTL_SWEEP_INTERVAL_MINUTES` (default 15)
+  and calls both `compaction_ops.ttl_cleanup` and
+  `compaction_ops.ttl_cleanup_timescale` with a 60-second grace window
+  (`ttl_epoch <= now - 60`) so it doesn't race destructively with
+  in-flight writes. The sweep is wrapped in a `ttl_sweep_lock` Redis
+  lock to avoid double-firing against the daily compaction at 00:00 UTC
+  or a manual `/v1/forget` call.
+- **Daily compaction** (unchanged): runs at 00:00 UTC, calls
+  `ttl_cleanup` and `ttl_cleanup_timescale` with default `grace_seconds=0`
+  for full reaping.
+
+**Soft-TTL contract:** a memory becomes eligible for eviction once its
+`ttl_epoch` has elapsed; it may continue to appear in retrieve results
+for up to one sweep cycle (default 15 min) before the sweeper or a
+synchronous `POST /v1/forget` reaps it. This is documented in OpenAPI
+on the `ttl_seconds` request fields and on the `ForgetResponse` schema.
+
 ### Database Load
 
 - **Profile Reads:** Low (cached in Redis)

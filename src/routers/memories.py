@@ -8,12 +8,13 @@ Story 10.2 adds typed table storage for episodic, emotional, and procedural memo
 Story 10.3 adds cross-storage memory deletion via DELETE /v1/memories/{memory_id}.
 """
 
+import hashlib
 import json
 import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -21,10 +22,26 @@ from src.config import get_default_short_term_ttl_seconds
 from src.dependencies.chroma import get_chroma_client
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 from src.models import Memory
-from src.schemas import DeleteMemoryResponse, DirectMemoryRequest, DirectMemoryResponse
+from src.schemas import (
+    DeleteMemoryResponse,
+    DirectMemoryRequest,
+    DirectMemoryResponse,
+    PatchMemoryRequest,
+    PatchMemoryResponse,
+    PatchMemoryTypedTableUpdated,
+    _Unset,
+)
+from src.services._constants import SYSTEM_MANAGED_FIELDS
 from src.services.embedding_utils import generate_embedding
 from src.services.retrieval import _standard_collection_name
-from src.services.storage import upsert_memories
+from src.services.storage import (
+    _update_emotional_row,
+    _update_episodic_row,
+    _update_procedural_row,
+    get_chroma_record,
+    update_chroma_record,
+    upsert_memories,
+)
 from src.services.tracing import root_span
 
 logger = logging.getLogger("agentic_memories.memories")
@@ -483,17 +500,18 @@ def _store_memory_direct_impl(body: DirectMemoryRequest) -> DirectMemoryResponse
         }
     )
 
-    # Default a TTL for short-term records so the compaction sweep can
-    # actually expire them. Without this, direct-API ingestion produced
-    # immortal short-term memories (none of the other layers get a TTL).
-    # Callers can override the default via DirectMemoryRequest.ttl_seconds;
-    # the field is ignored for non-short-term layers since they never expire.
-    if body.layer == "short-term":
-        ttl_seconds = (
-            body.ttl_seconds
-            if body.ttl_seconds is not None
-            else get_default_short_term_ttl_seconds()
-        )
+    # Resolve the per-record TTL.
+    # - If the caller passes `ttl_seconds`, honor it on ANY layer (AM-X.0). The
+    #   downstream metadata builder (`src/services/storage.py:_build_metadata`)
+    #   writes `ttl_epoch` whenever `memory.ttl is not None`, regardless of layer,
+    #   and the soft-TTL sweep evicts on `ttl_epoch <= now`.
+    # - If the caller omits `ttl_seconds`, preserve the existing per-layer
+    #   defaults: short-term gets `get_default_short_term_ttl_seconds()`;
+    #   semantic / long-term / typed layers stay immortal (ttl=None).
+    if body.ttl_seconds is not None:
+        ttl_seconds = body.ttl_seconds
+    elif body.layer == "short-term":
+        ttl_seconds = get_default_short_term_ttl_seconds()
     else:
         ttl_seconds = None
 
@@ -749,6 +767,451 @@ def _delete_from_procedural(memory_id: str, user_id: str) -> bool:
     finally:
         if conn:
             release_timescale_conn(conn)
+
+
+# =============================================================================
+# Patch Memory Endpoint (AM-X.1)
+# =============================================================================
+
+
+# Layers that store rows in typed Postgres tables. Flips into or out of these
+# layers are rejected with 422 in v1 (AC11). The non-typed set is the
+# allowed-flip-targets set.
+_TYPED_LAYERS = frozenset({"episodic", "procedural", "emotional"})
+_NON_TYPED_LAYERS = frozenset({"short-term", "semantic", "long-term"})
+
+
+def _content_hash(content: str) -> str:
+    """Compute the same content_hash used by `_build_metadata` (storage.py).
+
+    Kept locally so PATCH can short-circuit embedding regen without re-reading
+    the storage helper. If `_build_metadata`'s formula ever changes, update
+    both places.
+    """
+    return hashlib.sha256(content.strip().lower().encode()).hexdigest()
+
+
+def _shallow_merge_metadata(
+    existing: Dict[str, Any],
+    patch: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Apply the AM-X.1 shallow-merge semantics with `__delete__` sentinel.
+
+    - Keys in `patch` with value `"__delete__"` are removed from `existing`.
+    - All other keys in `patch` overwrite `existing`.
+    - Keys absent from `patch` are preserved from `existing`.
+
+    Returns a new dict; does not mutate inputs. The caller is responsible for
+    ensuring no SYSTEM_MANAGED_FIELDS key is present in `patch`
+    (AC8 router-level guard).
+    """
+    merged = dict(existing)
+    for key, value in patch.items():
+        if value == "__delete__":
+            merged.pop(key, None)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _validate_patch_metadata(patch_metadata: Dict[str, Any]) -> None:
+    """Reject patch metadata that touches system-managed keys (AC8).
+
+    The router-level guard. `update_chroma_record` enforces a defense-in-depth
+    strip (AC20), but we want to surface caller errors as 422 here rather than
+    silently dropping the keys.
+    """
+    bad = sorted(set(patch_metadata.keys()) & SYSTEM_MANAGED_FIELDS)
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "system_managed_metadata_keys",
+                "message": (
+                    "The following metadata keys are system-managed and cannot "
+                    "be set or deleted via PATCH: "
+                    + ", ".join(bad)
+                    + ". See SYSTEM_MANAGED_FIELDS in src/services/_constants.py."
+                ),
+                "fields": bad,
+            },
+        )
+
+
+def _validate_layer_flip(current_layer: Optional[str], new_layer: str) -> None:
+    """Enforce AC10/AC11: flips between non-typed layers allowed; flips
+    into/out of typed-storage layers return 422.
+    """
+    if current_layer == new_layer:
+        return
+    if current_layer in _TYPED_LAYERS or new_layer in _TYPED_LAYERS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "layer_flip_unsupported",
+                "message": (
+                    "layer flip into/out of typed-storage layer not supported "
+                    "in v1; delete and recreate."
+                ),
+                "current_layer": current_layer,
+                "new_layer": new_layer,
+            },
+        )
+    if new_layer not in _NON_TYPED_LAYERS:
+        # Defense-in-depth — schema's Literal already constrains this set.
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "invalid_layer",
+                "message": f"Unsupported layer for PATCH: {new_layer!r}",
+            },
+        )
+
+
+@router.patch("/{memory_id}", response_model=PatchMemoryResponse)
+def patch_memory(
+    memory_id: str,
+    body: PatchMemoryRequest,
+    user_id: str = Query(..., description="User ID for authorization"),
+) -> PatchMemoryResponse:
+    """Partial update of a memory record (AM-X.1).
+
+    Mutates `content`, `metadata`, `layer`, `importance`, `ttl_seconds` on an
+    existing memory by id. Preserves the memory id and original `timestamp`
+    (AC1). Embedding regen is synchronous when `content` changes (AC6, AC14)
+    and skipped when the new content hashes to the same value as stored (AC7).
+
+    See `.claude/scrum/stories/AM-X.1.md` for the full AC list.
+    """
+    start_time = time.perf_counter()
+    warnings: List[str] = []
+
+    logger.info("[memories.patch] memory_id=%s user_id=%s starting", memory_id, user_id)
+
+    # ---- Step 1: Read current Chroma record ---------------------------------
+    chroma_client = get_chroma_client()
+    if chroma_client is None:
+        logger.error(
+            "[memories.patch] memory_id=%s chromadb_client_unavailable", memory_id
+        )
+        raise HTTPException(status_code=503, detail="ChromaDB client unavailable")
+
+    try:
+        record = get_chroma_record(memory_id)
+    except Exception as exc:
+        logger.error(
+            "[memories.patch] memory_id=%s get_record_error=%s",
+            memory_id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve memory metadata"
+        )
+
+    if record is None:
+        logger.warning("[memories.patch] memory_id=%s not_found", memory_id)
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    existing_metadata: Dict[str, Any] = record["metadata"] or {}
+
+    # ---- Step 2: Authorization (AC3) ----------------------------------------
+    memory_user_id = existing_metadata.get("user_id")
+    if memory_user_id and memory_user_id != user_id:
+        logger.warning(
+            "[memories.patch] memory_id=%s unauthorized request_user=%s memory_user=%s",
+            memory_id,
+            user_id,
+            memory_user_id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized: memory belongs to different user",
+        )
+
+    # ---- Step 3: Validate patch metadata (AC8) ------------------------------
+    if body.metadata is not None:
+        _validate_patch_metadata(body.metadata)
+
+    # ---- Step 4: Layer flip validation (AC10/AC11) --------------------------
+    current_layer: Optional[str] = existing_metadata.get("layer")
+    if body.layer is not None:
+        _validate_layer_flip(current_layer, body.layer)
+
+    # ---- Step 5: Content / content_hash (AC6/AC7) ---------------------------
+    new_content: Optional[str] = body.content
+    content_hash_changed = False
+    new_content_hash: Optional[str] = None
+    if new_content is not None:
+        existing_hash = existing_metadata.get("content_hash")
+        new_content_hash = _content_hash(new_content)
+        if existing_hash != new_content_hash:
+            content_hash_changed = True
+
+    # ---- Step 6: Build merged metadata --------------------------------------
+    # Track keys that must be REMOVED from the Chroma record. Chroma's
+    # /update endpoint does a shallow merge, so omitting a key from the
+    # metadatas payload preserves the stored value — only an explicit
+    # `key: null` removes it. update_chroma_record handles the wire-level
+    # serialization of this list.
+    delete_keys: List[str] = []
+
+    if body.metadata is not None:
+        # `__delete__` sentinels: drop from the merged dict AND mark for
+        # deletion in Chroma. The shallow-merge alone is insufficient for
+        # the Chroma round-trip (the omitted key would persist in storage),
+        # but it keeps the dict consumed by the typed-table fan-out clean
+        # (where the JSONB || merge ignores absent keys, which is the
+        # desired behavior for that path).
+        for k, v in body.metadata.items():
+            if v == "__delete__":
+                delete_keys.append(k)
+        merged_caller_metadata = _shallow_merge_metadata(
+            {
+                k: v
+                for k, v in existing_metadata.items()
+                if k not in SYSTEM_MANAGED_FIELDS
+            },
+            body.metadata,
+        )
+    else:
+        merged_caller_metadata = {
+            k: v for k, v in existing_metadata.items() if k not in SYSTEM_MANAGED_FIELDS
+        }
+
+    # Internal/system-managed fields the router itself recomputes/preserves.
+    # `update_chroma_record` writes these via the internal_metadata escape
+    # hatch (not subject to the AC20 strip). We START from the existing
+    # system-managed values, then mutate per the request.
+    internal_metadata: Dict[str, Any] = {
+        k: existing_metadata[k] for k in SYSTEM_MANAGED_FIELDS if k in existing_metadata
+    }
+
+    # Layer change updates layer in internal metadata.
+    if body.layer is not None:
+        internal_metadata["layer"] = body.layer
+
+    # Content change updates the content_hash in internal metadata.
+    if new_content is not None:
+        internal_metadata["content_hash"] = new_content_hash
+
+    # ---- Step 7: TTL handling (AC9) -----------------------------------------
+    ttl_supplied = not isinstance(body.ttl_seconds, _Unset)
+    if ttl_supplied:
+        ttl_value = body.ttl_seconds  # may be None or int
+        if ttl_value is None:
+            # Explicit null clears the TTL. Popping from internal_metadata
+            # alone is insufficient because Chroma /update merges (the old
+            # ttl_epoch persists). Stage the key for deletion via the
+            # storage-layer delete_keys path so Chroma receives `ttl_epoch:
+            # null` and removes the field.
+            internal_metadata.pop("ttl_epoch", None)
+            if "ttl_epoch" not in delete_keys:
+                delete_keys.append("ttl_epoch")
+        else:
+            if not isinstance(ttl_value, int) or ttl_value < 1:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "invalid_ttl_seconds",
+                        "message": "ttl_seconds must be a positive integer or null",
+                    },
+                )
+            internal_metadata["ttl_epoch"] = int(time.time()) + int(ttl_value)
+
+    # Importance lives in CALLER metadata in Chroma (it's not in
+    # SYSTEM_MANAGED_FIELDS — see _build_metadata), so write it there.
+    if body.importance is not None:
+        merged_caller_metadata["importance"] = body.importance
+
+    # ---- Step 8: Embedding (AC6/AC7/AC14) -----------------------------------
+    embedding_regenerated = False
+    embedding_regen_duration_ms = 0
+    new_embedding: Optional[List[float]] = None
+    if new_content is not None and content_hash_changed:
+        embed_start = time.perf_counter()
+        try:
+            generated = generate_embedding(new_content)
+        except Exception as exc:
+            logger.error(
+                "[memories.patch] memory_id=%s embedding_failed error=%s",
+                memory_id,
+                exc,
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "embedding_failed",
+                    "message": "Failed to generate embedding for new content",
+                },
+            )
+        if not generated:
+            logger.error(
+                "[memories.patch] memory_id=%s embedding_returned_empty", memory_id
+            )
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "embedding_failed",
+                    "message": "Embedding service returned empty vector",
+                },
+            )
+        new_embedding = list(generated)
+        embedding_regenerated = True
+        embedding_regen_duration_ms = int((time.perf_counter() - embed_start) * 1000)
+        logger.info(
+            "[memories.patch] memory_id=%s embedding_regenerated latency_ms=%d",
+            memory_id,
+            embedding_regen_duration_ms,
+        )
+
+    # ---- Step 9: Apply Chroma update ----------------------------------------
+    chroma_updated = False
+    try:
+        update_chroma_record(
+            memory_id,
+            document=new_content if new_content is not None else None,
+            embedding=new_embedding,  # None when content unchanged
+            metadata=merged_caller_metadata,
+            internal_metadata=internal_metadata,
+            delete_keys=delete_keys or None,
+        )
+        chroma_updated = True
+    except Exception as exc:
+        logger.error(
+            "[memories.patch] memory_id=%s chroma_update_failed error=%s",
+            memory_id,
+            exc,
+            exc_info=True,
+        )
+        # Hard failure: Chroma is the source of truth. Do not attempt
+        # typed-table fan-out if Chroma failed.
+        return PatchMemoryResponse(
+            status="error",
+            memory_id=memory_id,
+            chroma_updated=False,
+            typed_table_updated=None,
+            embedding_regenerated=embedding_regenerated,
+            embedding_regen_duration_ms=embedding_regen_duration_ms,
+            warnings=[f"chroma_update_failed: {exc}"],
+            message="Failed to update Chroma record",
+        )
+
+    # ---- Step 10: Typed-table fan-out (AC12/AC13/AC22) ----------------------
+    stored_in_episodic = bool(existing_metadata.get("stored_in_episodic"))
+    stored_in_emotional = bool(existing_metadata.get("stored_in_emotional"))
+    stored_in_procedural = bool(existing_metadata.get("stored_in_procedural"))
+    typed_table_id = existing_metadata.get("typed_table_id")
+    has_any_typed = stored_in_episodic or stored_in_emotional or stored_in_procedural
+
+    typed_flags: Optional[PatchMemoryTypedTableUpdated] = None
+    if has_any_typed and typed_table_id:
+        # Build the typed-table metadata patch (a sub-dict of caller metadata
+        # that excludes immortal-by-convention top-level fields). For typed
+        # tables we apply the same `body.metadata` shallow merge — `__delete__`
+        # sentinels mean key removal in JSONB too. Strip the `__delete__`
+        # sentinel out for typed tables (their metadata column doesn't have
+        # the same merge semantics; for now we send shallow overrides only and
+        # ignore the deletion sentinel — AC12 doesn't mandate JSONB
+        # key-deletion).
+        typed_metadata_update: Optional[Dict[str, Any]] = None
+        if body.metadata is not None:
+            typed_metadata_update = {
+                k: v for k, v in body.metadata.items() if v != "__delete__"
+            }
+            if not typed_metadata_update:
+                typed_metadata_update = None
+
+        typed_flags = PatchMemoryTypedTableUpdated(
+            episodic=False, emotional=False, procedural=False
+        )
+
+        # AC22: typed-table UPDATE is ALWAYS attempted when applicable,
+        # regardless of content_hash skip. Only embedding write is
+        # short-circuited by the hash check above.
+
+        if stored_in_episodic:
+            try:
+                ok = _update_episodic_row(
+                    typed_table_id,
+                    user_id,
+                    content=new_content,
+                    importance=body.importance,
+                    metadata_update=typed_metadata_update,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[memories.patch] memory_id=%s episodic_fanout_exception=%s",
+                    memory_id,
+                    exc,
+                )
+                ok = False
+            typed_flags.episodic = ok
+            if not ok:
+                warnings.append("episodic_table_update_failed")
+
+        if stored_in_emotional:
+            try:
+                ok = _update_emotional_row(
+                    typed_table_id,
+                    user_id,
+                    content=new_content,
+                    metadata_update=typed_metadata_update,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[memories.patch] memory_id=%s emotional_fanout_exception=%s",
+                    memory_id,
+                    exc,
+                )
+                ok = False
+            typed_flags.emotional = ok
+            if not ok:
+                warnings.append("emotional_table_update_failed")
+
+        if stored_in_procedural:
+            try:
+                ok = _update_procedural_row(
+                    typed_table_id,
+                    user_id,
+                    content=new_content,
+                    metadata_update=typed_metadata_update,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[memories.patch] memory_id=%s procedural_fanout_exception=%s",
+                    memory_id,
+                    exc,
+                )
+                ok = False
+            typed_flags.procedural = ok
+            if not ok:
+                warnings.append("procedural_table_update_failed")
+
+    total_elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+    logger.info(
+        "[memories.patch] memory_id=%s success total_latency_ms=%d "
+        "embedding_regenerated=%s typed_flags=%s warnings=%d",
+        memory_id,
+        total_elapsed_ms,
+        embedding_regenerated,
+        typed_flags.model_dump() if typed_flags else None,
+        len(warnings),
+    )
+
+    return PatchMemoryResponse(
+        status="success",
+        memory_id=memory_id,
+        chroma_updated=chroma_updated,
+        typed_table_updated=typed_flags,
+        embedding_regenerated=embedding_regenerated,
+        embedding_regen_duration_ms=embedding_regen_duration_ms,
+        warnings=warnings,
+        message="Memory updated successfully"
+        if not warnings
+        else "Memory updated with warnings",
+    )
 
 
 # =============================================================================

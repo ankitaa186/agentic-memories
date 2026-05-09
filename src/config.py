@@ -219,6 +219,53 @@ def get_disable_heuristics() -> bool:
 
 
 @lru_cache(maxsize=1)
+def get_ttl_sweep_interval_minutes() -> int:
+    """Cadence of the fast TTL eviction sweeper, in minutes.
+
+    The fast sweeper runs an in-process APScheduler job that calls
+    `compaction_ops.ttl_cleanup` and `compaction_ops.ttl_cleanup_timescale`
+    on a configurable cadence (default 15min) so memories whose TTL has
+    elapsed are reaped within minutes rather than waiting for the daily
+    compaction at 00:00 UTC.
+
+    Override via the `TTL_SWEEP_INTERVAL_MINUTES` env var. Values <1 are
+    clamped to 1 (the scheduler does not support sub-minute intervals
+    here; sub-minute would also overlap with sweep latency on cold caches).
+    """
+    try:
+        val = int(os.getenv("TTL_SWEEP_INTERVAL_MINUTES", "15"))
+    except ValueError:
+        val = 15
+    if val < 1:
+        val = 1
+    return val
+
+
+@lru_cache(maxsize=1)
+def get_retrieve_max_fetch_cap() -> int:
+    """Hard cap on records fetched per `/v1/retrieve` filter-only call.
+
+    The filter-only path (no ``query``) cannot use Chroma's offset (Chroma
+    `get` order is undefined), so it fetches up to
+    ``min(limit + offset + buffer, RETRIEVE_MAX_FETCH_CAP)`` records, sorts
+    by timestamp DESC in Python, and slices the requested page (X.2 AC12).
+    Beyond this cap, pagination is documented as best-effort; callers
+    needing deeper pagination should narrow filters.
+
+    Override via the ``RETRIEVE_MAX_FETCH_CAP`` env var. Values <1 are
+    clamped to 1. Mirrors the ``TTL_SWEEP_INTERVAL_MINUTES`` pattern from
+    X.3.
+    """
+    try:
+        val = int(os.getenv("RETRIEVE_MAX_FETCH_CAP", "5000"))
+    except ValueError:
+        val = 5000
+    if val < 1:
+        val = 1
+    return val
+
+
+@lru_cache(maxsize=1)
 def is_scheduled_maintenance_enabled() -> bool:
     """Control daily scheduled maintenance (compaction) via env.
 
