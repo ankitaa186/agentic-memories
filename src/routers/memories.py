@@ -42,6 +42,7 @@ from src.services.storage import (
     update_chroma_record,
     upsert_memories,
 )
+from src.services.tracing import root_span
 
 logger = logging.getLogger("agentic_memories.memories")
 
@@ -349,6 +350,44 @@ def store_memory_direct(body: DirectMemoryRequest) -> DirectMemoryResponse:
 
     Returns:
         DirectMemoryResponse with status, memory_id, and storage confirmation.
+    """
+    # Story 2.1: wrap the handler body in a Langfuse root span so the
+    # embedding observation generated inside `generate_embedding(...)` nests
+    # under a single trace per request instead of becoming an orphan top-level
+    # trace in Langfuse.
+    with root_span(
+        name="memory_create_direct",
+        user_id=body.user_id,
+        input={
+            "user_id": body.user_id,
+            "content_length": len(body.content),
+            "layer": body.layer,
+            "type": body.type,
+            "importance": body.importance,
+        },
+        metadata={
+            "endpoint": "/v1/memories/direct",
+        },
+    ) as _root_span:
+        response = _store_memory_direct_impl(body)
+        if _root_span is not None:
+            try:
+                _root_span.update(
+                    output={
+                        "status": response.status,
+                        "memory_id": response.memory_id,
+                        "error_code": response.error_code,
+                        "storage": response.storage,
+                    }
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("[memories.direct] root_span.update failed: %s", exc)
+        return response
+
+
+def _store_memory_direct_impl(body: DirectMemoryRequest) -> DirectMemoryResponse:
+    """Inner implementation of `store_memory_direct` (Story 2.1: extracted so
+    the public handler can wrap the whole body in a Langfuse root span).
     """
     start_time = time.perf_counter()
 

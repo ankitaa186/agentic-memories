@@ -96,6 +96,39 @@ def simple_deduplicate(
     for deletion. The earlier ID always wins (oldest-by-fetch-order survives).
 
     Returns stats dict with 'scanned' and 'removed' counts.
+
+    Story 2.1: defensive Langfuse wrap. Today this is only called from
+    `compaction_graph.node_dedup` underneath the `compaction_run` root span,
+    so the helper's nested-detection guard is the active path: it returns
+    None and the regenerated embeddings (line ~137) attach to the existing
+    parent. If a future caller invokes `simple_deduplicate` directly with no
+    active span, the helper opens a `compaction_ops` root span instead.
+    """
+    from src.services.tracing import root_span
+
+    with root_span(
+        name="compaction_ops",
+        user_id=user_id,
+        input={
+            "user_id": user_id,
+            "similarity_threshold": similarity_threshold,
+            "limit": limit,
+        },
+    ) as _root_span:
+        result = _simple_deduplicate_impl(user_id, similarity_threshold, limit)
+        if _root_span is not None:
+            try:
+                _root_span.update(output=result)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        return result
+
+
+def _simple_deduplicate_impl(
+    user_id: str, similarity_threshold: float, limit: int
+) -> Dict[str, int]:
+    """Inner implementation of `simple_deduplicate` (Story 2.1: extracted so
+    the public function can wrap with a defensive Langfuse root span).
     """
     logger.info("[forget.dedup.start] user_id=%s limit=%s", user_id, limit)
     col = _get_collection()

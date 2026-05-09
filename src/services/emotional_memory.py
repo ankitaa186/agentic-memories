@@ -182,47 +182,73 @@ class EmotionalMemoryService:
                 release_timescale_conn(conn)
 
     def _store_in_chroma(self, memory: EmotionalMemory) -> None:
-        """Store emotional memory in ChromaDB for semantic search"""
-        if not self.chroma_client:
-            return
+        """Store emotional memory in ChromaDB for semantic search.
 
-        try:
-            # Create searchable text
-            search_text = f"{memory.emotional_state} {memory.context or ''} {memory.trigger_event or ''}"
+        Story 2.1: wraps the body in a Langfuse root span (`emotional_store`)
+        so the embedding observation generated inside `get_embeddings(...)`
+        nests under a single parent trace per call. Skipped automatically when
+        invoked beneath an existing parent span (e.g. inside the unified
+        ingestion graph).
+        """
+        from src.services.tracing import root_span
 
-            # Get embeddings
-            from src.services.embedding_utils import get_embeddings
-
-            embeddings = get_embeddings([search_text])
-            if not embeddings:
+        with root_span(
+            name="emotional_store",
+            user_id=memory.user_id,
+            input={
+                "user_id": memory.user_id,
+                "memory_id": memory.id,
+                "emotional_state": memory.emotional_state,
+            },
+        ) as _root_span:
+            if not self.chroma_client:
                 return
 
-            # Prepare metadata
-            metadata = {
-                "user_id": memory.user_id,
-                "emotional_state": memory.emotional_state,
-                "valence": memory.valence,
-                "arousal": memory.arousal,
-                "intensity": memory.intensity or 0.0,
-                "timestamp": memory.timestamp.isoformat(),
-                "context": memory.context or "",
-                "trigger_event": memory.trigger_event or "",
-            }
+            try:
+                # Create searchable text
+                search_text = f"{memory.emotional_state} {memory.context or ''} {memory.trigger_event or ''}"
 
-            # Store in ChromaDB
-            collection = self.chroma_client.get_or_create_collection(
-                name=self.collection_name
-            )
+                # Get embeddings
+                from src.services.embedding_utils import get_embeddings
 
-            collection.upsert(
-                embeddings=embeddings,
-                documents=[search_text],
-                metadatas=[metadata],
-                ids=[memory.id],
-            )
+                embeddings = get_embeddings([search_text])
+                if not embeddings:
+                    return
 
-        except Exception as e:
-            print(f"Error storing emotional memory in ChromaDB: {e}")
+                # Prepare metadata
+                metadata = {
+                    "user_id": memory.user_id,
+                    "emotional_state": memory.emotional_state,
+                    "valence": memory.valence,
+                    "arousal": memory.arousal,
+                    "intensity": memory.intensity or 0.0,
+                    "timestamp": memory.timestamp.isoformat(),
+                    "context": memory.context or "",
+                    "trigger_event": memory.trigger_event or "",
+                }
+
+                # Store in ChromaDB
+                collection = self.chroma_client.get_or_create_collection(
+                    name=self.collection_name
+                )
+
+                collection.upsert(
+                    embeddings=embeddings,
+                    documents=[search_text],
+                    metadatas=[metadata],
+                    ids=[memory.id],
+                )
+
+                if _root_span is not None:
+                    try:
+                        _root_span.update(
+                            output={"memory_id": memory.id, "stored": True}
+                        )
+                    except Exception:  # pragma: no cover - defensive
+                        pass
+
+            except Exception as e:
+                print(f"Error storing emotional memory in ChromaDB: {e}")
 
     def _calculate_intensity(self, valence: float, arousal: float) -> float:
         """Calculate emotional intensity from valence and arousal"""

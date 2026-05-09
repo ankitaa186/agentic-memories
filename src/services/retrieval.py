@@ -407,9 +407,59 @@ def search_memories(
     limit: int = 10,
     offset: int = 0,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Search memories with optional embedding query and metadata filters.
+    """Public retrieval entry point.
 
-    Filter keys recognized:
+    Story 2.1: wraps the body in a Langfuse root span (`retrieval`) so the
+    embedding observation produced by `generate_embedding(...)` for non-empty
+    queries nests under a single parent trace per call. The wrap also covers
+    the empty-query metadata-only branch so its latency is visible. Falls
+    through cleanly when Langfuse is unavailable or already-nested under a
+    parent (e.g. a future graph caller). Filter semantics are documented on
+    the inner ``_search_memories_impl``.
+    """
+    from src.services.tracing import root_span
+
+    with root_span(
+        name="retrieval",
+        user_id=user_id,
+        input={
+            "user_id": user_id,
+            "has_query": bool(query and query.strip()),
+            "query_len": len(query or ""),
+            "limit": limit,
+            "offset": offset,
+        },
+        metadata={
+            "filter_keys": list((filters or {}).keys()),
+        },
+    ) as _root_span:
+        results, total = _search_memories_impl(
+            user_id, query, filters=filters, limit=limit, offset=offset
+        )
+        if _root_span is not None:
+            try:
+                _root_span.update(
+                    output={
+                        "returned": len(results),
+                        "total": total,
+                    }
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("[retrieve] root_span.update failed: %s", exc)
+        return results, total
+
+
+def _search_memories_impl(
+    user_id: str,
+    query: str,
+    filters: Optional[Dict[str, Any]] = None,
+    limit: int = 10,
+    offset: int = 0,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Inner search body (Story 2.1: extracted so ``search_memories`` can wrap
+    the whole call in a Langfuse root span).
+
+    Filter keys recognized (X.2):
     - ``layer``, ``type`` — existing equality filters.
     - ``kind`` — equality on ``metadata.kind`` (X.2 AC1).
     - ``created_after`` / ``created_before`` — UTC-normalized ISO 8601
