@@ -155,6 +155,32 @@ class ForgetRequest(BaseModel):
         ]
     ] = Field(default_factory=list)
     dry_run: bool = False
+    jobs: List[Literal["ttl_cleanup", "promotion", "compaction"]] = Field(
+        default_factory=list,
+        description=(
+            "Reserved for future use; currently ignored. `/v1/forget` always runs "
+            "ttl_cleanup + ttl_cleanup_timescale regardless of this list. The "
+            "submitted jobs are echoed back as `jobs_requested` for caller "
+            "debuggability."
+        ),
+    )
+
+
+class ForgetResponse(BaseModel):
+    """Response shape for `POST /v1/forget`.
+
+    Soft-TTL contract: a memory becomes eligible for eviction once its
+    `ttl_epoch` has elapsed; it may continue to appear in retrieve results
+    for up to one sweep cycle (default 15 min, configurable via
+    `TTL_SWEEP_INTERVAL_MINUTES`) before this endpoint or the background
+    sweeper reaps it. Set `dry_run=true` to count the would-be deletions
+    without performing them.
+    """
+
+    chroma_deleted: int = 0
+    timescale_deleted: int = 0
+    dry_run: bool = False
+    jobs_requested: List[str] = Field(default_factory=list)
 
 
 class MaintenanceRequest(BaseModel):
@@ -602,9 +628,13 @@ class DirectMemoryRequest(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Optional TTL in seconds. Only meaningful when layer='short-term'. "
-            "If omitted, short-term records use SHORT_TERM_TTL_SECONDS (default "
-            "60 days). Non-short-term layers ignore this field."
+            "Optional TTL in seconds, honored on ALL layers (short-term, "
+            "semantic, long-term, and typed layers). When set, the memory "
+            "becomes eligible for eviction approximately `ttl_seconds` after "
+            "creation. Soft contract: a record may linger up to one TTL-sweep "
+            "cycle past its expiration before deletion. If omitted, "
+            "short-term records use SHORT_TERM_TTL_SECONDS (default 60 days); "
+            "all other layers remain immortal."
         ),
         example=86400,
     )
@@ -751,4 +781,201 @@ class DeleteMemoryResponse(BaseModel):
         default=None,
         description="Status or error message providing details about the deletion operation",
         example="Memory deleted successfully from all backends",
+    )
+
+
+# =============================================================================
+# AM-X.1: PATCH /v1/memories/{memory_id} schemas
+# =============================================================================
+
+
+class _Unset:
+    """Sentinel singleton type for fields where ``None`` is a meaningful
+    value distinct from "not supplied". Used by ``PatchMemoryRequest.ttl_seconds``
+    so the PATCH router can distinguish::
+
+        {"ttl_seconds": null}   -> clear the stored TTL (set ttl=None)
+        {}                      -> leave TTL unchanged (omitted)
+
+    A bare ``Optional[int] = None`` cannot encode this distinction because
+    Pydantic collapses both forms into ``None`` on the model instance.
+
+    The sentinel is a class-level singleton; equality and ``is`` both work.
+    Pydantic JSON-schema-wise we declare ``ttl_seconds`` as ``Any`` and
+    validate manually so ``json.loads`` / FastAPI body parsing pass through
+    explicit ``null`` while omitted fields default to ``UNSET``.
+    """
+
+    _instance: "Optional[_Unset]" = None
+
+    def __new__(cls) -> "_Unset":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover - debug only
+        return "UNSET"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+UNSET: _Unset = _Unset()
+"""Module-level singleton meaning "field omitted from PATCH request".
+
+Test code that constructs PatchMemoryRequest directly should pass ``UNSET``
+explicitly when it wants the omitted-field semantics; the JSON body parser
+populates this default automatically when the key is absent.
+"""
+
+
+class PatchMemoryRequest(BaseModel):
+    """Request body for ``PATCH /v1/memories/{memory_id}``.
+
+    All fields are optional. Omitted fields leave the stored value unchanged.
+
+    The ``ttl_seconds`` field uses the ``UNSET`` sentinel scheme so the router
+    can distinguish between ``{"ttl_seconds": null}`` (clear TTL) and the field
+    being absent from the request body (leave TTL unchanged). Other fields use
+    ``Optional[T] = None`` because ``None`` is not a meaningful value for
+    them — supplying ``None`` is equivalent to omitting the key.
+
+    Metadata semantics (AC8): shallow merge. Use the string sentinel
+    ``"__delete__"`` as a value to remove a key. System-managed metadata keys
+    (see ``src/services/_constants.py:SYSTEM_MANAGED_FIELDS``) cannot be
+    set or deleted via this field; the router returns 422 for any such key.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    content: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="New memory content. When changed, the embedding is regenerated synchronously. When the new content produces the same content_hash as the stored one, embedding regen is skipped.",
+        example="User now prefers afternoon meetings between 2-4pm.",
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Shallow-merge metadata patch. Keys present here override the "
+            "stored values; keys absent here are preserved. Use the sentinel "
+            'value `"__delete__"` to remove a key. System-managed keys '
+            "(`user_id`, `layer`, `type`, `ttl_epoch`, `timestamp`, "
+            "`content_hash`, `stored_in_*`, `typed_table_id`) cannot be set "
+            "or deleted via PATCH metadata; attempts return 422."
+        ),
+        example={"source": "chat-v2", "old_key": "__delete__"},
+    )
+    layer: Optional[
+        Literal[
+            "short-term", "semantic", "long-term", "episodic", "procedural", "emotional"
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "New memory layer. Allowed flips are between non-typed layers "
+            "(`short-term` <-> `semantic` <-> `long-term`). Flips into or "
+            "out of typed-storage layers (`episodic`, `procedural`, "
+            "`emotional`) return 422 in v1 — delete and recreate instead."
+        ),
+        example="long-term",
+    )
+    importance: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="New importance score from 0.0 to 1.0. On typed tables that have an importance_score column (episodic_memories), the value is also fanned out.",
+        example=0.95,
+    )
+    # ttl_seconds intentionally typed as Any so that explicit JSON null is
+    # preserved; omitted maps to the UNSET sentinel via default. The router
+    # validates the actual value (None | positive int | UNSET) at runtime.
+    ttl_seconds: Any = Field(
+        default=UNSET,
+        description=(
+            "New TTL in seconds. Recomputes `ttl_epoch = now + ttl_seconds`. "
+            "Pass explicit JSON `null` to clear the stored TTL (immortalize "
+            "the record). Omit the field entirely to leave the TTL unchanged. "
+            "Soft-TTL contract: a record may linger up to one TTL-sweep cycle "
+            "past its expiration before deletion."
+        ),
+        example=86400,
+    )
+
+
+class PatchMemoryTypedTableUpdated(BaseModel):
+    """Per-table flags for PATCH typed-table fan-out (AC13).
+
+    Each flag is True when the row in that typed table was updated
+    successfully, False on failure (the corresponding warning is emitted in
+    ``PatchMemoryResponse.warnings``). Tables that the record was not stored
+    in (per the ``stored_in_*`` flags) are still reported with their original
+    "stored" value — False if the record was never stored there.
+    """
+
+    episodic: bool = Field(
+        default=False,
+        description="True when the episodic_memories row was updated successfully.",
+    )
+    emotional: bool = Field(
+        default=False,
+        description="True when the emotional_memories row was updated successfully.",
+    )
+    procedural: bool = Field(
+        default=False,
+        description="True when the procedural_memories row was updated successfully.",
+    )
+
+
+class PatchMemoryResponse(BaseModel):
+    """Response body for ``PATCH /v1/memories/{memory_id}`` (AC13).
+
+    Per-surface flags let clients detect partial failures without parsing free
+    text. ``typed_table_updated`` is ``None`` when the record had no
+    ``stored_in_*`` flags set on it (no typed-table fan-out applied).
+
+    HTTP status semantics: partial failure returns **200 with warnings
+    populated**, NOT 207 multi-status — matches the existing DELETE fan-out
+    pattern. Caller inspects per-surface flags to detect drift.
+    """
+
+    status: Literal["success", "error"] = Field(
+        ...,
+        description="Operation status: 'success' (Chroma updated) or 'error' (Chroma failed).",
+        example="success",
+    )
+    memory_id: str = Field(
+        ...,
+        description="The patched memory id (always echoed; preserved across PATCH per AC1).",
+        example="mem_a1b2c3d4e5f6",
+    )
+    chroma_updated: bool = Field(
+        ...,
+        description="True when the Chroma record (document/embedding/metadata) was updated successfully. False when the Chroma write failed; status will then be 'error'.",
+        example=True,
+    )
+    typed_table_updated: Optional[PatchMemoryTypedTableUpdated] = Field(
+        default=None,
+        description="Per-table fan-out flags. None when the record has no `stored_in_*` flags set (no typed-table fan-out applies).",
+    )
+    embedding_regenerated: bool = Field(
+        ...,
+        description="True when the content changed (different content_hash) and a fresh embedding was written. False when content was unchanged and embedding regen was skipped (idempotency, AC7).",
+        example=True,
+    )
+    embedding_regen_duration_ms: int = Field(
+        ...,
+        ge=0,
+        description="Wall time spent generating + writing the new embedding, in milliseconds. 0 when `embedding_regenerated` is False (AC14).",
+        example=87,
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Best-effort warning messages for partial failures (e.g., a typed-table UPDATE failing). Empty on a clean update.",
+        example=[],
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="Human-readable status message.",
+        example="Memory updated successfully",
     )

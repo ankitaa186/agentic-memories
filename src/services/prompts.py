@@ -110,7 +110,7 @@ Extract memories from conversation history as JSON array. Each memory must be:
   "layer": "short-term" | "semantic",               // Required
   "confidence": 0.5-1.0,                            // Required
   "tags": ["preferences", "books"],                 // Required
-  "ttl": 86400 | null,                              // Optional: seconds (for short-term only)
+  "ttl": 86400 | null,                              // Optional: TTL in seconds; honored on all layers (null = immortal, except short-term which falls back to the configured default)
   
   // Optional structured data (include if relevant):
   "temporal": {

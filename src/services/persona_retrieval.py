@@ -83,6 +83,80 @@ def _normalize_persona_tags(raw_value: Any) -> List[str]:
     return [str(raw_value)]
 
 
+def _apply_x2_filters_to_hybrid(
+    hybrid_results: List[Any], x2_filters: Dict[str, Any]
+) -> List[Any]:
+    """Apply X.2 retrieve filters to hybrid-service results in Python.
+
+    The hybrid service does not natively honor X.2's ``created_*`` /
+    ``expires_*`` / ``kind`` / ``metadata_filter`` predicates, so for the
+    persona-path AC19 to hold end-to-end, we must post-filter hybrid
+    results against the same predicate set the where-clause builder
+    enforces at the Chroma layer for ``search_memories``.
+
+    Inputs are assumed already-validated:
+    - ``created_after`` / ``created_before`` are UTC-normalized ISO strings
+      (lex-comparable against the stored ``timestamp`` field).
+    - ``expires_after`` / ``expires_before`` are epoch ints. Records WITHOUT
+      a ``ttl_epoch`` are excluded by any ``expires_*`` filter (X.2 AC21).
+    - ``metadata_filter`` is a ``{key: [values]}`` dict pre-validated.
+    """
+
+    out: List[Any] = []
+    created_after = x2_filters.get("created_after")
+    created_before = x2_filters.get("created_before")
+    expires_after = x2_filters.get("expires_after")
+    expires_before = x2_filters.get("expires_before")
+    kind = x2_filters.get("kind")
+    metadata_filter = x2_filters.get("metadata_filter") or {}
+
+    for result in hybrid_results:
+        meta = getattr(result, "metadata", None) or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        ts = meta.get("timestamp")
+        if isinstance(ts, str):
+            if created_after is not None and ts < created_after:
+                continue
+            if created_before is not None and ts >= created_before:
+                continue
+        else:
+            if created_after is not None or created_before is not None:
+                continue
+        ttl_epoch = meta.get("ttl_epoch")
+        if expires_after is not None or expires_before is not None:
+            # X.2 AC21: expires_* filters records WITH a TTL only.
+            if ttl_epoch is None:
+                continue
+            try:
+                ttl_int = int(ttl_epoch)
+            except (TypeError, ValueError):
+                continue
+            if expires_after is not None and ttl_int < int(expires_after):
+                continue
+            if expires_before is not None and ttl_int >= int(expires_before):
+                continue
+        if kind is not None and str(meta.get("kind", "")) != str(kind):
+            continue
+        skip = False
+        for mk, mv_list in metadata_filter.items():
+            # AND semantic per spec: "multiple values for the same key are
+            # AND-combined". When a single value is supplied (the route's
+            # `_build_where_clause` already 422s on conflicting duplicates),
+            # this collapses to standard equality. When duplicates somehow
+            # bypass the route guard, we require all to match — never silently
+            # pick the first one. (PR #62 review #5.)
+            values = mv_list if isinstance(mv_list, list) else [mv_list]
+            actual = str(meta.get(mk, ""))
+            if not all(actual == str(v) for v in values):
+                skip = True
+                break
+        if skip:
+            continue
+        out.append(result)
+    return out
+
+
 @dataclass
 class PersonaRetrievalResult:
     persona: str
@@ -117,6 +191,30 @@ class PersonaRetrievalAgent:
         if persona_requested and self.persona not in target_tags:
             target_tags.append(self.persona)
 
+        # X.2 AC19: thread the new X.2 retrieve filters through the persona
+        # path so the dominant retrieve code path (chat runtime, summary
+        # manager, memory context, orchestrator — 12+ call sites) honors
+        # them. Without this, callers of `_persona_copilot.retrieve` would
+        # silently drop every X.2 filter and fall through to unfiltered
+        # hybrid retrieval. The hybrid service does not yet honor these
+        # filters natively, so we (a) post-filter hybrid results in-Python
+        # against the same predicate set used by `_build_where_clause`, and
+        # (b) propagate the filters to the `search_memories` fallback below
+        # so the where-clause path filters at the Chroma layer.
+        x2_filter_keys = (
+            "kind",
+            "created_after",
+            "created_before",
+            "expires_after",
+            "expires_before",
+            "metadata_filter",
+        )
+        x2_filters: Dict[str, Any] = {
+            k: metadata_filters.get(k)
+            for k in x2_filter_keys
+            if metadata_filters.get(k) not in (None, "", [], {})
+        }
+
         hybrid_query = RetrievalQuery(
             user_id=user_id,
             query_text=query,
@@ -132,6 +230,15 @@ class PersonaRetrievalAgent:
         }
 
         hybrid_results = self.hybrid.retrieve_memories(hybrid_query)
+
+        # AC19: apply X.2 filters to hybrid_results in-Python BEFORE the
+        # persona-tag prioritization step so a filter-mismatched record is
+        # never returned even when the embedding query also matched. Avoids
+        # a silent regression where chat-runtime retrieve calls would
+        # return memories outside the requested time window.
+        if x2_filters and hybrid_results:
+            hybrid_results = _apply_x2_filters_to_hybrid(hybrid_results, x2_filters)
+
         if persona_requested:
             filtered_results = []
             for result in hybrid_results:
@@ -154,10 +261,16 @@ class PersonaRetrievalAgent:
                     remainder.append(result)
             hybrid_results = prioritized + remainder
 
-        # Apply additional metadata filters (layer, type, etc.)
+        # Apply additional metadata filters (layer, type, etc.). X.2 keys
+        # (created_after, created_before, expires_after, expires_before,
+        # kind, metadata_filter) are already applied above via
+        # `_apply_x2_filters_to_hybrid`, so skip them here to avoid double
+        # application or treating them as bare metadata-equality predicates.
         if metadata_filters:
             for key, value in metadata_filters.items():
                 if key == "persona_tags":
+                    continue
+                if key in x2_filter_keys:
                     continue
                 if value is None:
                     continue
@@ -187,6 +300,9 @@ class PersonaRetrievalAgent:
             # Fall back to baseline search. Only enforce persona filtering when
             # the caller explicitly requested it to preserve backwards
             # compatibility with legacy memories that lack persona tags.
+            # X.2 AC19: pass X.2 filter keys through (already preserved via
+            # metadata_filters) so the where-clause builder filters at the
+            # Chroma layer when the hybrid path returned nothing.
             search_filters = dict(metadata_filters or {})
             if persona_requested:
                 search_filters["persona_tags"] = target_tags

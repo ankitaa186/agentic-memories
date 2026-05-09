@@ -12,6 +12,7 @@ from os import getenv
 
 from src.schemas import (
     ForgetRequest,
+    ForgetResponse,
     MaintenanceRequest,
     MaintenanceResponse,
     RetrieveItem,
@@ -48,6 +49,7 @@ from src.config import (
     is_llm_configured,
     get_llm_provider,
     is_scheduled_maintenance_enabled,
+    get_ttl_sweep_interval_minutes,
 )
 from src.config import get_extraction_model_name, get_embedding_model_name
 from src.config import get_xai_base_url, get_chroma_tenant, get_chroma_database
@@ -261,6 +263,73 @@ def _execute_compaction(r) -> None:
             logger.info("[maint.compaction.error] user_id=%s %s", uid, exc)
 
 
+def _run_ttl_sweep() -> None:
+    """Fast TTL eviction sweep: reaps expired memories every TTL_SWEEP_INTERVAL_MINUTES.
+
+    Calls both `compaction_ops.ttl_cleanup(grace_seconds=60)` and
+    `compaction_ops.ttl_cleanup_timescale(grace_seconds=60)`. The 60s grace
+    window protects against racing destructively with in-flight writes that
+    just minted a record at the boundary.
+
+    Wraps the work in a Redis `ttl_sweep_lock` (5-min TTL) so this job
+    doesn't pile up on itself: a manual `/v1/forget` call (which acquires
+    the same lock) or a previous overlapping sweep that hasn't finished
+    will cause this tick to skip silently. NOTE: the daily compaction at
+    00:00 UTC uses a *different* lock (`compaction_lock:daily`), so this
+    sweep CAN run concurrently with the daily. That's deliberate and safe
+    — `ttl_cleanup` and `ttl_cleanup_timescale` are idempotent
+    delete-by-predicate ops (Chroma `delete(ids=...)` is a no-op on
+    already-gone rows; Postgres `DELETE WHERE` likewise). The worst
+    concurrent-fire outcome is duplicated log counts, not data corruption.
+    The 5-min TTL is comfortably longer than the actual sweep (which is
+    millisecond-scale: a single Chroma `where` query plus a Postgres
+    `DELETE WHERE`); the lock auto-expiring mid-sweep would only be
+    possible on a degenerately-large dataset, so future maintainers should
+    not tighten the TTL prematurely.
+    """
+    from src.services.compaction_ops import ttl_cleanup, ttl_cleanup_timescale
+
+    r = get_redis_client()
+    lock = None
+    if r is not None:
+        try:
+            lock = r.lock("ttl_sweep_lock", timeout=300, blocking=False)
+            if not lock.acquire():
+                logger.info("[sched.ttl_sweep] skipped: lock held")
+                return
+        except Exception as exc:
+            logger.info("[sched.ttl_sweep] lock acquire failed: %s", exc)
+            lock = None
+
+    chroma_deleted = 0
+    timescale_deleted = 0
+    attempted = True
+    try:
+        try:
+            chroma_deleted = int(ttl_cleanup(grace_seconds=60) or 0)
+        except Exception as exc:
+            logger.exception("[sched.ttl_sweep.chroma_error] %s", exc)
+        try:
+            timescale_deleted = int(ttl_cleanup_timescale(grace_seconds=60) or 0)
+        except Exception as exc:
+            logger.exception("[sched.ttl_sweep.timescale_error] %s", exc)
+        logger.info(
+            "[sched.ttl_sweep] attempted=%s chroma_deleted=%s timescale_deleted=%s",
+            attempted,
+            chroma_deleted,
+            timescale_deleted,
+        )
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception as exc:
+                logger.info(
+                    "[sched.ttl_sweep] lock release skipped (may have expired): %s",
+                    exc,
+                )
+
+
 def _start_scheduler() -> None:
     global _scheduler
     try:
@@ -273,9 +342,20 @@ def _start_scheduler() -> None:
             _scheduler.add_job(
                 _run_daily_compaction, "cron", hour=0, minute=0, id="daily_compaction"
             )
+            sweep_minutes = get_ttl_sweep_interval_minutes()
+            _scheduler.add_job(
+                _run_ttl_sweep,
+                "interval",
+                minutes=sweep_minutes,
+                id="ttl_sweep",
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=60,
+            )
             _scheduler.start()
             logger.info(
-                "[sched] started APScheduler with daily compaction job at 00:00 UTC"
+                "[sched] started APScheduler with daily compaction at 00:00 UTC and ttl_sweep every %s min",
+                sweep_minutes,
             )
         elif _scheduler is None:
             if not is_scheduled_maintenance_enabled():
@@ -1110,8 +1190,137 @@ def retrieve(
     ),
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    created_after: Optional[str] = Query(
+        default=None,
+        description=(
+            "Inclusive lower bound on `metadata.timestamp` (ISO 8601). Server "
+            "stores timestamps in UTC. Pass `Z` or an explicit offset; offset "
+            "is normalized to UTC before comparison. Naive datetimes are "
+            "rejected with 422."
+        ),
+    ),
+    created_before: Optional[str] = Query(
+        default=None,
+        description=(
+            "Exclusive upper bound on `metadata.timestamp` (ISO 8601). Server "
+            "stores timestamps in UTC. Pass `Z` or an explicit offset; offset "
+            "is normalized to UTC before comparison. Naive datetimes are "
+            "rejected with 422."
+        ),
+    ),
+    expires_after: Optional[str] = Query(
+        default=None,
+        description=(
+            "Inclusive lower bound on `metadata.ttl_epoch` (epoch seconds as "
+            "an integer, OR an ISO 8601 datetime that follows the same "
+            "timezone-aware rules as `created_after`). Filters records WITH "
+            "a TTL only. Immortal memories (no `ttl_epoch` set) are excluded "
+            "from any `expires_*` filter. To find immortal memories, omit "
+            "both `expires_*` parameters."
+        ),
+    ),
+    expires_before: Optional[str] = Query(
+        default=None,
+        description=(
+            "Exclusive upper bound on `metadata.ttl_epoch` (epoch seconds as "
+            "an integer, OR an ISO 8601 datetime that follows the same "
+            "timezone-aware rules as `created_before`). Filters records WITH "
+            "a TTL only. Immortal memories (no `ttl_epoch` set) are excluded "
+            "from any `expires_*` filter. To find immortal memories, omit "
+            "both `expires_*` parameters."
+        ),
+    ),
+    kind: Optional[str] = Query(
+        default=None,
+        description=(
+            "Exact-match filter on `metadata.kind` (a user-supplied metadata "
+            "key written via `POST /v1/memories/direct`). Use the dedicated "
+            "`kind` parameter rather than `metadata_filter=kind:value`."
+        ),
+    ),
+    metadata_filter: Optional[List[str]] = Query(
+        default=None,
+        description=(
+            "Repeatable `key:value` metadata equality filter (scalar values "
+            "only). Multiple values for the same key are AND-combined as the "
+            "literal user provided. System-managed and internally-derived "
+            "keys (user_id, layer, type, ttl_epoch, timestamp, content_hash, "
+            "stored_in_*, typed_table_id, importance, relevance_score, "
+            "confidence, usage_count, persona_tags, emotional_signature) are "
+            "rejected with 422. Use the dedicated `kind` parameter for the "
+            "`kind` key."
+        ),
+    ),
 ) -> RetrieveResponse:
     from src.services.tracing import start_trace, end_trace
+    from src.services.retrieval import (
+        _normalize_iso_datetime,
+        _coerce_expires_value,
+        _parse_metadata_filter_pairs,
+        sort_by_recency,
+    )
+
+    # X.2 AC3 / AC18: validate and timezone-normalize new datetime filters.
+    # These run BEFORE start_trace so a 422 short-circuits the request.
+    normalized_created_after: Optional[str] = (
+        _normalize_iso_datetime(created_after, "created_after")
+        if created_after
+        else None
+    )
+    normalized_created_before: Optional[str] = (
+        _normalize_iso_datetime(created_before, "created_before")
+        if created_before
+        else None
+    )
+    normalized_expires_after: Optional[int] = (
+        _coerce_expires_value(expires_after, "expires_after")
+        if expires_after is not None
+        else None
+    )
+    normalized_expires_before: Optional[int] = (
+        _coerce_expires_value(expires_before, "expires_before")
+        if expires_before is not None
+        else None
+    )
+
+    # AC14: reject obviously-conflicting ranges (created_after >= created_before).
+    if (
+        normalized_created_after is not None
+        and normalized_created_before is not None
+        and normalized_created_after >= normalized_created_before
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="created_after must be strictly less than created_before",
+        )
+    if (
+        normalized_expires_after is not None
+        and normalized_expires_before is not None
+        and normalized_expires_after >= normalized_expires_before
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="expires_after must be strictly less than expires_before",
+        )
+
+    # AC4 / AC22: parse + validate metadata_filter against the rejection lists.
+    parsed_metadata_filter: Dict[str, List[str]] = _parse_metadata_filter_pairs(
+        metadata_filter
+    )
+
+    # Detect whether any X.2 filter is active. AC6 / AC20: filter-only paths
+    # (any X.2 filter present without `query`) return recency-desc.
+    has_x2_filter = any(
+        value not in (None, "", [], {})
+        for value in (
+            normalized_created_after,
+            normalized_created_before,
+            normalized_expires_after,
+            normalized_expires_before,
+            kind,
+            parsed_metadata_filter or None,
+        )
+    )
 
     # Start trace for this request
     trace = start_trace(
@@ -1121,6 +1330,7 @@ def retrieve(
             "query": query[:100] if query else None,
             "limit": limit,
             "endpoint": "/v1/retrieve",
+            "x2_filters": has_x2_filter,
         },
     )
 
@@ -1129,15 +1339,42 @@ def retrieve(
         metadata_filters["layer"] = layer
     if type:
         metadata_filters["type"] = type
+    if normalized_created_after is not None:
+        metadata_filters["created_after"] = normalized_created_after
+    if normalized_created_before is not None:
+        metadata_filters["created_before"] = normalized_created_before
+    if normalized_expires_after is not None:
+        metadata_filters["expires_after"] = normalized_expires_after
+    if normalized_expires_before is not None:
+        metadata_filters["expires_before"] = normalized_expires_before
+    if kind:
+        metadata_filters["kind"] = kind
+    if parsed_metadata_filter:
+        metadata_filters["metadata_filter"] = parsed_metadata_filter
     persona_context: Dict[str, Any] = {}
     if persona:
         persona_context["forced_persona"] = persona
         metadata_filters.setdefault("persona_tags", [persona])
 
+    # X.2 AC6 / AC20: filter-only paths (no query, any X.2 filter present, OR
+    # legacy filter-only with sort unset) return recency-desc; the existing
+    # explicit `sort=` knob still wins for backward compatibility. AC20
+    # specifically: a filter-only call with `?layer=semantic` and no `sort=`
+    # now returns recency-desc instead of Chroma's arbitrary `get` order.
+    is_query_less = not (query and query.strip())
+    sorting = sort in ("newest", "oldest")
+    auto_recency = is_query_less and not sorting
+    if auto_recency:
+        # Treat the auto-recency case as ``sort=newest`` for the existing
+        # post-fetch sort scaffolding; this is also what the new filter-only
+        # path inside `search_memories` does internally (matches via the
+        # shared ``sort_by_recency`` helper, AC23).
+        sorting = True
+        sort = "newest"
+
     # When sorting by timestamp, fetch a large pool so we can sort before paginating.
     # ChromaDB .get() returns records in arbitrary order, so a small limit would
     # miss recent memories.
-    sorting = sort in ("newest", "oldest")
     fetch_limit = max(limit + offset, 1000) if sorting else limit + offset
 
     persona_results = _persona_copilot.retrieve(
@@ -1153,18 +1390,13 @@ def retrieve(
     raw_items: List[dict] = []
     total = 0
 
-    # Define timestamp key extractor once (avoid duplication)
-    def _ts_key(r: dict) -> str:
-        meta = r.get("metadata", {}) if isinstance(r, dict) else {}
-        return meta.get("timestamp", "") if isinstance(meta, dict) else ""
-
     if selected_persona and selected_persona in persona_results:
         persona_payload = persona_results[selected_persona]
         pool = persona_payload.items
 
-        # Sort the full pool first, then paginate
+        # AC23: shared recency-sort helper instead of an inline _ts_key block.
         if sorting:
-            pool.sort(key=_ts_key, reverse=(sort == "newest"))
+            pool = sort_by_recency(pool, newest_first=(sort == "newest"))
 
         total = len(pool)
         raw_items = pool[offset : offset + limit]
@@ -1180,7 +1412,12 @@ def retrieve(
                 limit=fetch_limit,
                 offset=0,
             )
-            pool.sort(key=_ts_key, reverse=(sort == "newest"))
+            # AC23: shared helper. Note ``search_memories`` already
+            # recency-sorts on its filter-only path, but applying the helper
+            # here is still correct (idempotent on a sorted list) and ensures
+            # the explicit ``sort=oldest`` direction still works when the
+            # caller asked for oldest-first via the legacy `sort=` knob.
+            pool = sort_by_recency(pool, newest_first=(sort == "newest"))
             raw_items = pool[offset : offset + limit]
         else:
             raw_items, total = search_memories(
@@ -1682,9 +1919,70 @@ def narrative(body: NarrativeRequest) -> NarrativeResponse:
     return response
 
 
-@app.post("/v1/forget")
-def forget(body: ForgetRequest) -> dict:
-    return {"jobs_enqueued": ["ttl_cleanup", "promotion"], "dry_run": body.dry_run}
+@app.post("/v1/forget", response_model=ForgetResponse)
+def forget(body: ForgetRequest) -> ForgetResponse:
+    """Synchronously reap memories whose TTL has elapsed.
+
+    Calls `ttl_cleanup` (Chroma short-term docs with `ttl_epoch <= now`)
+    and `ttl_cleanup_timescale` (low-importance episodic + low-intensity
+    emotional rows past their cutoff) in-process and returns real counts.
+
+    Soft-TTL contract: a memory becomes eligible for eviction once its
+    `ttl_epoch` has elapsed; it may continue to appear in retrieve results
+    for up to one sweep cycle (default 15 min, configurable via
+    `TTL_SWEEP_INTERVAL_MINUTES`) before this endpoint or the background
+    sweeper reaps it.
+
+    `body.jobs` is reserved for future use and currently ignored — the
+    submitted list is echoed back as `jobs_requested` for caller
+    debuggability. `body.dry_run=True` reports the count of would-be
+    Chroma deletions without performing them (Timescale dry-run is
+    reported as `0`; full dry-run for typed tables is out of scope for
+    this endpoint).
+    """
+    from src.services.compaction_ops import (
+        _get_collection,
+        ttl_cleanup,
+        ttl_cleanup_timescale,
+    )
+
+    chroma_deleted = 0
+    timescale_deleted = 0
+
+    if body.dry_run:
+        # Count would-be deletions without performing them. Use a where-only
+        # `get` against the same predicate `ttl_cleanup` would issue.
+        try:
+            col = _get_collection()
+            now_epoch = int(datetime.now(timezone.utc).timestamp())
+            # IDs are always returned by Chroma; include=[] avoids fetching
+            # metadatas/documents we don't need for a count. (PR #62 review.)
+            res = col.get(  # type: ignore[attr-defined]
+                where={"ttl_epoch": {"$lte": now_epoch}}, include=[]
+            )
+            ids = res.get("ids", []) if isinstance(res, dict) else []
+            chroma_deleted = len(ids) if isinstance(ids, list) else 0
+        except Exception as exc:
+            logger.info("[forget.dry_run.chroma_error] %s", exc)
+            chroma_deleted = 0
+        # Timescale dry-run is out of scope for AM-X.3; report 0.
+        timescale_deleted = 0
+    else:
+        try:
+            chroma_deleted = int(ttl_cleanup() or 0)
+        except Exception as exc:
+            logger.info("[forget.chroma_error] %s", exc)
+        try:
+            timescale_deleted = int(ttl_cleanup_timescale() or 0)
+        except Exception as exc:
+            logger.info("[forget.timescale_error] %s", exc)
+
+    return ForgetResponse(
+        chroma_deleted=chroma_deleted,
+        timescale_deleted=timescale_deleted,
+        dry_run=body.dry_run,
+        jobs_requested=list(body.jobs or []),
+    )
 
 
 @app.post("/v1/maintenance", response_model=MaintenanceResponse)
