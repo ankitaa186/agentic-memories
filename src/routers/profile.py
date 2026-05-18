@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
 from src.services.profile_storage import ProfileStorageService, VALID_CATEGORIES
+from src.services.health_field_validators import validate_field as validate_health_field
 from src.dependencies.timescale import get_timescale_conn, release_timescale_conn
 
 logger = logging.getLogger("agentic_memories.profile_api")
@@ -334,6 +335,13 @@ def update_profile_field(
             status_code=400,
             detail=f"Cannot set field value to null. Use DELETE /v1/profile/{category}/{field_name}?user_id={body.user_id} to remove the field.",
         )
+
+    # Story 3.1: shape validation for known structured health fields.
+    # ValueError carries a field-specific, user-actionable message.
+    try:
+        validate_health_field(category, field_name, body.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     conn = None
     cursor = None
@@ -710,7 +718,7 @@ def _serialize_field_value(value: Any) -> str:
 def _update_profile_metadata(cursor, user_id: str):
     """
     Update user_profiles with field counts and completeness percentage.
-    Uses the service layer constants (25 total fields across 5 categories).
+    Uses the service layer constants (TOTAL_EXPECTED_FIELDS across 8 categories).
     Also invalidates the completeness cache.
     """
     from src.services.profile_storage import (

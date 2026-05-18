@@ -28,8 +28,10 @@ def test_expected_profile_fields_structure():
         "values",
     }
 
-    # Verify total is 27
-    assert TOTAL_EXPECTED_FIELDS == 27
+    # TOTAL_EXPECTED_FIELDS must equal the derived sum — guards against a
+    # hand-edited constant drifting from the dict.
+    derived = sum(len(v) for v in EXPECTED_PROFILE_FIELDS.values())
+    assert TOTAL_EXPECTED_FIELDS == derived
 
 
 def test_expected_profile_fields_content():
@@ -50,6 +52,60 @@ def test_expected_profile_fields_content():
     # Verify new categories exist
     assert "allergies" in EXPECTED_PROFILE_FIELDS["health"]
     assert "personality_type" in EXPECTED_PROFILE_FIELDS["personality"]
+
+
+def test_health_tier1_expansion_story_3_1():
+    """Story 3.1: health category baseline expanded to Tier 1 catalog."""
+    from src.services.profile_storage import EXPECTED_PROFILE_FIELDS
+
+    health = set(EXPECTED_PROFILE_FIELDS["health"])
+
+    # Existing extractable fields promoted to baseline (7)
+    assert {
+        "allergies",
+        "dietary_needs",
+        "health_conditions",
+        "medications",
+        "clothing_sizes",
+        "sensory_preferences",
+        "vision_correction",
+    }.issubset(health)
+
+    # Story 3.1 Tier 1 additions (15 new non-sensitive fields)
+    new_tier1 = {
+        "blood_type",
+        "height_cm",
+        "weight_baseline_kg",
+        "biological_sex",
+        "primary_care_provider",
+        "specialists",
+        "insurance",
+        "immunizations",
+        "last_physical_date",
+        "dental_care_last",
+        "eye_care_last",
+        "fitness_baseline",
+        "sleep_baseline",
+        "devices",
+        "family_medical_history_summary",
+    }
+    assert new_tier1.issubset(health)
+
+    # Sensitive Tier 2 fields are NOT in the baseline (deliberately skipped)
+    sensitive = {
+        "mental_health_history",
+        "surgical_history",
+        "hospitalizations",
+        "substances_baseline",
+        "reproductive_status",
+        "gender_identity",
+    }
+    assert sensitive.isdisjoint(health), (
+        "Sensitive Tier 2 fields must not be in EXPECTED_PROFILE_FIELDS baseline"
+    )
+
+    # Health baseline size: 7 existing + 15 new = 22
+    assert len(health) == 22
 
 
 # Mock classes for testing
@@ -175,8 +231,10 @@ def test_completeness_calculation_partial_profile():
                 result = service.get_completeness_details("test-user")
 
     assert result is not None
-    # 10 fields / 27 total ≈ 37%
-    assert abs(result["overall_completeness_pct"] - 37.0) < 1.0
+    # 10 populated fields out of TOTAL_EXPECTED_FIELDS — pct is derived,
+    # not hard-coded, so this stays robust as the baseline expands.
+    expected_pct = (10 / TOTAL_EXPECTED_FIELDS) * 100
+    assert abs(result["overall_completeness_pct"] - expected_pct) < 0.5
     assert result["populated_fields"] == 10
     assert result["total_fields"] == TOTAL_EXPECTED_FIELDS
 

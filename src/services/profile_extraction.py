@@ -91,13 +91,28 @@ Be HIGHLY SELECTIVE. Extract only what defines WHO the user IS, not tasks or tra
   - how_we_met (how user met the assistant/system - context)
 
 **health** - Health & body information (handle sensitively):
-  - allergies (medical allergies - medications, environmental: ["penicillin", "bees", "pollen"])
-  - dietary_needs (medical dietary requirements, distinct from preferences)
+  - allergies (medical allergies: ["penicillin", "bees", "pollen"])
+  - dietary_needs (medical dietary requirements, distinct from food preferences)
   - health_conditions (chronic conditions, if voluntarily shared)
-  - medications (if voluntarily shared)
+  - medications (current medications, if voluntarily shared)
   - clothing_sizes (for gifting: {"shirt": "M", "shoe": "10", "ring": "7"})
   - sensory_preferences (environment needs: {"temperature": "cool", "noise": "quiet", "light": "dim"})
-  - vision_correction (type, brand if mentioned - helpful for emergencies)
+  - vision_correction (type, brand if mentioned)
+  - blood_type (one of: "A+","A-","B+","B-","AB+","AB-","O+","O-","unknown")
+  - height_cm (number; convert from feet/inches at extraction: 5'9" → 175)
+  - weight_baseline_kg (number; convert from lb at extraction: 168 lb → 76; point-in-time baseline only — repeated weights are time-series data, not profile)
+  - biological_sex (one of: "male","female","intersex","prefer_not_to_say"; extract only when explicitly mentioned)
+  - primary_care_provider (object: {"name": "Dr. Patel", "clinic": "Bay Area Medical"})
+  - specialists (array of objects: [{"specialty": "cardiologist", "name": "Dr. Smith"}, {"specialty": "dermatologist", "name": "Dr. Lee"}])
+  - insurance (object: {"provider": "Aetna", "plan": "PPO"})
+  - immunizations (array of objects: [{"vaccine": "MMR", "date": "1985"}, {"vaccine": "COVID-19", "date": "2025-09"}, {"vaccine": "flu", "date": "2025-10"}])
+  - last_physical_date (date string "YYYY-MM-DD" or "YYYY-MM")
+  - dental_care_last (date string of last dental visit "YYYY-MM-DD" or "YYYY-MM")
+  - eye_care_last (date string of last eye exam "YYYY-MM-DD" or "YYYY-MM")
+  - fitness_baseline (object: {"resting_hr": 58, "vo2max": 42, "activity_level": "moderate"} — long-term baseline, not point-in-time readings)
+  - sleep_baseline (object: {"typical_duration_hr": 7.5, "typical_bedtime": "23:30"} — typical pattern, not last-night's data)
+  - devices (array of objects: [{"type": "CPAP", "model": "ResMed AirSense 10"}, {"type": "glucose_monitor", "model": "Dexcom G7"}])
+  - family_medical_history_summary (text summary: "Father: heart attack at 55. Mother: T2D at 60." — interim freeform; will be superseded by structured per-relative history later)
 
 **personality** - Emotional profile & traits:
   - personality_type (MBTI, enneagram, etc. if mentioned)
@@ -199,6 +214,32 @@ WRONG: [{"field_name": "investment_watchlist_tickers"...}]
 Input: "My grandfather was a doctor and my uncles are all engineers"
 CORRECT: [{"category": "background", "field_name": "family_background", "field_value": "Grandfather was a doctor; uncles are engineers", "confidence": 85, "source_type": "explicit", "source_memory_id": "mem_3"}]
 WRONG: [{"field_name": "grandfather_occupation"...}, {"field_name": "uncles_occupations"...}]
+
+Input: "I saw Dr. Patel at Bay Area Medical for my annual physical yesterday — everything looked good"
+CORRECT: [
+  {"category": "health", "field_name": "primary_care_provider", "field_value": {"name": "Dr. Patel", "clinic": "Bay Area Medical"}, "confidence": 95, "source_type": "explicit", "source_memory_id": "mem_health_1"},
+  {"category": "health", "field_name": "last_physical_date", "field_value": "2026-05-16", "confidence": 90, "source_type": "explicit", "source_memory_id": "mem_health_1"}
+]
+NOTE: Resolve "yesterday" against the memory's timestamp; if the timestamp is unknown, omit last_physical_date.
+
+Input: "I'm 5'9" and weigh about 168 pounds"
+CORRECT: [
+  {"category": "health", "field_name": "height_cm", "field_value": 175, "confidence": 95, "source_type": "explicit", "source_memory_id": "mem_health_2"},
+  {"category": "health", "field_name": "weight_baseline_kg", "field_value": 76, "confidence": 85, "source_type": "explicit", "source_memory_id": "mem_health_2"}
+]
+NOTE: Convert at extraction: 5'9" → 175 cm; 168 lb → 76 kg. "About" softens confidence on weight.
+
+Input: "Got my flu shot last October and my COVID booster in September"
+CORRECT: [{"category": "health", "field_name": "immunizations", "field_value": [{"vaccine": "flu", "date": "2025-10"}, {"vaccine": "COVID-19", "date": "2025-09"}], "confidence": 90, "source_type": "explicit", "source_memory_id": "mem_health_3"}]
+
+Input: "My CPAP machine is a ResMed AirSense 10 — been using it for 2 years"
+CORRECT: [{"category": "health", "field_name": "devices", "field_value": [{"type": "CPAP", "model": "ResMed AirSense 10"}], "confidence": 95, "source_type": "explicit", "source_memory_id": "mem_health_4"}]
+
+Input: "My dad had a heart attack when he was 55. Mom was diagnosed with type 2 diabetes at 60."
+CORRECT: [{"category": "health", "field_name": "family_medical_history_summary", "field_value": "Father: heart attack at age 55. Mother: type 2 diabetes diagnosed at age 60.", "confidence": 95, "source_type": "explicit", "source_memory_id": "mem_health_5"}]
+
+Input: "I weighed 168 today"
+CORRECT: [] (point-in-time weight is time-series biometric data, NOT profile baseline; will be handled by health_metrics in Story 3.2. Only extract weight_baseline_kg when the user frames it as their baseline — e.g., "I weigh about 168" or "my usual weight is 168".)
 
 Return ONLY the JSON array. Return [] if no profile-worthy information found.
 When in doubt, extract LESS. Quality over quantity."""

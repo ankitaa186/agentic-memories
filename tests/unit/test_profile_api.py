@@ -241,6 +241,81 @@ def test_update_profile_field_null_value_rejected(api_client, monkeypatch):
     assert "DELETE" in response.json()["detail"]
 
 
+# Story 3.1: shape validation for Tier 1 health fields surfaces as HTTP 400
+def test_update_health_blood_type_rejects_invalid_value(api_client):
+    """Invalid blood_type enum is rejected with 400 before any DB work."""
+    response = api_client.put(
+        "/v1/profile/health/blood_type",
+        json={"user_id": "test-user-3.1", "value": "Z+", "source": "manual"},
+    )
+    assert response.status_code == 400
+    assert "blood_type" in response.json()["detail"]
+
+
+def test_update_health_height_cm_rejects_string(api_client):
+    """height_cm must be numeric; a string value is rejected."""
+    response = api_client.put(
+        "/v1/profile/health/height_cm",
+        json={"user_id": "test-user-3.1", "value": "175", "source": "manual"},
+    )
+    assert response.status_code == 400
+    assert "height_cm" in response.json()["detail"]
+
+
+def test_update_health_immunizations_requires_vaccine_key(api_client):
+    """immunizations objects must include a string 'vaccine' field."""
+    response = api_client.put(
+        "/v1/profile/health/immunizations",
+        json={
+            "user_id": "test-user-3.1",
+            "value": [{"date": "2025-10"}],
+            "source": "manual",
+        },
+    )
+    assert response.status_code == 400
+    assert "immunizations" in response.json()["detail"]
+
+
+def test_update_health_last_physical_date_format(api_client):
+    """last_physical_date must be YYYY-MM-DD or YYYY-MM."""
+    response = api_client.put(
+        "/v1/profile/health/last_physical_date",
+        json={"user_id": "test-user-3.1", "value": "May 17 2026", "source": "manual"},
+    )
+    assert response.status_code == 400
+    assert "last_physical_date" in response.json()["detail"]
+
+
+def test_update_health_known_field_with_valid_shape_passes_validator(
+    api_client, mock_db_conn, monkeypatch
+):
+    """A well-formed health value passes the validator and reaches the DB layer."""
+    conn, _cursor = mock_db_conn
+
+    def mock_get_conn():
+        return conn
+
+    def mock_release_conn(c):
+        pass
+
+    with patch("src.routers.profile.get_timescale_conn", mock_get_conn):
+        with patch("src.routers.profile.release_timescale_conn", mock_release_conn):
+            response = api_client.put(
+                "/v1/profile/health/blood_type",
+                json={
+                    "user_id": "test-user-3.1",
+                    "value": "O+",
+                    "source": "manual",
+                },
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["category"] == "health"
+    assert data["field_name"] == "blood_type"
+    assert data["value"] == "O+"
+
+
 # Test DELETE /v1/profile/{category}/{field_name} endpoint
 def test_delete_profile_field_success(api_client, mock_db_conn, monkeypatch):
     """Test successful single field deletion"""

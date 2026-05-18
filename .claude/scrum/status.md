@@ -1,10 +1,11 @@
 # Sprint Status — agentic-memories
 
-Last Updated: 2026-04-25
+Last Updated: 2026-05-18
 
 ## Active Epics
 **Epic 1: Deep Profile — from resume to self-model** (drafted v2 by Disha, design-reviewed v1 by Parminder — parallel v2 tech-spec rewrite in flight) — on user-hold
 **Epic 2: Observability** (opened 2026-04-25) — operational; parallel to Epic 1; doc at `.claude/scrum/docs/epic-2-observability.md`
+**Epic 3: Health Domain Expansion** (opened 2026-05-18) — Wave A scoped (Stories 3.1, 3.2, 3.3); doc at `.claude/scrum/docs/epic-3-health-domain-expansion.md`. Pending Parminder design review before stories transition to `ready`.
 
 ## Epic 1 Detail
 Goal: Evolve the profile layer so the AI knows the user better than they know themselves.
@@ -452,8 +453,116 @@ Pending: Parminder transitions Wave 1 stories to `ready` once v2 tech spec is po
   - **Do NOT add `APIError` or `UnprocessableEntityError` to the tuple.** `APIError` is the base class for ALL openai-emitted errors (including 4xx client errors); catching it re-introduces the broad-except problem. `UnprocessableEntityError` (422) is a deterministic client error — retry won't fix it.
   - **Imports at top of file.** `extract_utils.py` currently does NOT import `openai` or `httpx` at module scope (the `openai` import is local inside `_call_llm_json` for the Langfuse-vs-vanilla branch selection at lines 110-114, 157-161). David must add `import httpx` and `import openai` at the top of the file (or do narrow imports in the except clause if he prefers), so the narrow tuple is in scope. Note: `openai` is always available as a transitive dep — we can import it unconditionally even when `is_langfuse_enabled()` is false.
 
+## Epic 3 Detail
+Goal: Evolve the health domain from a 7-field gift-helper into a structured self-model of the body — quantitative time-series (`health_metrics` hypertable), bounded episodes with lifecycle (`health_episodes` hypertable), and ~25-field health profile depth, all fed by conversational ingest.
+Constraint: API backward-compat on existing `/v1/profile*` endpoints; new endpoints under `/v1/health/*` are net-additive. Same fence as Epic 1 v2.
+Full epic doc: `.claude/scrum/docs/epic-3-health-domain-expansion.md`
+Wave A scope: Stories 3.1 (profile expansion, no DDL), 3.2 (`health_metrics` hypertable + new extraction kind), 3.3 (`health_episodes` hypertable + start/update/close lifecycle). Linear sequencing — each story unblocks the next.
+Cross-cutting decisions (per epic doc): D1 single LLM call w/ multiple output kinds; D2 upfront opt-in for sensitive fields; D3 unit normalization at ingest; D4 per-kind confidence thresholds (profile 80, metric 70, episode 75); D5 idempotency via unique index on metrics + explicit action verb on episodes; D6 no backfill in Wave A; D7 all DDL via migrate scripts.
+Sensitive-field surface (Story 3.1 plumbing reused by 3.3): `mental_health_history`, `surgical_history`, `hospitalizations`, `substances_baseline`, `reproductive_status`, `gender_identity` (profile, 3.1); `mental_health_episode` type (episodes, 3.3). All gated by `user_profiles.health_sensitive_opt_in`.
+New migrations introduced: `migrations/postgres/025_user_profiles_sensitive_opt_in.up.sql` (3.1), `migrations/timescaledb/004_health_metrics.up.sql` (3.2), `migrations/timescaledb/005_health_episodes.up.sql` (3.3).
+Waves B and C are listed in the epic doc for context but NOT drafted — they earn their own epic-level review once Wave A lands.
+Pending: Parminder design review of Wave A schemas (specifically the metric catalog in 3.2 and the open-episode partial-index strategy in 3.3) before stories transition from `drafted` to `ready`.
+
+## Epic 3 Backlog (Wave A)
+
+### Story 3.1: Health profile expansion (7 → ~25 structured fields)
+- Status: drafted
+- Assigned: unassigned
+- Priority: P0
+- Dependencies: none
+- Review Cycles: 0
+- User Problem: The current `health` category captures 7 flat fields, mostly for gifting and dietary safety. Anyone asking "who is my doctor, when was my last physical, what are my immunizations, what's my family medical history" gets nothing. The bar for a usable health profile in 2026 is dozens of fields, not seven.
+- API Contract Preserved: `/v1/profile` and `/v1/profile/health` retain all frozen top-level keys. New fields appear under `profile.health` (existing category). `completeness_pct` numeric value will shift because denominator grows; key itself unchanged. New endpoints `POST/GET /v1/profile/health/sensitive_opt_in` are net-additive.
+- Tier 1 fields (16 new, count toward completeness): `blood_type`, `height_cm`, `weight_baseline_kg`, `biological_sex`, `primary_care_provider`, `specialists`, `insurance`, `immunizations`, `last_physical_date`, `dental_care_last`, `eye_care_last`, `fitness_baseline`, `sleep_baseline`, `devices`, `family_medical_history_summary`, plus inherited from Epic 1 (`health.exercise` from 1.19, restructured `health_conditions` from 1.15).
+- Tier 2 fields (6, sensitive, opt-in only, NOT counted toward completeness): `mental_health_history`, `surgical_history`, `hospitalizations`, `substances_baseline`, `reproductive_status`, `gender_identity`.
+- Acceptance Criteria:
+  - [ ] GIVEN `src/services/profile_storage.py:20` WHEN `EXPECTED_PROFILE_FIELDS["health"]` is updated THEN it contains exactly the Tier 1 catalog (16 new fields plus 7 existing). Tier 2 fields are NOT in `EXPECTED_PROFILE_FIELDS`.
+  - [ ] GIVEN `src/services/profile_extraction.py` WHEN the prompt is regenerated THEN the `**health**` section enumerates the full Tier 1 catalog with type hints AND includes ≥6 worked examples (provider, immunization-with-date, family history, sensitive-when-opted-out, sensitive-when-opted-in, height/weight numeric).
+  - [ ] GIVEN migration `025_user_profiles_sensitive_opt_in.up.sql` THEN `user_profiles` gains nullable `health_sensitive_opt_in BOOLEAN DEFAULT FALSE`; matching `.down.sql` drops the column.
+  - [ ] GIVEN module-level `SENSITIVE_HEALTH_FIELDS` constant (single source of truth) listing the 6 Tier 2 field names THEN `store_profile_extractions()` checks the user's `health_sensitive_opt_in` and silently drops Tier 2 extractions (logged at debug with `extraction_skipped_reason="sensitive_opt_out"`) when false.
+  - [ ] GIVEN `POST /v1/profile/health/sensitive_opt_in {user_id, opt_in: bool}` THEN it upserts the flag and returns the new value; matching `GET` returns current value.
+  - [ ] GIVEN shape validators THEN `POST /v1/profile/field` rejects malformed values with HTTP 400 and a field-specific error: invalid `blood_type` enum, non-numeric `height_cm`, malformed date in `last_physical_date`, malformed object shape in `primary_care_provider`.
+  - [ ] GIVEN `scripts/recompute_completeness.py` THEN running it refreshes `completeness_pct`/`total_fields`/`populated_fields` for every `user_profiles` row against the new baseline; existing users' completeness values WILL change, documented in PR description.
+  - [ ] GIVEN extraction emits a Tier 1 health field with confidence ≥80 THEN it persists to `profile_fields`; below threshold → logged to new `extraction_review_log` table (additive — created by this story) for offline eval, not persisted.
+  - [ ] GIVEN `GET /v1/profile/health` after a Tier 1 extraction lands THEN the new field appears under `fields`; all frozen top-level response keys remain.
+- Edge Cases:
+  - Existing `medications` stays as flat array of strings in Wave A; restructured in Story 3.5. Validators accept flat-array shape.
+  - LLM emits Tier 2 field while opted-out → drop silently at debug. Do NOT 4xx; the field name shouldn't leak via error messages per-utterance.
+  - LLM emits structured object with extra keys (e.g., `primary_care_provider: {..., fax}`) → open schema accepts additional keys but doesn't use them in completeness math.
+  - `family_medical_history_summary` is freeform text; flag in prompt comment as deprecated-by-3.6 so no consumer treats it as canonical.
+  - Sequencing with Epic 1 stories 1.15 and 1.19 (both touch `health.*`): if Epic 1 lands first, 3.1 inherits as-is; if 3.1 lands first, no further field-catalog change needed in Epic 1. Decided at sprint planning.
+
+### Story 3.2: Biometric time-series hypertable (`health_metrics`)
+- Status: drafted
+- Assigned: unassigned
+- Priority: P0
+- Dependencies: 3.1
+- Review Cycles: 0
+- User Problem: Quantitative health signals (weight, BP, HR, sleep, glucose, mood-1-to-10) have nowhere to live. The user says "I weighed 168 today" and the system either drops it, persists it as one-off episodic prose, or stuffs a single point into a profile field that overwrites on next mention. None of those forms support trend queries, anomaly detection, or correlation with episodes.
+- API Contract Preserved: Net-additive endpoints under `/v1/health/metric*`. No `/v1/profile*` change. No existing TimescaleDB hypertable touched.
+- Schema: New hypertable `health_metrics(id, user_id, ts, metric, value_numeric, value_text, unit, source, confidence, source_memory_id, metadata, created_at)`. Hypertable on `ts`. Unique index `(user_id, ts, metric, source)`. Partial index on `(user_id, metric, ts DESC)`. Check constraints on confidence range and value presence. Chunk interval 7d. Compression after 30d, segmentby `(user_id, metric)`.
+- Metric catalog (v1, ~24 metrics): `weight` (kg), `body_fat_pct` (%), `bp_systolic`/`bp_diastolic` (mmHg, paired via `metadata.correlation_id`), `hr_resting`/`hr_walking` (bpm), `hrv_sdnn_ms` (ms), `vo2max` (ml/kg/min), `body_temp` (°C), `spo2` (%), `glucose` (mg/dL), `sleep_duration` (h), `sleep_efficiency` (%), `sleep_deep`/`sleep_rem` (min), `steps` (count), `exercise_minutes` (min), `active_kcal` (kcal), `water_ml` (ml), `caffeine_mg` (mg), `mood_self`/`stress_self`/`energy_self` (scale_1_10), `pain_self` (scale_0_10 + location in metadata).
+- Acceptance Criteria:
+  - [ ] GIVEN migration `004_health_metrics.up.sql` + `.down.sql` THEN they apply cleanly through `migrate.sh`; up creates hypertable + indexes + constraints + chunk interval + compression policy; down drops the table.
+  - [ ] GIVEN `src/services/health_metrics.py` THEN it exposes `HealthMetricsService` with `record_metric()`, `record_batch()`, `query_range()`, `latest()`, `trend_summary()`.
+  - [ ] GIVEN `ALLOWED_METRICS` constant (single source of truth) THEN `record_metric()` rejects (HTTP 400) on (a) unknown metric, (b) unit mismatch with canonical, (c) value outside documented sanity range (e.g., `weight` > 500kg, `bp_systolic` < 50 or > 280).
+  - [ ] GIVEN repeat insertion of same `(user_id, ts, metric, source)` THEN the row is UPDATEd via the unique index (UPSERT), not duplicated.
+  - [ ] GIVEN new router `src/routers/health.py` registered in `src/app.py` THEN it exposes `POST /v1/health/metric`, `POST /v1/health/metrics/batch` (≤1000 rows), `GET /v1/health/metric?user_id=&metric=&start=&end=&agg=` (raw/daily_avg/daily_min/daily_max/weekly_avg), `GET /v1/health/metric/latest?user_id=&metric=`.
+  - [ ] GIVEN LLM extraction prompt is extended THEN it emits new top-level array `health_metrics: [{metric, value, unit, ts?, confidence, source_memory_id}, ...]` for quantitative utterances; ≥12 worked examples covering numeric + unit-converted + self-rated + paired-BP.
+  - [ ] GIVEN unit-conversion prompt rule THEN LLM converts to canonical unit at extraction (lb→kg, °F→°C, oz→ml); the service-layer unit validator catches mis-conversions and routes to `extraction_review_log`.
+  - [ ] GIVEN `run_unified_ingestion()` THEN after profile extraction the new `health_metrics` extractions are dispatched to `record_batch()`; per-row failures log + skip without aborting the ingestion run.
+  - [ ] GIVEN `record_metric()` for `weight` or `height` THEN a downstream hook refreshes `weight_baseline_kg` / `height_cm` on `profile_fields` to the latest point. One-way sync: metrics → profile baseline (never reverse).
+  - [ ] GIVEN paired BP "BP was 122/78" THEN extraction emits TWO rows (`bp_systolic`, `bp_diastolic`) with identical `ts` AND identical `metadata.correlation_id` (UUID). Canonical pattern for future paired metrics.
+  - [ ] GIVEN extraction confidence < 70 THEN it is NOT persisted; appended to `extraction_review_log` for offline eval.
+  - [ ] GIVEN no parent Langfuse span is active AND `record_batch()` writes THEN upstream extraction observations remain correctly nested under the existing `unified_memory_ingestion` root span (Epic 2 invariant — do NOT regress).
+  - [ ] GIVEN integration tests THEN they cover roundtrip insert/query, idempotency, unit-validator rejection, paired-BP correlation_id, lb→kg / oz→ml / °F→°C conversion, low-confidence routing to review log, GET range queries with each `agg` value, sensitive opt-out interaction (none of v1 metrics are sensitive — confirm no Tier 2 metric leaks).
+- Edge Cases:
+  - "I weighed 168" with no unit → LLM assumes lb in 80-400 range, kg in 35-200 range, lb in 80-200 overlap (US default); documented in prompt and tested.
+  - "I slept 6 hours last night" → `ts` is morning-of-mention's 06:00 local time; documented in prompt.
+  - "Heart rate is normally around 60" → narrative baseline, routes to `fitness_baseline.resting_hr` on profile, NOT to `health_metrics`. Prompt example covers this.
+  - "Feeling pretty energetic" → no number, no `health_metric`. "Energy is like 7 out of 10" → `energy_self=7`.
+  - Backfill from historical memories is OUT of scope (Decision D6).
+  - `metric` column is free-form TEXT — adding metrics is a constant + prompt update, no DB migration. Trade-off accepted.
+
+### Story 3.3: Symptom & episode logs (`health_episodes`)
+- Status: drafted
+- Assigned: unassigned
+- Priority: P0
+- Dependencies: 3.2
+- Review Cycles: 0
+- User Problem: Symptoms are events with onset, severity, location, duration, triggers, relief, resolution. Today they disappear or land in `episodic_memories` as unstructured prose. No way to answer "how often do I get headaches," "what triggers my back flares," "have I had this stomach pain before." Pre-doctor-visit summary "here's what I've experienced" is impossible.
+- API Contract Preserved: Net-additive endpoints under `/v1/health/episode*`. No `/v1/profile*` or existing `/v1/health/metric*` change. No existing hypertable touched.
+- Schema: New hypertable `health_episodes(id, user_id, started_at, ended_at, episode_type, subtype, severity_max, severity_current, body_location[], triggers[], relief_attempts JSONB, related_metric_ids[], source_memory_ids[], notes, metadata, created_at, updated_at)`. Hypertable on `started_at`. Partial index `WHERE ended_at IS NULL` for open-episode reconciliation. Check constraints on severity ranges and time order. Chunk 30d. Compression after 90d, segmentby `user_id`.
+- Episode types (locked enum): `symptom`, `illness`, `injury`, `allergic_reaction`, `chronic_flare`, `mental_health_episode` (gated by `health_sensitive_opt_in`). Subtypes are free-form text normalized in app code via `SUBTYPE_NORMALIZATION` lookup.
+- Acceptance Criteria:
+  - [ ] GIVEN migration `005_health_episodes.up.sql` + `.down.sql` THEN they apply cleanly; up creates hypertable + partial index on open episodes + check constraints + chunk + compression; down drops the table.
+  - [ ] GIVEN `src/services/health_episodes.py` THEN it exposes `HealthEpisodesService` with `start_episode()`, `update_episode()`, `close_episode()`, `find_open_episode()`, `list_episodes()`, `pattern_summary()`.
+  - [ ] GIVEN `find_open_episode()` THEN it uses the partial index `idx_health_episodes_open` and returns most recent open episode for `(user_id, episode_type, subtype)` within `window_hours`. Defaults: 72h symptom, 14d chronic_flare, 48h allergic_reaction, 30d illness, 30d injury. Encoded in `WINDOW_DEFAULTS` constant.
+  - [ ] GIVEN `update_episode()` THEN it appends to `source_memory_ids[]`, updates `severity_current`, bumps `severity_max` if exceeded, merges `body_location[]`/`triggers[]` de-duplicated, appends to `relief_attempts[]` JSONB, sets `updated_at`.
+  - [ ] GIVEN `close_episode()` THEN it sets `ended_at` and `updated_at`; partial index reflects closure immediately (test asserts `find_open_episode()` no longer returns it).
+  - [ ] GIVEN extended router THEN it exposes `POST /v1/health/episode`, `PATCH /v1/health/episode/{id}`, `GET /v1/health/episode?user_id=&status=open|closed|all&type=&since=&limit=`, `GET /v1/health/episode/patterns?user_id=&type=&subtype=&lookback_days=`.
+  - [ ] GIVEN LLM extraction prompt is extended THEN it emits `health_episode_events: [{action: "start"|"update"|"close"|"none", episode_id?, episode_type, subtype, severity?, severity_current?, body_location?, triggers?, relief_attempt?, ended_at?, source_memory_id}, ...]`; ≥10 worked examples (start, update-severity, close, relief, ambiguous-skip, metaphor-skip, mental_health while opted-out, multi-open disambig).
+  - [ ] GIVEN dispatch from `run_unified_ingestion()` THEN: `action=start` → `start_episode()`; `action=update|close` with explicit `episode_id` → operate on that ID (404 → log + skip); `action=update|close` without episode_id → `find_open_episode()` first, then operate (none found → log + skip, do not auto-create); `action=none` → no-op.
+  - [ ] GIVEN LLM prompt receives recent open episodes (last 7d, max 10) as context THEN it can return explicit `episode_id` for disambiguation; the implementation MUST pass this context.
+  - [ ] GIVEN multiple open episodes match `(type, subtype)` within window THEN `find_open_episode()` returns the most recent; sets `ambiguous_match=true` in the action result; logs at warning. Action still applies (most-recent wins).
+  - [ ] GIVEN `pattern_summary()` THEN it returns: `count`, `count_by_day_of_week`, `count_by_hour_of_day`, `top_triggers` (5), `top_relief_actions` (5, where `worked=true`), `avg_duration_hours`, `avg_severity_max`, `co_occurrence_with_metrics` (per-metric percentage of episodes where a low/high reading occurred within ±24h).
+  - [ ] GIVEN `episode_type=mental_health_episode` AND `health_sensitive_opt_in=false` THEN extraction silently drops the event (debug log); row is NEVER written.
+  - [ ] GIVEN open episode >14d with no updates THEN a daily auto-close cron (`scripts/auto_close_stale_episodes.py` or maintenance-graph node) sets `ended_at`, `metadata.auto_closed=true` — distinguishable from user-confirmed close.
+  - [ ] GIVEN false-positive guard examples in prompt ("headache scene in the movie", "this meeting gave me a headache") THEN eval set includes them with `action=none` as expected.
+  - [ ] GIVEN integration tests THEN they cover: start → update → close lifecycle; two-of-same-type → update ambiguous → warning logged; close non-existent episode_id → logged-and-skipped no 5xx; sensitive opt-out drop; `pattern_summary()` with ≥10 seeded episodes across 60d; auto-close cron behavior.
+- Edge Cases:
+  - "Headache since this morning" with different headache closed 5h ago → `action=start` (new), `metadata.previous_episode_id=<closed-one>` for clustering.
+  - "It's getting worse" with headache + back pain both open → LLM ideally returns explicit `episode_id`; otherwise service applies most-recent-wins AND logs `ambiguous_match=true`. Never auto-create "general worsening" episode.
+  - Relief attempt without open episode ("took some ibuprofen") → `action=none`. Do NOT auto-create.
+  - "Headache scene in the movie" → `action=none`. Verified by eval.
+  - Unknown subtype ("cluster headache") → lands in table as-is; `SUBTYPE_NORMALIZATION` adds it in follow-up code change.
+  - Severity emitted as text → coerced to 0-10 per prompt: vague intensifiers → 6-7, mild → 3, moderate → 5, severe → 8, "10/10" literal.
+  - `related_metric_ids[]` populated by co-occurrence pass at close time (within ±24h of start..end); for open episodes, populated at `pattern_summary()` query time only (avoids write-amplification on every metric insert).
+  - Compression policy 90d (vs metrics' 30d) because open-episode reconciliation needs the partial index hot.
+
 ## Team State
 - Fenny: orchestrating
-- Disha: Epic 1 v2 + 19 stories drafted (on user-hold); Epic 2 opened; Stories 2.1 + 2.2 ready
-- Parminder: 2.1 reviewed and transitioned to `ready` (both open Qs answered, ACs corrected); 2.2 reviewed and transitioned to `ready` (caller-tolerance audit done; corrected the "errors propagate to caller" framing — outer `except Exception → return None` at extract_utils.py:200-220 still swallows; bug-fix delta is just "no second SDK call"); v2 tech spec for Epic 1 in parallel
+- Disha: Epic 1 v2 + 19 stories drafted (on user-hold); Epic 2 opened (Stories 2.1 + 2.2 ready); Epic 3 opened with Wave A drafted (Stories 3.1, 3.2, 3.3 drafted, pending Parminder design review)
+- Parminder: 2.1 reviewed and transitioned to `ready` (both open Qs answered, ACs corrected); 2.2 reviewed and transitioned to `ready` (caller-tolerance audit done; corrected the "errors propagate to caller" framing — outer `except Exception → return None` at extract_utils.py:200-220 still swallows; bug-fix delta is just "no second SDK call"); v2 tech spec for Epic 1 in parallel; Epic 3 Wave A schemas queued for design review
 - David, Harpreet, Murat: on standby for implementation wave
