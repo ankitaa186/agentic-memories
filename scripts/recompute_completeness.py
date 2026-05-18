@@ -48,29 +48,40 @@ logging.basicConfig(
 logger = logging.getLogger("recompute_completeness")
 
 
-def _populated_by_category(cursor, user_id: str) -> Dict[str, Set[str]]:
+def _load_all_populated_fields(cursor) -> Dict[str, Dict[str, Set[str]]]:
+    """
+    Bulk-load every (user_id, category, field_name) tuple from profile_fields
+    in ONE query, grouped by user_id then category.
+
+    Avoids the N+1 query pattern that would result from issuing one query per
+    user during recompute. For thousands of users this is the difference
+    between thousands of round-trips and a single fetch.
+    """
     cursor.execute(
         """
-        SELECT category, field_name
+        SELECT user_id, category, field_name
         FROM profile_fields
-        WHERE user_id = %s
-        """,
-        (user_id,),
+        ORDER BY user_id
+        """
     )
-    populated: Dict[str, Set[str]] = {cat: set() for cat in EXPECTED_PROFILE_FIELDS}
+    by_user: Dict[str, Dict[str, Set[str]]] = {}
     for row in cursor.fetchall():
         if isinstance(row, dict):
+            user_id = row["user_id"]
             category = row["category"]
             field_name = row["field_name"]
         else:
-            category, field_name = row
-        if category in populated:
-            populated[category].add(field_name)
-    return populated
+            user_id, category, field_name = row
+        if category not in EXPECTED_PROFILE_FIELDS:
+            continue
+        by_user.setdefault(user_id, {cat: set() for cat in EXPECTED_PROFILE_FIELDS})[
+            category
+        ].add(field_name)
+    return by_user
 
 
-def _compute(cursor, user_id: str) -> Tuple[int, float]:
-    populated = _populated_by_category(cursor, user_id)
+def _compute_from_populated(populated: Dict[str, Set[str]]) -> Tuple[int, float]:
+    """Pure-Python completeness math against an already-loaded populated map."""
     total_populated = 0
     for category, expected_fields in EXPECTED_PROFILE_FIELDS.items():
         total_populated += len(populated[category].intersection(set(expected_fields)))
@@ -97,14 +108,19 @@ def recompute_all(dry_run: bool = False) -> None:
     updated = 0
     unchanged = 0
     try:
+        # One bulk fetch instead of N per-user queries — avoids the N+1 pattern.
+        all_populated = _load_all_populated_fields(cursor)
+
         cursor.execute(
             "SELECT user_id, completeness_pct, populated_fields, total_fields "
             "FROM user_profiles ORDER BY user_id"
         )
         rows = cursor.fetchall()
         logger.info(
-            "starting recompute users=%s new_total_expected_fields=%s dry_run=%s",
+            "starting recompute users=%s users_with_fields=%s "
+            "new_total_expected_fields=%s dry_run=%s",
             len(rows),
+            len(all_populated),
             TOTAL_EXPECTED_FIELDS,
             dry_run,
         )
@@ -116,10 +132,17 @@ def recompute_all(dry_run: bool = False) -> None:
                 old_populated = int(row["populated_fields"] or 0)
                 old_total = int(row["total_fields"] or 0)
             else:
-                user_id, old_pct_raw, old_populated, old_total = row
+                user_id, old_pct_raw, old_populated_raw, old_total_raw = row
                 old_pct = float(old_pct_raw or 0.0)
+                old_populated = int(old_populated_raw or 0)
+                old_total = int(old_total_raw or 0)
 
-            new_populated, new_pct = _compute(cursor, user_id)
+            # Users with no profile_fields rows still need their counts zeroed
+            # against the new denominator — fall back to empty-populated map.
+            populated = all_populated.get(
+                user_id, {cat: set() for cat in EXPECTED_PROFILE_FIELDS}
+            )
+            new_populated, new_pct = _compute_from_populated(populated)
 
             changed = (
                 round(new_pct, 2) != round(old_pct, 2)
