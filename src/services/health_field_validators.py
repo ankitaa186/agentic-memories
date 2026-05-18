@@ -16,6 +16,7 @@ Validators are intentionally permissive about extra keys on object-shaped fields
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any, Callable, Dict
 
 
@@ -23,7 +24,10 @@ from typing import Any, Callable, Dict
 BLOOD_TYPES = frozenset({"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "unknown"})
 BIOLOGICAL_SEX_VALUES = frozenset({"male", "female", "intersex", "prefer_not_to_say"})
 
-# Date strings must be either "YYYY-MM-DD" or "YYYY-MM"
+# Date strings must be either "YYYY-MM-DD" or "YYYY-MM".
+# Regex is a cheap shape pre-check; strptime below enforces real calendar
+# validity (month 1-12, day-in-month) so impossible values like 2026-13,
+# 2026-02-30, 2099-99 are rejected rather than silently accepted.
 _DATE_RE = re.compile(r"^\d{4}-\d{2}(-\d{2})?$")
 
 
@@ -63,6 +67,13 @@ def _validate_date_string(value: Any, field: str) -> None:
         raise ValueError(
             f"{field} must be a date string in 'YYYY-MM-DD' or 'YYYY-MM' format"
         )
+    # Calendar-validate via strptime — rejects impossible values like
+    # 2026-13, 2026-02-30, 2099-99 that the regex would otherwise accept.
+    fmt = "%Y-%m-%d" if len(s) == 10 else "%Y-%m"
+    try:
+        datetime.strptime(s, fmt)
+    except ValueError:
+        raise ValueError(f"{field} is not a valid calendar date ({s!r})") from None
 
 
 def validate_blood_type(value: Any) -> None:

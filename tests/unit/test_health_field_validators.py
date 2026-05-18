@@ -213,6 +213,43 @@ def test_date_fields_reject_invalid_formats(field, value):
         validate_field("health", field, value)
 
 
+@pytest.mark.parametrize(
+    "field", ["last_physical_date", "dental_care_last", "eye_care_last"]
+)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-13",  # month > 12
+        "2026-00",  # month < 1
+        "2026-99",  # month > 12 (regex-shape valid)
+        "2026-02-30",  # Feb 30 doesn't exist
+        "2026-02-99",  # day > max
+        "2026-13-01",  # month > 12 with day
+        "2026-04-31",  # April 31 doesn't exist
+        "2025-02-29",  # 2025 isn't a leap year
+    ],
+)
+def test_date_fields_reject_invalid_calendar_dates(field, value):
+    """Codex review: regex was matching impossible calendar dates."""
+    with pytest.raises(ValueError, match=field):
+        validate_field("health", field, value)
+
+
+@pytest.mark.parametrize(
+    "field", ["last_physical_date", "dental_care_last", "eye_care_last"]
+)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2024-02-29",  # 2024 IS a leap year — valid
+        "2026-12-31",  # last day of year
+        "2026-01-01",  # first day of year
+    ],
+)
+def test_date_fields_accept_edge_calendar_dates(field, value):
+    validate_field("health", field, value)
+
+
 # --- fitness_baseline / sleep_baseline ----------------------------------
 
 
