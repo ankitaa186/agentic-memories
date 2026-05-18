@@ -17,6 +17,14 @@ logger = logging.getLogger("agentic_memories.profile_storage")
 # Expected profile fields per category
 # These define the baseline for completeness calculation
 # Core fields a "complete" profile should have
+#
+# Story 3.1 (Epic 3, Wave A) expanded `health` from 2 → 22 baseline fields.
+# This shifts TOTAL_EXPECTED_FIELDS and existing users' completeness_pct will
+# drop until the new fields are populated; that is documented and intentional.
+# Sensitive Tier 2 health fields (mental_health_history, surgical_history,
+# hospitalizations, substances_baseline, reproductive_status, gender_identity)
+# are intentionally NOT in this baseline — they will land with the sensitive
+# opt-in surface in a follow-up change.
 EXPECTED_PROFILE_FIELDS: Dict[str, List[str]] = {
     "basics": ["name", "birthday", "location", "occupation", "family_status"],
     "preferences": [
@@ -28,15 +36,38 @@ EXPECTED_PROFILE_FIELDS: Dict[str, List[str]] = {
     "goals": ["short_term", "long_term", "bucket_list"],
     "interests": ["hobbies", "learning_areas", "favorite_topics"],
     "background": ["skills", "education_history", "work_history", "current_employer"],
-    "health": ["allergies", "dietary_needs"],
+    "health": [
+        # Existing (pre-3.1) extractable fields — promoted to baseline
+        "allergies",
+        "dietary_needs",
+        "health_conditions",
+        "medications",
+        "clothing_sizes",
+        "sensory_preferences",
+        "vision_correction",
+        # Story 3.1 — Tier 1 expansion
+        "blood_type",
+        "height_cm",
+        "weight_baseline_kg",
+        "biological_sex",
+        "primary_care_provider",
+        "specialists",
+        "insurance",
+        "immunizations",
+        "last_physical_date",
+        "dental_care_last",
+        "eye_care_last",
+        "fitness_baseline",
+        "sleep_baseline",
+        "devices",
+        "family_medical_history_summary",
+    ],
     "personality": ["personality_type", "stress_response", "social_battery"],
     "values": ["life_values", "philanthropy", "spiritual_alignment"],
 }
 
-# Total expected fields count
-TOTAL_EXPECTED_FIELDS = sum(
-    len(fields) for fields in EXPECTED_PROFILE_FIELDS.values()
-)  # 25
+# Total expected fields count — derived from EXPECTED_PROFILE_FIELDS, never hand-edited
+TOTAL_EXPECTED_FIELDS = sum(len(fields) for fields in EXPECTED_PROFILE_FIELDS.values())
 
 # Valid category names - single source of truth
 VALID_CATEGORIES = list(EXPECTED_PROFILE_FIELDS.keys())
@@ -198,7 +229,7 @@ class ProfileStorageService:
         Update user_profiles with field counts and completeness percentage.
         Also invalidates the completeness cache.
 
-        Uses EXPECTED_PROFILE_FIELDS constant (25 total fields across 5 categories).
+        Uses EXPECTED_PROFILE_FIELDS constant (TOTAL_EXPECTED_FIELDS across 8 categories).
         """
         # Get populated fields grouped by category
         cursor.execute(
