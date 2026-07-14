@@ -511,6 +511,9 @@ class HybridRetrievalService:
 
         except Exception as e:
             logger.error("Error in temporal retrieval: %s", e)
+        finally:
+            if conn:
+                release_timescale_conn(conn)
 
         return results
 

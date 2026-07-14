@@ -73,12 +73,23 @@ def release_timescale_conn(conn: Connection):
     Note: Always rollback before returning to ensure clean transaction state.
     This prevents 'connection in INTRANS state' warnings from the pool.
     If the caller already committed, rollback is a no-op.
+
+    rollback() and putconn() are isolated in separate try/except blocks so a
+    broken connection (whose rollback raises) is STILL returned to the pool.
+    Sharing one try previously skipped putconn on rollback failure, leaking the
+    connection (incident 2026-07-12). putconn is safe on a broken/closed conn:
+    the pool resets it and discards+replaces it when the transaction status is
+    unknown, so the connection is never leaked.
     """
     pool = get_timescale_pool()
     if pool and conn:
         try:
             conn.rollback()  # Ensure clean transaction state before returning to pool
-            pool.putconn(conn)
+        except Exception as e:
+            print(f"Failed to rollback before returning connection to pool: {e}")
+
+        try:
+            pool.putconn(conn)  # Always return to pool, even if rollback failed
         except Exception as e:
             print(f"Failed to return connection to pool: {e}")
 

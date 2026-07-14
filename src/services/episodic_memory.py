@@ -131,13 +131,14 @@ class EpisodicMemoryService:
                     ),
                 )
             conn.commit()  # Explicit commit
-            release_timescale_conn(conn)  # Return to pool
         except Exception as e:
             if conn:
                 conn.rollback()  # Rollback on error
-                release_timescale_conn(conn)
             print(f"Error storing episodic memory in TimescaleDB: {e}")
             raise
+        finally:
+            if conn:
+                release_timescale_conn(conn)  # Return to pool
 
     def _store_in_chroma(self, memory: EpisodicMemory) -> None:
         """Store memory in ChromaDB for vector search"""

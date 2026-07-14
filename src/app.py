@@ -989,6 +989,16 @@ def health_full() -> dict:
     if conn:
         release_timescale_conn(conn)
 
+    # Timescale pool stats (observability for connection-leak monitoring,
+    # incident 2026-07-12). Informational only — never affects overall status.
+    try:
+        from src.dependencies.timescale import get_timescale_pool
+
+        pool = get_timescale_pool()
+        checks["timescale_pool"] = pool.get_stats() if pool else None
+    except Exception as exc:  # pragma: no cover - defensive
+        checks["timescale_pool"] = {"error": str(exc)}
+
     # LLM endpoint connectivity check (cached for 60s to avoid hitting external API)
     cached_llm = _get_cached_llm_check()
     if cached_llm:
