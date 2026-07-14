@@ -1,11 +1,11 @@
 # Sprint Status — agentic-memories
 
-Last Updated: 2026-05-18
+Last Updated: 2026-07-13
 
 ## Active Epics
 **Epic 1: Deep Profile — from resume to self-model** (drafted v2 by Disha, design-reviewed v1 by Parminder — parallel v2 tech-spec rewrite in flight) — on user-hold
 **Epic 2: Observability** (opened 2026-04-25) — operational; parallel to Epic 1; doc at `.claude/scrum/docs/epic-2-observability.md`
-**Epic 3: Health Domain Expansion** (opened 2026-05-18) — Wave A scoped (Stories 3.1, 3.2, 3.3); doc at `.claude/scrum/docs/epic-3-health-domain-expansion.md`. Pending Parminder design review before stories transition to `ready`.
+**Epic 3: Health Domain Expansion** (opened 2026-05-18) — Wave A scoped (Stories 3.1, 3.2, 3.3); doc at `.scrum/docs/epic-3-health-domain-expansion.md`. Pending Parminder design review before stories transition to `ready`.
 
 ## Epic 1 Detail
 Goal: Evolve the profile layer so the AI knows the user better than they know themselves.
@@ -566,3 +566,29 @@ Pending: Parminder design review of Wave A schemas (specifically the metric cata
 - Disha: Epic 1 v2 + 19 stories drafted (on user-hold); Epic 2 opened (Stories 2.1 + 2.2 ready); Epic 3 opened with Wave A drafted (Stories 3.1, 3.2, 3.3 drafted, pending Parminder design review)
 - Parminder: 2.1 reviewed and transitioned to `ready` (both open Qs answered, ACs corrected); 2.2 reviewed and transitioned to `ready` (caller-tolerance audit done; corrected the "errors propagate to caller" framing — outer `except Exception → return None` at extract_utils.py:200-220 still swallows; bug-fix delta is just "no second SDK call"); v2 tech spec for Epic 1 in parallel; Epic 3 Wave A schemas queued for design review
 - David, Harpreet, Murat: on standby for implementation wave
+
+## Epic H: PG Connection-Leak Incident Hotfix (opened 2026-07-13)
+Context: prod incident 2026-07-12 ~20:00 — TimescaleDB saturated at max_connections=100 for ~24h. RCA verified by Aria (bus 2026-07-13 [21:05]). APScheduler theory rejected.
+
+### Story H-1: Connection-leak hotfix (Fixes 1+2+3 + pool stats + tests)
+- Status: done
+- Assigned: dave
+- Priority: P0
+- Dependencies: none
+- Review Cycles: 0
+- Branch: story/H-1-conn-leak-hotfix (commit 7d414c6)
+- Test gate (tess, 2026-07-13): PASS. Full unit suite 540 passed / 1 pre-existing skip / 9.09s; hotfix suite 5 passed / 0.57s; hermetic integration test_retrieve_filters 6 passed / 0.84s. App-based integration (forget/intents/direct_memory/chroma_wrapper) DEFERRED — TestClient(app) runs the real lifespan which does a live prod-Chroma read and starts the TTL sweeper (SCHEDULED_MAINTENANCE_ENABLED defaults true → delete risk on the live old-image prod stack). Ship-ready pending user deploy decision. Post-deploy verification (real /health/full pool stats + pool exhaustion/recovery under concurrent /v1/narrative) is story H-5.
+- Acceptance Criteria:
+  - [x] _temporal_retrieval releases its pooled conn on every path (try/finally)
+  - [x] release_timescale_conn always putconns even when rollback raises
+  - [x] _store_in_timescale releases via try/finally
+  - [x] /health/full exposes pool.get_stats()
+  - [x] Unit test: rollback raises → putconn still called (fails on pre-fix code)
+  - [x] Spy tests: release called exactly once on happy+error paths (both fixed functions)
+  - [x] make lint clean; targeted tests green
+  - [x] Zero happy-path behavioral change
+
+### Story H-2: Pool max_size 10→5 (separate revertable PR) — backlog, P1
+### Story H-3: Non-superuser DB role for app DSN — backlog, P1 (own story; GRANT risk)
+### Story H-4: Hygiene — single-worker scheduler, dedupe log handlers, /health/full try-finally, delete dead StorageOrchestrator — backlog, P2
+### Story H-5: Incident-repro integration test (/v1/narrative loop vs small pool) — backlog, P1, owner tess
