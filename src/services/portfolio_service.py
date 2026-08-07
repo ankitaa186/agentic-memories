@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import uuid
 import logging
+from datetime import date
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
@@ -21,6 +22,20 @@ logger = logging.getLogger(__name__)
 
 # Ticker validation: 1-10 uppercase alphanumeric + dots (for BRK.B style)
 TICKER_PATTERN = re.compile(r"^[A-Z0-9\.]{1,10}$")
+
+# Options support (asset_class = 'option')
+ASSET_CLASSES = {"equity", "option"}
+OPTION_TYPES = {"put", "call"}
+ACTION_TYPES = {"sell_to_open", "buy_to_open", "sell_to_close", "buy_to_close"}
+# Actions that leave a position open; close actions end the position lifecycle
+OPEN_ACTION_TYPES = {"sell_to_open", "buy_to_open"}
+
+# OCC-style option symbol stored in `ticker` for option rows:
+# UNDERLYING + YYMMDD + C/P + strike*1000 zero-padded to 8 digits (e.g., TLN260821P00300000)
+OPTION_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9\.]{1,10}\d{6}[CP]\d{8}$")
+
+# Position keys accepted by update/delete endpoints: equity ticker or OCC option symbol
+POSITION_KEY_PATTERN = re.compile(r"^[A-Z0-9\.]{1,32}$")
 
 
 def normalize_ticker(ticker: Optional[str]) -> Optional[str]:
@@ -60,6 +75,92 @@ def validate_positive_float(
     except (ValueError, TypeError):
         logger.warning("Invalid numeric %s value rejected: %s", field_name, value)
         return None
+
+
+def validate_positive_int(value: Any, field_name: str) -> Optional[int]:
+    """Validate and convert numeric field to a positive integer (e.g., option contracts)."""
+    if value is None:
+        return None
+
+    try:
+        int_val = int(value)
+        if int_val > 0 and float(value) == int_val:
+            return int_val
+        logger.warning("Invalid %s value rejected: %s", field_name, value)
+        return None
+    except (ValueError, TypeError):
+        logger.warning("Invalid numeric %s value rejected: %s", field_name, value)
+        return None
+
+
+def validate_expiration_date(value: Any) -> Optional[str]:
+    """Validate an ISO YYYY-MM-DD expiration date; returns normalized ISO string or None."""
+    if not value:
+        return None
+
+    raw = str(value).strip()
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except ValueError:
+        logger.warning("Invalid expiration_date rejected: %s", value)
+        return None
+
+
+def build_option_symbol(
+    underlying_ticker: str,
+    option_type: str,
+    strike_price: float,
+    expiration_date: str,
+) -> str:
+    """
+    Build the OCC-style symbol stored in `ticker` for option positions.
+
+    Deterministic per (underlying, expiration, option_type, strike), so the
+    UNIQUE (user_id, ticker) constraint enforces one row per contract key.
+    Example: TLN put, strike 300, expiring 2026-08-21 -> TLN260821P00300000
+    """
+    exp = date.fromisoformat(expiration_date)
+    type_code = "C" if option_type == "call" else "P"
+    strike_code = f"{int(round(strike_price * 1000)):08d}"
+    return f"{underlying_ticker}{exp.strftime('%y%m%d')}{type_code}{strike_code}"
+
+
+def normalize_position_key(key: Optional[str]) -> Optional[str]:
+    """Normalize a position key path segment: equity ticker or OCC option symbol."""
+    if not key:
+        return None
+
+    normalized = key.upper().strip()
+    if not normalized or not POSITION_KEY_PATTERN.match(normalized):
+        logger.warning("Invalid position key rejected: %s", key)
+        return None
+
+    return normalized
+
+
+def option_position_status(
+    action_type: Optional[str], expiration_date: Optional[Any]
+) -> str:
+    """
+    Compute lifecycle status for an option position.
+
+    - 'closed': position was closed via a *_to_close action
+    - 'expired': still open but past expiration
+    - 'active': open and unexpired
+    """
+    if action_type in ACTION_TYPES - OPEN_ACTION_TYPES:
+        return "closed"
+
+    if expiration_date is not None:
+        exp = (
+            expiration_date
+            if isinstance(expiration_date, date)
+            else date.fromisoformat(str(expiration_date))
+        )
+        if exp < date.today():
+            return "expired"
+
+    return "active"
 
 
 @dataclass
@@ -258,7 +359,9 @@ class PortfolioService:
             user_id: User ID
 
         Returns:
-            List of holding dictionaries with: id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
+            List of holding dictionaries with: id, ticker, asset_name, asset_class, shares,
+            avg_price, option fields (underlying_ticker, option_type, action_type, strike_price,
+            expiration_date, contracts, premium, collateral_required), first_acquired, last_updated
         """
         conn = get_timescale_conn()
         if not conn:
@@ -268,10 +371,13 @@ class PortfolioService:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, user_id, ticker, asset_name, shares, avg_price, first_acquired, last_updated
+                    SELECT id, user_id, ticker, asset_name, asset_class, shares, avg_price,
+                           underlying_ticker, option_type, action_type, strike_price,
+                           expiration_date, contracts, premium, collateral_required,
+                           first_acquired, last_updated
                     FROM portfolio_holdings
                     WHERE user_id = %s
-                    ORDER BY ticker ASC
+                    ORDER BY asset_class ASC, ticker ASC
                 """,
                     (user_id,),
                 )
