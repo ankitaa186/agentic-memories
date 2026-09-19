@@ -248,7 +248,7 @@ class PersonaRetrievalAgent:
                 if any(tag in target_tags for tag in tags):
                     filtered_results.append(result)
             hybrid_results = filtered_results
-        else:
+        elif not query.strip():
             prioritized: List[Any] = []
             remainder: List[Any] = []
             for result in hybrid_results:
@@ -315,7 +315,7 @@ class PersonaRetrievalAgent:
                 limit=limit,
                 offset=0,
             )
-            if not persona_requested:
+            if not persona_requested and not query.strip():
                 prioritized = []
                 remainder = []
                 for item in fallback:
@@ -333,7 +333,11 @@ class PersonaRetrievalAgent:
         return PersonaRetrievalResult(
             persona=self.persona,
             items=formatted,
-            weight_profile=self.weight_profile,
+            weight_profile=(
+                {"semantic": 1.0, "temporal": 0.0, "importance": 0.0, "emotional": 0.0}
+                if query.strip()
+                else self.weight_profile
+            ),
             source="hybrid" if hybrid_results else "semantic",
         )
 

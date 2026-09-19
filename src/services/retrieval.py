@@ -16,6 +16,7 @@ from src.dependencies.redis_client import get_redis_client
 from src.config import get_embedding_model_name, get_retrieve_max_fetch_cap
 from src.services._constants import SYSTEM_MANAGED_FIELDS
 from src.services.embedding_utils import generate_embedding
+from src.services.similarity import cosine_similarity
 
 
 COLLECTION_NAME = "memories"
@@ -388,18 +389,6 @@ def _hash_query(query: str) -> str:
     return hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
 
 
-def _keyword_score(query: str, doc: str) -> float:
-    q_tokens = set(query.lower().split())
-    d_tokens = set(doc.lower().split())
-    if not q_tokens or not d_tokens:
-        return 0.0
-    return len(q_tokens & d_tokens) / len(q_tokens)
-
-
-def _hybrid_score(semantic: float, keyword: float) -> float:
-    return 0.8 * semantic + 0.2 * keyword
-
-
 def search_memories(
     user_id: str,
     query: str,
@@ -513,7 +502,7 @@ def _search_memories_impl(
     cache_key = None
     if use_cache:
         ns = redis.get(f"mem:ns:{user_id}") or "0"
-        cache_key = f"mem:srch:{user_id}:{_hash_query(query)}:v{ns}"
+        cache_key = f"mem:srch:cosine-v2:{user_id}:{_hash_query(query)}:v{ns}"
         cached = redis.get(cache_key)
         if cached:
             data = json.loads(cached)
@@ -598,20 +587,30 @@ def _search_memories_impl(
         if n_results < 1:
             n_results = 1
         semantic_results = collection.query(  # type: ignore[attr-defined]
-            query_embeddings=[emb], n_results=n_results, where=where
+            query_embeddings=[emb],
+            n_results=n_results,
+            where=where,
+            include=["documents", "metadatas", "embeddings"],
         )
         ids = semantic_results.get("ids", [[]])[0]
         docs = semantic_results.get("documents", [[]])[0]
-        scores = semantic_results.get("distances", [[]])[0]
+        scores = []
+        vectors = semantic_results.get("embeddings", [[]])[0]
+        for i in range(len(ids)):
+            try:
+                scores.append(cosine_similarity(emb, vectors[i]))
+            except (IndexError, TypeError, ValueError):
+                logger.warning("Skipping memory with invalid search vector: %s", ids[i])
+                scores.append(None)
         metas = semantic_results.get("metadatas", [[]])[0]
 
     items: List[Dict[str, Any]] = []
     for i, mem_id in enumerate(ids):
         if i >= len(docs) or i >= len(metas) or i >= len(scores):
             continue
-        semantic_sim = 1.0 - float(scores[i]) if scores else 0.0
-        k_score = _keyword_score(query, docs[i])
-        final = _hybrid_score(semantic_sim, k_score)
+        if scores[i] is None:
+            continue
+        final = 0.8 if is_filter_only_path else scores[i]
         meta = metas[i] or {}
         if not isinstance(meta, dict):
             meta = {"raw": meta}
@@ -671,8 +670,8 @@ def _search_memories_impl(
         items = filtered
 
     # X.2 AC6 / AC20: filter-only paths return results in recency-desc order
-    # (newest `metadata.timestamp` first). The legacy ``score`` sort is kept
-    # for ``query``-supplied paths so existing semantic ranking is unchanged.
+    # (newest `metadata.timestamp` first). Query results use measured cosine
+    # relevance, consistently with the ordinary persona/hybrid path.
     if is_filter_only_path:
         items = sort_by_recency(items, newest_first=True)
     else:

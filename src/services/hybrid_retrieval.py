@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
+from functools import lru_cache
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,23 @@ from src.dependencies.chroma import get_chroma_client  # noqa: E402
 from src.services.episodic_memory import EpisodicMemoryService  # noqa: E402
 from src.services.emotional_memory import EmotionalMemoryService  # noqa: E402
 from src.services.procedural_memory import ProceduralMemoryService  # noqa: E402
-from src.services.embedding_utils import get_embeddings  # noqa: E402
+from src.services.embedding_utils import EMBEDDING_MODEL, get_embeddings  # noqa: E402
+from src.services.similarity import cosine_similarity  # noqa: E402
+
+
+@lru_cache(maxsize=256)
+def _skill_embedding(
+    user_id: str, skill_id: str, content: str, model: str
+) -> Tuple[float, ...]:
+    """Keep SQL-only skills searchable without writing/backfilling memories.
+
+    Scope the bounded, process-local cache by owner, identity, content and model.
+    Edits get a new embedding; deleted skills are never read from this cache alone.
+    """
+    embeddings = get_embeddings([content])
+    if not embeddings or not embeddings[0]:
+        raise ValueError("missing procedural retrieval embedding")
+    return tuple(embeddings[0])
 
 
 def _deserialize_metadata_lists(metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -129,8 +146,15 @@ class HybridRetrievalService:
             all_results = []
 
             # 1. Semantic retrieval (query) or browse-all (no query)
+            query_embedding = None
             if query.query_text:
-                semantic_results = self._semantic_retrieval(query)
+                try:
+                    query_embedding = get_embeddings([query.query_text])[0]
+                    cosine_similarity(query_embedding, query_embedding)
+                except Exception as exc:
+                    logger.error("Query embedding unavailable: %s", exc)
+                    return []
+                semantic_results = self._semantic_retrieval(query, query_embedding)
                 all_results.extend(semantic_results)
             else:
                 browse_results = self._browse_all(query)
@@ -148,7 +172,7 @@ class HybridRetrievalService:
 
             # 4. Procedural retrieval (if procedural memories requested)
             if not query.memory_types or "procedural" in query.memory_types:
-                procedural_results = self._procedural_retrieval(query)
+                procedural_results = self._procedural_retrieval(query, query_embedding)
                 all_results.extend(procedural_results)
 
             # 5. Deduplicate and rank results
@@ -175,7 +199,9 @@ class HybridRetrievalService:
 
             return final_results
 
-    def _semantic_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+    def _semantic_retrieval(
+        self, query: RetrievalQuery, query_embedding: Optional[List[float]] = None
+    ) -> List[RetrievalResult]:
         """Perform semantic search across all memory types"""
         results = []
 
@@ -184,9 +210,8 @@ class HybridRetrievalService:
 
         try:
             # Get query embeddings
-            query_embeddings = get_embeddings([query.query_text])
-            if not query_embeddings:
-                return results
+            if query_embedding is None:
+                query_embedding = get_embeddings([query.query_text])[0]
 
             # Use the standard unified collection used by /v1/store
             from src.services.retrieval import _standard_collection_name
@@ -195,9 +220,10 @@ class HybridRetrievalService:
             try:
                 collection = self.chroma_client.get_collection(collection_name)
                 search_results = collection.query(
-                    query_embeddings=query_embeddings,
+                    query_embeddings=[query_embedding],
                     n_results=query.limit,
                     where={"user_id": query.user_id},
+                    include=["documents", "metadatas", "embeddings"],
                 )
                 if (
                     search_results
@@ -205,12 +231,16 @@ class HybridRetrievalService:
                     and search_results["ids"][0]
                 ):
                     for i, memory_id in enumerate(search_results["ids"][0]):
-                        distance = (
-                            search_results["distances"][0][i]
-                            if search_results.get("distances")
-                            else 0.0
-                        )
-                        similarity = 1.0 - distance
+                        try:
+                            similarity = cosine_similarity(
+                                query_embedding, search_results["embeddings"][0][i]
+                            )
+                        except (KeyError, IndexError, TypeError, ValueError):
+                            logger.warning(
+                                "Skipping memory with invalid search vector: %s",
+                                memory_id,
+                            )
+                            continue
                         metadata = _deserialize_metadata_lists(
                             search_results["metadatas"][0][i] or {}
                         )
@@ -236,7 +266,9 @@ class HybridRetrievalService:
 
                         result = RetrievalResult(
                             memory_id=memory_id,
-                            memory_type="semantic",
+                            memory_type="procedural"
+                            if metadata.get("stored_in_procedural")
+                            else "semantic",
                             content=search_results["documents"][0][i],
                             relevance_score=similarity,
                             recency_score=recency,
@@ -625,7 +657,9 @@ class HybridRetrievalService:
 
         return results
 
-    def _procedural_retrieval(self, query: RetrievalQuery) -> List[RetrievalResult]:
+    def _procedural_retrieval(
+        self, query: RetrievalQuery, query_embedding: Optional[List[float]] = None
+    ) -> List[RetrievalResult]:
         """Retrieve procedural memories"""
         results = []
 
@@ -647,14 +681,31 @@ class HybridRetrievalService:
                 if skill.context:
                     content += f" (Context: {skill.context})"
 
+                similarity = None
+                if query.query_text:
+                    if query_embedding is None:
+                        query_embedding = get_embeddings([query.query_text])[0]
+                    try:
+                        embedding = _skill_embedding(
+                            query.user_id, str(skill.id), content, EMBEDDING_MODEL
+                        )
+                        similarity = cosine_similarity(query_embedding, embedding)
+                    except Exception as exc:
+                        logger.warning(
+                            "Skipping unscored procedural memory %s: %s", skill.id, exc
+                        )
+                        continue
+
                 result = RetrievalResult(
-                    memory_id=skill.id,
+                    memory_id=str(skill.id),
                     memory_type="procedural",
                     content=content,
-                    relevance_score=0.7,  # Base relevance for skills
+                    relevance_score=similarity if similarity is not None else 0.7,
+                    semantic_similarity=similarity,
                     recency_score=recency_score,
                     importance_score=importance_score,
                     metadata={
+                        "layer": "procedural",
                         "skill_name": skill.skill_name,
                         "proficiency_level": skill.proficiency_level,
                         "practice_count": skill.practice_count,
@@ -727,6 +778,19 @@ class HybridRetrievalService:
         self, results: List[RetrievalResult], query: RetrievalQuery
     ) -> List[RetrievalResult]:
         """Rank results using hybrid scoring"""
+        if (
+            query.query_text
+            and not query.time_range
+            and not query.emotional_context
+            and query.strategy in (RetrievalStrategy.HYBRID, RetrievalStrategy.SEMANTIC)
+        ):
+            # Ordinary recall: compare measured query relevance only. Missing
+            # similarity is not an invented match; persona/age cannot promote it.
+            scored = [r for r in results if r.semantic_similarity is not None]
+            for result in scored:
+                result.relevance_score = result.semantic_similarity
+            return sorted(scored, key=lambda r: r.relevance_score, reverse=True)
+
         for result in results:
             # Calculate composite score
             composite_score = self._calculate_composite_score(result, query)

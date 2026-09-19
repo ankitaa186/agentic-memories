@@ -56,6 +56,11 @@ stop: ## Stop Docker containers (use ENV=prod for production)
 
 restart: stop start ## Restart Docker containers (use ENV=prod for production)
 
+.PHONY: service-update
+service-update: ## Rebuild/recreate API only; leave database containers and volumes untouched (ENV=prod for production)
+	@docker compose $(COMPOSE_FILES) build api
+	@docker compose $(COMPOSE_FILES) up -d --no-deps api
+
 clean: ## Clean up logs, results, and volumes
 	rm -rf tests/e2e/logs/ tests/e2e/results/
 	@docker compose $(COMPOSE_FILES) down -v

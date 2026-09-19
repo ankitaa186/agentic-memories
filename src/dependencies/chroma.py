@@ -319,10 +319,13 @@ class V2Collection:
         query_embeddings: list = None,
         n_results: int = 10,
         where: Optional[Dict] = None,
+        include: Optional[list] = None,
     ):
         """Query collection.
         Supports either query_texts (if server embeds) or query_embeddings (preferred)."""
         data: Dict[str, Any] = {"n_results": n_results}
+        if include is not None:
+            data["include"] = include
         if where:
             # Chroma 1.x rejects ``where: {}`` (see V2Collection.get docstring).
             data["where"] = where
