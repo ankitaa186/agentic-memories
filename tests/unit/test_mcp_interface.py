@@ -80,7 +80,9 @@ def test_discovery_and_complete_route_mapping(mcp_client, app_module):
     assert {(r["method"], r["path"], r["tool"]) for r in mapping} == {
         (op.method, op.path, name) for name, op in operations.items()
     }
+    schemas = {row["tool"]: row["inputSchema"] for row in mapping}
     for tool in tools:
+        assert tool["inputSchema"] == schemas[tool["name"]]
         Draft202012Validator.check_schema(tool["inputSchema"])
         Draft202012Validator.check_schema(tool["outputSchema"])
         if operations[tool["name"]].method in {"DELETE", "PUT", "PATCH"}:
