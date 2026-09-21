@@ -2,7 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## Changes on main — June 21–September 21, 2026
+
+### Added
+
+- Equity/options portfolio CRUD, generated OCC-style symbols, position lookup by UUID/symbol/contract key, lifecycle status, grouped responses, and active short-option collateral totals (migration 025; August 6).
+- `make service-update` to rebuild and recreate only the API container (September 18).
+- Informational `checks.timescale_pool` statistics on `/health/full` (July 13).
+
+### Fixed
+
+- Pooled PostgreSQL connections now return on temporal-retrieval and episodic-storage cleanup paths, even when rollback fails (July 13).
+- Ordinary semantic/hybrid text retrieval ranks by actual cosine similarity, including SQL-only procedural memories, without unrelated persona/age/importance boosts. Bounded owner/content/model-scoped skill embedding caching and normalized IDs preserve recall and deduplication (September 18).
+
+### Maintenance
+
+- Internal scrum workspace moved from `.claude/scrum/` to `.scrum/`; no runtime feature change (July 13).
+
+See [review and upgrade notes](docs/recent-enhancements-2026-09.md) for commit evidence and migration requirements. These are changes present on `main`, not a claim of a tagged release or deployment.
+
+## Unreleased (earlier changes)
 
 ### Added
 

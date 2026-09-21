@@ -10,6 +10,8 @@
 
 ### Memory Orchestrator APIs
 
+The injection adapter still applies legacy `1 - score` conversion to the core search score. Injection scores and thresholds differ from the measured cosine scores in ordinary retrieval; see the [scope limitation](recent-enhancements-2026-09.md#retrieval-relevance).
+
 #### POST /v1/orchestrator/message
 **Description:** Stream a single chat message through the adaptive memory orchestrator
 **Request:** `OrchestratorMessageRequest`
@@ -96,7 +98,7 @@
 **Performance:** Sub-second queries (ChromaDB only)
 
 #### POST /v1/retrieve
-**Description:** Persona-aware retrieval with dynamic weighting
+**Description:** Persona-aware retrieval; ordinary text queries rank by measured cosine similarity
 **Request:** `PersonaRetrieveRequest`
 - `user_id`: string
 - `query`: string
@@ -113,7 +115,8 @@
 
 **Features:**
 - Automatic persona detection or explicit selection
-- Profile-based weight overrides (semantic, temporal, importance, emotional)
+- Ordinary text recall uses measured cosine relevance without persona, recency, or importance boosts; explicit persona filters still apply
+- Specialized temporal/emotional retrieval retains composite scoring; browse behavior remains separate
 - Multi-tier summaries
 - Explainability for applied weights
 
@@ -155,7 +158,22 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
 
 **Performance:** 2-5 seconds (multi-database)
 
+### Portfolio CRUD APIs
+
+See the [portfolio API guide](portfolio-api.md) for complete equity/options examples and migration requirements.
+
+| Method | Route | Behavior |
+| --- | --- | --- |
+| GET | `/v1/portfolio?user_id=...` | Flat holdings, equity/options groups, lifecycle status, counts, collateral total; `include_inactive=false` by default |
+| POST | `/v1/portfolio/holding` | Create (201) or upsert (200) a position |
+| PUT | `/v1/portfolio/holding/{position_key}` | Partial update; missing position returns 404 |
+| DELETE | `/v1/portfolio/holding/{position_key}?user_id=...` | Delete a position by UUID, symbol, or contract key |
+| DELETE | `/v1/portfolio?user_id=...` | Remove all holdings for the user |
+
 #### GET /v1/portfolio/summary
+
+Legacy summary shape; use `GET /v1/portfolio` for option lifecycle and collateral aggregates.
+
 **Description:** Structured portfolio data from PostgreSQL
 **Query Parameters:**
 - `user_id`: string (required)
@@ -213,6 +231,7 @@ Categories: emotions, behaviors, personal, professional, habits, skills_tools, p
   - `env`: Environment variables check
   - `chroma`: ChromaDB connectivity
   - `timescale`: TimescaleDB connectivity
+  - `timescale_pool`: Pool statistics, `null` if absent, or an error object; informational only, excluded from overall health status
   - `redis`: Redis connectivity
   - `portfolio`: Portfolio service status
   - `langfuse`: Langfuse tracing status

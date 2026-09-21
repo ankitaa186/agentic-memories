@@ -1,5 +1,7 @@
 # Retrieval Data Flow Architecture
 
+> Historical architecture snapshot. For current ordinary-query cosine ranking, procedural embedding caching, and deduplication behavior as of September 2026, see the [retrieval update notes](../recent-enhancements-2026-09.md#retrieval-relevance). Any distance conversion or weighted ordinary-query ranking below predates that update.
+
 ## Visual Data Flow Graph
 
 ```

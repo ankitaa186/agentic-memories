@@ -4,6 +4,12 @@
 
 This directory contains database schema migrations for all storage layers, organized by database type. The migration system tracks applied migrations and supports both fresh deployments and incremental upgrades.
 
+## Options support (August 2026)
+
+[PostgreSQL migration 025](postgres/025_options_support.up.sql) adds equity/options positions and per-class constraints to `portfolio_holdings`. Existing rows default to equities. Apply pending migrations before deploying API code that reads these columns; `make service-update` does not run migrations. The [down migration](postgres/025_options_support.down.sql) deletes option positions before dropping their fields and narrowing the ticker column.
+
+See the [portfolio API guide](../docs/portfolio-api.md) for the request contract and [recent upgrade notes](../docs/recent-enhancements-2026-09.md).
+
 ## Structure
 
 ```

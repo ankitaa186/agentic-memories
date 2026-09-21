@@ -238,41 +238,25 @@ CREATE TABLE identity_memories (
 ---
 
 ### portfolio_holdings
-**Purpose:** Current financial holdings and positions
 
-**Schema:**
-```sql
-CREATE TABLE portfolio_holdings (
-    id UUID PRIMARY KEY,
-    user_id VARCHAR(64) NOT NULL,
-    ticker VARCHAR(16),
-    asset_name VARCHAR(256),
-    asset_type VARCHAR(64),   -- public_equity, crypto, private_equity, etc.
-    shares FLOAT,
-    avg_price FLOAT,
-    position VARCHAR(16),     -- long, short
-    intent VARCHAR(16),       -- buy, sell, hold, watch
-    time_horizon VARCHAR(16), -- short, medium, long
-    source_memory_id VARCHAR(128),
-    first_acquired TIMESTAMPTZ,
-    last_updated TIMESTAMPTZ DEFAULT NOW(),
-    metadata JSONB
-);
-```
+**Purpose:** Equity and option positions, after migrations 015, 016, and 025.
 
-**Asset Types:**
-- `public_equity`: Stocks
-- `crypto`: Cryptocurrencies
-- `private_equity`: Private company shares
-- `bonds`: Fixed income
-- `real_estate`: Property holdings
-- `commodities`: Gold, oil, etc.
+| Fields | Type / meaning |
+| --- | --- |
+| `id`, `user_id` | UUID primary key and required user identifier |
+| `ticker` | Required `VARCHAR(32)`; equity ticker or generated OCC-style option symbol; unique with `user_id` |
+| `asset_name` | Optional display name |
+| `asset_class` | Required `equity` (default) or `option` |
+| `shares`, `avg_price` | Equity quantity and average price; null for options |
+| `underlying_ticker`, `option_type` | Required for options; underlying symbol and `put` / `call` |
+| `action_type` | Required for options: `sell_to_open`, `buy_to_open`, `sell_to_close`, `buy_to_close` |
+| `strike_price`, `expiration_date`, `contracts` | Required option strike (> 0), date, and integer contract count (> 0) |
+| `premium`, `collateral_required` | Optional option amounts; collateral must be nonnegative |
+| `first_acquired`, `last_updated` | Acquisition/update timestamps |
 
-**Intent Types:**
-- `buy`: Planning to acquire more
-- `sell`: Planning to sell
-- `hold`: Maintaining position
-- `watch`: Monitoring but not held
+Option fields must be null on equity rows; equity quantity fields must be null on option rows. `status` is computed in API responses, not stored. Contract identity is `(user_id, underlying, expiration, option_type, strike)`, encoded in `ticker`; there are no separate lots for the same contract.
+
+Migration 015 removed the former `asset_type`, `position`, `intent`, `time_horizon`, and `source_memory_id` fields. For exact DDL and constraints, see [migration 025](../migrations/postgres/025_options_support.up.sql) and the [portfolio API guide](portfolio-api.md).
 
 ---
 

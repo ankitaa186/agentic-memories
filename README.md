@@ -2,10 +2,10 @@
 
 <div align="center">
 
-**A living, breathing memory system that transforms AI from stateless responders into sentient companions with human-like consciousness**
+**Persistent memory for AI agents with semantic retrieval, user profiles, scheduled intents, and equity/options portfolio tracking.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 
@@ -19,6 +19,15 @@
 </div>
 
 ---
+
+## Recent enhancements (June–September 2026)
+
+- **Relevant recall:** ordinary text queries rank semantic and procedural memories by measured cosine similarity. Unrelated skills, persona tags, recency, and importance no longer displace stronger query matches. SQL-only skills remain searchable, with bounded embedding caching and cross-store deduplication.
+- **Equities and options:** portfolio CRUD supports puts/calls, long/short option positions, lifecycle status, and caller-supplied collateral totals. `GET /v1/portfolio` groups equities and options; closed and expired options are opt-in.
+- **Connection reliability:** temporal retrieval and episodic storage return pooled PostgreSQL connections on cleanup paths, including rollback failures. `/health/full` exposes pool statistics for observation.
+- **API-only updates:** `make service-update ENV=prod` rebuilds and recreates the API without recreating database containers. Apply required schema migrations separately.
+
+See the [review and upgrade notes](docs/recent-enhancements-2026-09.md) for the complete commit inventory, behavior changes, and operational details, and the [portfolio API guide](docs/portfolio-api.md) for working examples.
 
 ## 🌟 The Vision
 
@@ -120,7 +129,7 @@ This is implemented today via the compaction system (`POST /v1/maintenance/compa
   - **Identity**: Core values, beliefs, and self-concept (coming soon)
   
 - **🔍 Hybrid Retrieval System**
-  - Semantic search via vector embeddings (ChromaDB)
+  - Semantic search via vector embeddings (ChromaDB), with measured cosine ranking for ordinary text queries
   - Temporal queries for time-range narratives (TimescaleDB)
   - Structured queries for skills and holdings (PostgreSQL)
   - Graph traversal for relationships (Neo4j - coming soon)
@@ -128,7 +137,7 @@ This is implemented today via the compaction system (`POST /v1/maintenance/compa
   
 - **📖 Narrative Construction** - Weaves memories into coherent stories with temporal awareness and gap-filling
 
-- **💼 Portfolio Intelligence** - Tracks stocks, crypto, assets with intent detection and goal extraction
+- **💼 Portfolio Tracking** - Explicit CRUD for equities and option contracts, including lifecycle status and committed collateral for active short options
 
 - **🔐 Privacy-First Design** - Consent management, encryption-ready, sensitivity scoring (coming soon)
 
@@ -463,12 +472,15 @@ curl -X POST http://localhost:8080/v1/store \
 | Endpoint | Method | Use Case |
 |----------|--------|----------|
 | `/v1/retrieve` | GET | Semantic search — fast, your go-to for most use cases |
-| `/v1/retrieve` | POST | Persona-aware retrieval with weighted scoring |
+| `/v1/retrieve` | POST | Persona-aware retrieval with cosine ranking for text queries |
 | `/v1/retrieve/structured` | POST | Memories organized into categories by LLM |
 | `/v1/narrative` | POST | Coherent story/timeline from hybrid retrieval |
 | `/v1/orchestrator/retrieve` | POST | Retrieve within orchestrator session context |
 | `/v1/profile` | GET | Structured user profile (auto-extracted from conversations) |
-| `/v1/portfolio/summary` | GET | Financial holdings |
+| `/v1/portfolio` | GET | Equities, options, lifecycle status, and collateral summary |
+| `/v1/portfolio/holding` | POST | Create or upsert an equity or option position |
+| `/v1/portfolio/holding/{position_key}` | PUT / DELETE | Update or delete a position |
+| `/v1/portfolio/summary` | GET | Legacy financial summary |
 
 **Basic retrieval** — semantic search across all stored memories:
 
@@ -482,10 +494,10 @@ curl 'http://localhost:8080/v1/retrieve?user_id=user_123&query=cooking&limit=10'
 curl 'http://localhost:8080/v1/profile?user_id=user_123'
 ```
 
-**Portfolio** — financial holdings:
+**Portfolio** — grouped equity and option positions:
 
 ```bash
-curl 'http://localhost:8080/v1/portfolio/summary?user_id=user_123'
+curl 'http://localhost:8080/v1/portfolio?user_id=user_123'
 ```
 
 **Structured retrieval** — memories categorized into emotions, professional, skills, habits, etc.:
@@ -791,7 +803,15 @@ Generates coherent life stories using **hybrid retrieval** (ChromaDB + Timescale
 
 ---
 
-#### 🔹 Portfolio Summary
+#### 🔹 Portfolio CRUD
+
+Use `GET /v1/portfolio?user_id=user_123` for the flat `holdings` list, grouped `equities` and `options`, counts, and `summary.total_committed_options_collateral`. The default view includes equities and active options; add `include_inactive=true` to include closed and expired options.
+
+Create or upsert positions with `POST /v1/portfolio/holding`; update or delete with `/v1/portfolio/holding/{position_key}`. Option keys can be a position UUID, generated OCC-style symbol, or the underlying plus contract fields. See the [portfolio API guide](docs/portfolio-api.md) for request bodies, lifecycle semantics, validation, and migration 025.
+
+#### 🔹 Legacy Portfolio Summary
+
+This endpoint keeps its older response shape; use the CRUD GET endpoint above for option lifecycle and collateral aggregates.
 
 ```http
 GET /v1/portfolio/summary?user_id=user_123
@@ -1075,7 +1095,7 @@ curl "http://localhost:8080/v1/profile/completeness?user_id=sarah_123" | jq
 GET /health/full
 ```
 
-Comprehensive health check for all services.
+Comprehensive health check for all services. `checks.timescale_pool` contains `psycopg_pool.get_stats()` when a pool exists, `null` when absent, or an error object if statistics cannot be read. These statistics are informational and do not change the overall health status.
 
 ---
 
@@ -1155,23 +1175,9 @@ CREATE TABLE procedural_memories (
 
 ### Portfolio Holdings (PostgreSQL)
 
-```sql
-CREATE TABLE portfolio_holdings (
-    id UUID PRIMARY KEY,
-    user_id VARCHAR(64),
-    ticker VARCHAR(16),
-    asset_name VARCHAR(256),
-    asset_type VARCHAR(64),
-    shares FLOAT,
-    avg_price FLOAT,
-    position VARCHAR(16),  -- long, short
-    intent VARCHAR(16),  -- buy, sell, hold, watch
-    time_horizon VARCHAR(16),
-    source_memory_id VARCHAR(128),
-    first_acquired TIMESTAMPTZ,
-    last_updated TIMESTAMPTZ
-);
-```
+`portfolio_holdings` stores equities and options keyed by `(user_id, ticker)`. Migration 025 adds contract fields and widens `ticker` to 32 characters for generated OCC-style option symbols. Options use `contracts`; equities use `shares` and `avg_price`. The API computes option status from the action and expiration date.
+
+See the [current field reference](docs/data-models-server.md#portfolio_holdings) and [portfolio API guide](docs/portfolio-api.md). SQL migrations are the authoritative schema, including constraints.
 
 ### Graph Relationships (Neo4j — planned)
 
@@ -1380,7 +1386,7 @@ docker compose logs -f api   # Follow API logs
 
 - **Search**
   - Uses the same core search as the classic pipeline.
-  - Results include an embedding distance from the vector DB; the orchestrator converts to similarity: \( score = 1.0 - \text{raw\_distance} \).
+  - Core search now returns measured cosine similarity. However, the orchestrator injection adapter still applies the legacy `1 - score` transformation in `src/memory_orchestrator/retrieval.py`. Its injection scores and threshold behavior therefore differ from ordinary retrieval; the September ranking fix did not update this adapter.
 
 - **Policy gating**
   - `RetrievalPolicy` controls surfacing:
@@ -1407,7 +1413,7 @@ docker compose logs -f api   # Follow API logs
   - Falls back to baseline search if persona-specific path yields nothing.
 
 - **POST /v1/retrieve (persona)**
-  - `PersonaCoPilot` picks or honors a persona, applies profile-based weight overrides to hybrid scoring (semantic, temporal, importance, emotional), and can return:
+  - `PersonaCoPilot` picks or honors a persona. Ordinary text queries use measured cosine relevance; specialized temporal/emotional queries and browse paths retain their separate scoring behavior. It can return:
     - selected persona + confidence,
     - multi-tier summaries (raw/episodic/arc),
     - optional narrative,
@@ -1418,16 +1424,16 @@ docker compose logs -f api   # Follow API logs
 - **Stateful, turn-by-turn retrieval**: policy-gated injections per message instead of static result lists.
 - **Duplicate suppression**: `reinjection_cooldown_turns` prevents repeating the same memory across nearby turns.
 - **Conversation-scoped delivery**: subscribers receive injections only for their `conversation_id`, avoiding cross-chat leakage.
-- **Intuitive thresholds**: normalized similarity \(1 - \text{distance}\) makes `min_similarity` easy to reason about.
+- **Core-search relevance**: ordinary retrieval uses measured cosine similarity. Orchestrator injection scores retain the legacy inversion described above.
 - **Cost-aware ingestion**: batching/flush policies reduce vector upsert churn during bursts.
 - **Persona-ready**: seamlessly pairs with persona-aware POST `/v1/retrieve` for dynamic weighting, summaries, and explainability.
 
 ### How to tune
 
-- Increase `min_similarity` to be stricter; decrease to surface more.
+- `min_similarity` gates the orchestrator adapter's transformed score; because the legacy inversion remains, increasing it is not equivalent to demanding stronger cosine relevance.
 - Lower `max_injections_per_message` to reduce context bloat.
 - Raise `reinjection_cooldown_turns` to avoid repeats across multiple turns.
-- Adjust persona weight profiles to emphasize different signal types per persona.
+- Persona weight profiles apply to specialized scoring paths; they do not boost ordinary text-query matches above more relevant memories.
 
 > Key impact: more relevant, timely, and non-redundant context injections; persona-aware retrieval for richer personalization.
 
