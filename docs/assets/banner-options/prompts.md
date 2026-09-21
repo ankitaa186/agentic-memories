@@ -10,3 +10,6 @@ and personal-companion direction.
 - [Before/after comparison and all options](index.html)
 
 Option C was selected for the README. The original and first revision remain available for comparison.
+
+The selected C banner now uses the requested lavender-to-sky-blue gradient on “Memories”.
+[Gradient edit prompt](c-gradient-edit-prompt.txt). The original C image is retained.
