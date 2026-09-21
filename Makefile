@@ -81,7 +81,7 @@ VENV := . .venv/bin/activate &&
 # requirements.txt file.
 requirements.txt: pyproject.toml
 	@uv sync
-	@uv export --no-hashes --no-dev --format requirements.txt --output-file requirements.txt
+	@uv export --no-hashes --no-dev --no-group test --format requirements.txt --output-file requirements.txt
 
 # Ensure venv exists and dependencies are installed
 .venv/bin/activate:

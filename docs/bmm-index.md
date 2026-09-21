@@ -98,7 +98,7 @@ MCP support is implemented in the source revision; a deployed instance must be r
    - [API Contracts - Backend](./api-contracts-server.md) - Learn the API endpoints
 
 2. **Setup Environment:**
-   - Follow [README.md Quick Start](../README.md#-quick-start)
+   - Follow [README.md Quick Start](../README.md#get-started)
    - Run `make start` to launch all services (API, UI, databases)
    - Run migrations: `cd migrations && bash migrate.sh up`
 

@@ -1,0 +1,24 @@
+# GitHub generated release notes: maintainers still review direct commits and migrations.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+    - title: Documentation and examples
+      labels:
+        - documentation
+    - title: Maintenance and dependencies
+      labels:
+        - dependencies
+        - maintenance
+    - title: Other changes
+      labels:
+        - '*'

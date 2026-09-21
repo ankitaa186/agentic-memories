@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="590" viewBox="0 0 1080 590" role="img" aria-labelledby="title desc">
+<title id="title">Verified cross-session MCP example</title><desc id="desc">A real run stores an evening-walk preference, recalls the identical record through a new connection, and deletes the demo memory.</desc>
+<defs><linearGradient id="accent"><stop stop-color="#a78bfa"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+<rect width="1080" height="590" rx="20" fill="#0b0a12"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="40" y="51" font-size="30" fill="#f4efff" font-weight="bold">A preference remembered across conversations</text>
+<text x="40" y="83" font-size="17" fill="#bcb0cf" font-weight="normal">Recorded MCP example • retrieved content, not a generated answer</text>
+<rect x="40" y="116" width="1000" height="144" rx="14" fill="#191326" stroke="#a78bfa"/>
+<text x="64" y="151" font-size="17" fill="#c4b5fd" font-weight="bold">SESSION 1 / store_memory_direct</text>
+<text x="64" y="190" font-size="23" fill="#f4efff" font-weight="normal">Evening walks help me unwind.</text>
+<text x="64" y="226" font-size="23" fill="#f4efff" font-weight="normal">I prefer quiet routes near the water.</text>
+<text x="64" y="302" font-size="18" fill="#bcb0cf" font-weight="normal">Connection closed → New MCP connection</text>
+<rect x="40" y="334" width="1000" height="170" rx="14" fill="#191326" stroke="#c4b5fd"/>
+<text x="64" y="371" font-size="17" fill="#c4b5fd" font-weight="bold">SESSION 2 / retrieve</text>
+<text x="64" y="410" font-size="23" fill="#f4efff" font-weight="bold">How do I like to unwind?</text>
+<text x="64" y="449" font-size="22" fill="#f4efff" font-weight="normal">Recalled the saved evening-walk preference.</text>
+<text x="64" y="482" font-size="17" fill="#bcb0cf" font-weight="normal">Verified matching record ID and content.</text>
+<text x="40" y="551" font-size="18" fill="#ddd0ff" font-weight="normal">PASS / cross-session recall     CLEANUP / demo record deleted</text>
+</g></svg>

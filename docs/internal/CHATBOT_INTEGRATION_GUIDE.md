@@ -1,6 +1,6 @@
 # Integration Guide
 
-**MCP is the preferred integration for agents.** Connect to `http://localhost:8080/mcp` with Streamable HTTP after starting the [API stack](../../README.md#-quick-start). It shares the FastAPI process and port. Direct REST remains a supported alternative and is the underlying pipeline for every tool.
+**MCP is the preferred integration for agents.** Connect to `http://localhost:8080/mcp` with Streamable HTTP after starting the [API stack](../../README.md#get-started). It shares the FastAPI process and port. Direct REST remains a supported alternative and is the underlying pipeline for every tool.
 
 ## MCP quickstart (preferred)
 

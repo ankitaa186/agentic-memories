@@ -1,6 +1,6 @@
 [project]
 name = "agentic-memories"
-description = "MCP-first persistent memory for AI agents with semantic retrieval, user profiles, scheduled intents, equity/options portfolios, and a supported REST interface."
+description = "Biomimetic memory for personal AI companions. Retain experiences and preferences across conversations, with self-hosted storage and MCP integration."
 readme = "README.md"
 version = "0.1.0"
 # TODO: Target Python 3.14 after ensuring all dependencies are compatible / are updated.

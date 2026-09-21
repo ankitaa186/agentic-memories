@@ -1,36 +1,55 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
+User-visible changes, compatibility notes, and upgrade requirements.
 
-## Unreleased — MCP integration
+Published versions appear in [GitHub Releases](https://github.com/ankitaa186/agentic-memories/releases).
+There are no historical versioned releases recorded here yet. See the
+[release process](docs/releases/README.md) and [next release draft](docs/releases/v0.2.0-draft.md).
+
+## Unreleased
+
+### Documentation
+
+- Reworked onboarding around persistent context and MCP, with a concise README, a documentation index, focused setup/concept/operations guides, and a runnable cross-session memory example.
+- Added a new hero banner, editable workflow/architecture graphics, and release preparation guidance.
+
+### Maintenance
+
+- Aligned Makefile and CI runtime dependency exports with the checked-in requirements by excluding the test dependency group.
+
+### Added
 
 - Added the preferred MCP agent interface at `/mcp`, using Streamable HTTP in the existing FastAPI process and port. All 39 application operations and four framework documentation endpoints are discoverable tools; REST remains supported.
 - Reuses the FastAPI request pipeline for validation, user scoping, credentials, responses and errors; integrates the SDK lifecycle and synchronized dependencies.
 - Added [client/configuration guidance](docs/MCP.md), a [route/tool inventory](docs/mcp-route-mapping.json), and protocol/regression tests. Remote deployments must protect `/mcp` with appropriate proxy access controls, including administrative operations.
 - Documentation now leads with MCP while retaining REST examples and clearly identifying older deferred-MCP plans. These changes describe this revision, not a tagged release or completed deployment.
 
-## Changes on main — June 21–September 21, 2026
+## Unversioned baseline
 
-### Added
+These changes predate the first tagged release. Dates identify work on main, not releases.
+
+### June–September 2026
+
+#### Added
 
 - Equity/options portfolio CRUD, generated OCC-style symbols, position lookup by UUID/symbol/contract key, lifecycle status, grouped responses, and active short-option collateral totals (migration 025; August 6).
 - `make service-update` to rebuild and recreate only the API container (September 18).
 - Informational `checks.timescale_pool` statistics on `/health/full` (July 13).
 
-### Fixed
+#### Fixed
 
 - Pooled PostgreSQL connections now return on temporal-retrieval and episodic-storage cleanup paths, even when rollback fails (July 13).
 - Ordinary semantic/hybrid text retrieval ranks by actual cosine similarity, including SQL-only procedural memories, without unrelated persona/age/importance boosts. Bounded owner/content/model-scoped skill embedding caching and normalized IDs preserve recall and deduplication (September 18).
 
-### Maintenance
+#### Maintenance
 
 - Internal scrum workspace moved from `.claude/scrum/` to `.scrum/`; no runtime feature change (July 13).
 
 See [review and upgrade notes](docs/recent-enhancements-2026-09.md) for commit evidence and migration requirements. These are changes present on `main`, not a claim of a tagged release or deployment.
 
-## Unreleased (earlier changes)
+### Earlier changes
 
-### Added
+#### Added
 
 - **AM-X.2 — Time and metadata filters on `GET /v1/retrieve`.** New optional
   query parameters: `created_after`, `created_before`, `expires_after`,
@@ -42,7 +61,7 @@ See [review and upgrade notes](docs/recent-enhancements-2026-09.md) for commit e
   are excluded. The `metadata_filter` parameter rejects system-managed and
   internally-derived keys with 422.
 
-### Changed (behavior)
+#### Changed (behavior)
 
 - **AM-X.2 — Filter-only `/v1/retrieve` calls now return recency-desc.**
   Previously, callers passing only `layer=` or `type=` (no `query`, no
