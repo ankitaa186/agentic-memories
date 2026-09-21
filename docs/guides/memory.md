@@ -2,12 +2,13 @@
 
 [Documentation](../README.md) / Concepts
 
-An agent uses its current context window to answer a request. Agentic Memories adds
-persistent storage and explicit tools to reuse selected information in later requests.
+An agent uses its current context window to answer a request. Agentic Memories turns
+submitted conversations into persistent memories, then exposes tools to recall the
+useful context in later requests.
 The integrating application decides when to call those tools and what retrieved context
 to include in the model's prompt.
 
-![Store a preference, preserve it beyond the connection, recall it in a later session.](../assets/memory-flow.svg)
+![Conversation extraction, organization, storage, and later recall.](../assets/extraction-pipeline.svg)
 
 ## Biomimetic design
 
@@ -20,15 +21,38 @@ The consciousness-inspired ambition is personal continuity across interactions. 
 can use remembered preferences and experiences to contextualize its next response. The
 service does not establish that the companion has consciousness or subjective experience.
 
-## Store
+## Conversation extraction
 
-Use `store_memory_direct` when the application already knows the information to retain:
-a project decision, a user preference, or a correction. Use `store_transcript` when you
-want the extraction pipeline to select memories from a conversation. Orchestrator tools
-provide another ingestion path for conversational applications.
+Use `store_transcript` to submit conversation turns. The caller provides dialogue;
+the pipeline does the work of deciding what to retain and turning it into memories.
+The [unified ingestion graph](../../src/services/unified_ingestion_graph.py) performs:
 
-The [cross-session example](../../examples/README.md) uses a direct write so that its
-result does not depend on an extraction model deciding whether the text is worth storing.
+1. **Worthiness assessment:** evaluate whether the conversation contains information
+   worth retaining. A conversation can end here without creating memories.
+2. **Extraction:** use the conversation and relevant existing memories to identify
+   candidate personal facts, experiences, preferences, and other useful context.
+3. **Classification and enrichment:** organize candidates into memory types, build
+   memory records and embeddings, and retain supported metadata.
+4. **Duplicate checks:** compare candidates against existing content and semantic matches.
+5. **Profile extraction and storage:** derive structured profile fields where applicable,
+   store vector memories, and write applicable typed records.
+
+The graph is a sequence of processing stages, not a claim that every conversation
+creates every memory type or that every storage backend succeeds atomically. Inspect
+results; extraction wording, classification, and count vary with the model. Avoid
+reporting an empty extraction as success in an example intended to demonstrate recall.
+
+The [main example](../../examples/README.md) runs this pipeline through MCP, prints
+actual extracted memories, and checks that some of those records are recalled in a
+new session. Orchestrator tools provide a conversational ingestion path with their own
+buffering and retrieval behavior; see the [integration guide](../internal/CHATBOT_INTEGRATION_GUIDE.md).
+
+## Advanced: preformatted memories
+
+`store_memory_direct` is useful for migrations, imports, or an application that already
+produces a memory record. It bypasses worthiness assessment and conversation extraction.
+The [direct-write example](../../examples/README.md#advanced-direct-write-example) covers
+that path separately; it is not evidence that the extraction pipeline works.
 
 ## Recall
 

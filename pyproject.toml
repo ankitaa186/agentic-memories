@@ -1,6 +1,6 @@
 [project]
 name = "agentic-memories"
-description = "Biomimetic memory for personal AI companions. Retain experiences and preferences across conversations, with self-hosted storage and MCP integration."
+description = "Biomimetic memory for personal AI companions. Extract lasting memories from conversations and recall what matters, with self-hosted storage and MCP integration."
 readme = "README.md"
 version = "0.1.0"
 # TODO: Target Python 3.14 after ensuring all dependencies are compatible / are updated.

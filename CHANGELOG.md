@@ -10,7 +10,7 @@ There are no historical versioned releases recorded here yet. See the
 
 ### Documentation
 
-- Reworked onboarding around persistent context and MCP, with a concise README, a documentation index, focused setup/concept/operations guides, and a runnable cross-session memory example.
+- Reworked onboarding around persistent context and MCP, with a concise README, a documentation index, focused setup/concept/operations guides, and a runnable conversation-extraction example that recalls the extracted memories in a new session. Direct writes remain an advanced example.
 - Added a new hero banner, editable workflow/architecture graphics, and release preparation guidance.
 
 ### Maintenance

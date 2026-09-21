@@ -1,5 +1,7 @@
 from pathlib import Path
 from html import escape
+import re
+import textwrap
 
 root = Path(__file__).resolve().parents[1] / "docs" / "assets"
 base = """<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="{height}" viewBox="0 0 1080 {height}" role="img" aria-labelledby="title desc">
@@ -39,15 +41,15 @@ b = text(
 for x, step, title, lines in [
     (
         40,
-        "01 / STORE",
-        "Save a preference",
+        "01 / CONVERSATION",
+        "Share an experience",
         ["“Evening walks", "help me unwind.”"],
     ),
     (
         397,
-        "02 / PERSIST",
-        "Close the session",
-        ["The memory stays in storage.", "The client connection ends."],
+        "02 / EXTRACTION",
+        "Identify what matters",
+        ["Extract and organize memories.", "Check duplicates and store."],
     ),
     (
         754,
@@ -69,7 +71,7 @@ b += (
     + text(
         40,
         343,
-        "MCP tools: store_memory_direct → retrieve   •   The agent decides when to call them.",
+        "MCP tools: store_transcript → extraction pipeline → retrieve",
         16,
         "#bcb0cf",
     )
@@ -78,7 +80,7 @@ save(
     "memory-flow.svg",
     378,
     "Memory across sessions",
-    "Store a preference, close the connection, and recall it through a new connection.",
+    "Submit conversation, extract memories, then recall them in a later session.",
     b,
 )
 b = text(40, 52, "One memory service. Two ways to connect.", 30, weight="bold") + text(
@@ -148,7 +150,7 @@ b += (
     + text(
         90,
         394,
-        "Experiences. Preferences. Continuity.",
+        "Conversation → Extraction → Recall",
         27,
         weight="bold",
     )
@@ -163,47 +165,116 @@ save(
     b,
 )
 
-# A compact, accurate visual of the captured example output.
+# The principal product flow: conversations enter; the service derives memories.
+b = text(40, 52, "Conversation in. Useful memories out.", 32, weight="bold")
+b += text(
+    40,
+    84,
+    "Your companion supplies dialogue. The pipeline builds the memories.",
+    18,
+    "#bcb0cf",
+)
+b += rect(40, 112, 1000, 84, "#65517f")
+b += text(62, 142, "CONVERSATION", 14, "#c4b5fd", "bold")
+b += text(
+    62,
+    174,
+    "“Evening walks help me unwind. I like herbal tea and a novel afterward.”",
+    22,
+)
+for x, title, detail in [
+    (40, "1 / Worthiness", ["Is this worth", "remembering?"]),
+    (298, "2 / Extraction", ["Identify useful facts,", "preferences and experiences."]),
+    (556, "3 / Organization", ["Classify, enrich, embed", "and check duplicates."]),
+    (814, "4 / Memory", ["Build profile context;", "store applicable records."]),
+]:
+    b += rect(x, 248, 226, 145, "#a78bfa")
+    b += text(x + 15, 282, title, 21, weight="bold")
+    b += text(x + 15, 321, detail[0], 16, "#d4c8e5")
+    b += text(x + 15, 348, detail[1], 16, "#d4c8e5")
+    if x < 814:
+        b += line(x + 231, 320, x + 249, 320)
+b += line(150, 201, 150, 236)
+b += line(927, 399, 927, 433)
+b += rect(40, 446, 1000, 86, "#c4b5fd")
+b += text(62, 478, "LATER RECALL / retrieve", 16, "#c4b5fd", "bold")
+b += text(62, 511, "Extracted context is available to help your companion respond.", 22)
+save(
+    "extraction-pipeline.svg",
+    565,
+    "Conversation extraction pipeline",
+    "Dialogue passes through worthiness assessment, extraction, classification and enrichment, duplicate checks, profile extraction and storage. Later retrieval supplies context to the companion.",
+    b,
+)
+
+# Render only recorded extraction results, never invent model output for the graphic.
 transcript = root.parents[1] / "examples" / "mcp-memory-output.txt"
+recording = transcript.read_text()
 if (
-    transcript.exists()
-    and "PASS:" in transcript.read_text()
-    and "CLEANUP:" in transcript.read_text()
+    "PASS: recalled pipeline-extracted memories through a new connection."
+    not in recording
 ):
-    b = text(
-        40, 51, "A preference remembered across conversations", 30, weight="bold"
-    ) + text(
-        40,
-        83,
-        "Recorded MCP example • retrieved content, not a generated answer",
-        17,
-        "#bcb0cf",
+    raise ValueError(
+        "A successful extraction recording is required for the demo graphic"
     )
-    b += rect(40, 116, 1000, 144, "#a78bfa") + text(
-        64, 151, "SESSION 1 / store_memory_direct", 17, "#c4b5fd", "bold"
-    )
-    b += text(64, 190, "Evening walks help me unwind.", 23) + text(
-        64, 226, "I prefer quiet routes near the water.", 23
-    )
-    b += text(64, 302, "Connection closed → New MCP connection", 18, "#bcb0cf")
-    b += rect(40, 334, 1000, 170, "#c4b5fd") + text(
-        64, 371, "SESSION 2 / retrieve", 17, "#c4b5fd", "bold"
-    )
-    b += text(64, 410, "How do I like to unwind?", 23, weight="bold")
-    b += text(64, 449, "Recalled the saved evening-walk preference.", 22) + text(
-        64, 482, "Verified matching record ID and content.", 17, "#bcb0cf"
-    )
-    b += text(
-        40,
-        551,
-        "PASS / cross-session recall     CLEANUP / demo record deleted",
-        18,
-        "#ddd0ff",
-    )
-    save(
-        "mcp-demo.svg",
-        590,
-        "Verified cross-session MCP example",
-        "A real run stores an evening-walk preference, recalls the identical record through a new connection, and deletes the demo memory.",
-        b,
-    )
+extracted = re.findall(r"^EXTRACTED \[(.*?)\]: (.*)$", recording, re.M)
+if not extracted:
+    raise ValueError("No extracted memories found in recording")
+b = text(40, 51, "From a conversation to personal memory", 30, weight="bold")
+b += text(
+    40,
+    83,
+    "Real MCP extraction run • wording and memory count vary by model",
+    17,
+    "#bcb0cf",
+)
+b += rect(40, 112, 1000, 72, "#65517f")
+b += text(
+    62, 143, "INPUT / 4 conversation turns via store_transcript", 20, weight="bold"
+)
+b += text(
+    62,
+    170,
+    "Evening walks, quiet routes, herbal tea, reading and avoiding coffee.",
+    18,
+    "#d4c8e5",
+)
+b += text(
+    40,
+    225,
+    f"EXTRACTED / {len(extracted)} memories returned by the pipeline",
+    21,
+    "#c4b5fd",
+    "bold",
+)
+y = 245
+for layer, content in extracted:
+    lines = textwrap.wrap(content, width=81)
+    height = 45 + len(lines) * 25
+    b += rect(40, y, 1000, height)
+    b += text(58, y + 24, layer.upper(), 13, "#c4b5fd", "bold")
+    for index, line_text in enumerate(lines):
+        b += text(58, y + 50 + index * 25, line_text, 19)
+    y += height + 10
+b += text(
+    40,
+    y + 30,
+    "NEW SESSION / retrieved records matched extraction-result IDs",
+    19,
+    "#ddd0ff",
+    "bold",
+)
+b += text(
+    40,
+    y + 61,
+    "Printed memories are actual extraction output, not manually authored records.",
+    17,
+    "#bcb0cf",
+)
+save(
+    "mcp-demo.svg",
+    y + 92,
+    "Verified conversation extraction example",
+    "A real run of store_transcript produced classified memories from four conversation turns. A new MCP connection recalled those extracted records.",
+    b,
+)

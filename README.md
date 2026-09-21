@@ -2,9 +2,10 @@
 
 ![Agentic Memories — Biomimetic memory architecture. Built for a personal AI that remembers you. Your memories, your infrastructure.](docs/assets/agentic-memories-hero.png)
 
-**Biomimetic memory for your personal AI companion.** Help your companion remember
-experiences, preferences, and useful context across conversations. Connect through MCP
-and keep stored memories on your own infrastructure.
+**Turn conversations into lasting memory for your personal AI companion.**
+The extraction pipeline identifies what is worth remembering, organizes experiences
+and preferences, and makes that context available in later conversations. Connect
+through MCP and keep stored memories on your own infrastructure.
 
 [![CI](https://github.com/ankitaa186/agentic-memories/actions/workflows/ci.yml/badge.svg)](https://github.com/ankitaa186/agentic-memories/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -17,33 +18,43 @@ and keep stored memories on your own infrastructure.
 
 ## A companion that remembers what matters
 
-Your next conversation can build on what you have already shared. Agentic Memories
-gives a personal AI companion tools to retain useful context and recall it when needed.
+Your companion should not need a manually written memory for every useful detail.
+Pass it a conversation: Agentic Memories evaluates what matters, extracts memories,
+classifies and enriches them, checks for duplicates, and stores the resulting context.
+It can also extract structured profile information from those memories.
 
 | What you need | What Agentic Memories provides |
 | --- | --- |
-| Remember experiences and preferences | Store explicit memories or extract them from conversation transcripts |
+| Learn from natural conversation | LLM-based worthiness assessment and memory extraction |
+| Organize what matters | Classification, enrichment, duplicate checks, and profile extraction |
 | Pick up a conversation later | Persistent memories and structured user profiles |
 | Find relevant context | Semantic recall, time ranges, metadata filters, and structured retrieval |
 | Keep information current | Updates, deletion, expiration, and consolidation |
 | Connect an existing agent | MCP tools over HTTP; a REST interface is also available |
 
-Your agent chooses when to write and retrieve memories, and how to use the returned
-context. Connecting a client alone does not automatically capture every conversation.
+Your application decides which conversations to submit and when to retrieve context.
+The pipeline handles extracting memories from the submitted conversation; connecting
+an MCP client alone does not capture every interaction.
 
-## See memory carry across sessions
+## From conversation to lasting memory
 
-![Verified MCP example: store an evening-walk preference, close the connection, recall it in a new session, and delete the demo record.](docs/assets/mcp-demo.svg)
+![Conversation flows through worthiness assessment, extraction, organization and storage, then later recall.](docs/assets/extraction-pipeline.svg)
 
-**Earlier:** “Evening walks help me unwind. I prefer quiet routes near the water.”
+**In conversation:** “Evening walks help me unwind. I usually take a quiet route by
+the water. When I get home, I like herbal tea and a novel.”
 
-**Later:** “How do I like to unwind?”
+**The pipeline:** identifies useful personal information and produces classified
+memories. The caller supplies conversation turns, not prewritten memory records.
 
-**Recalled context:** The saved preference, ready for your companion's answer.
+**In a later session:** “How do I like to unwind in the evening?” retrieves the
+extracted context for your companion's response.
 
-This is the scenario in the [runnable MCP example](examples/mcp_memory.py): it stores
-one preference, closes the connection, recalls it through a new connection, and deletes
-its demo record. The example prints retrieved content, not a simulated model response.
+The [runnable example](examples/mcp_memory.py) sends a short conversation through
+`store_transcript`, prints the actual extracted memories, then recalls them through a
+new MCP connection. [See the recorded run](examples/mcp-memory-output.txt); wording,
+classification, and memory count can vary with the configured model.
+
+[View the extracted-memory graphic](docs/assets/mcp-demo.svg).
 
 ## Get started
 
@@ -82,15 +93,16 @@ uv sync --locked
 uv run python examples/mcp_memory.py
 ```
 
-The example makes real embedding requests and uses a unique demo user. It cleans up
-its memory in a `finally` block; a one-hour TTL provides a fallback if interrupted.
+The example makes real extraction and embedding requests using a unique demo user.
+It leaves the extracted records available for inspection. Use a dedicated demo scope.
 [Example details and sample output](examples/README.md).
 
 ## Tools for useful context
 
 | Capability | Example MCP tools | Guide |
 | --- | --- | --- |
-| Store and recall | `store_memory_direct`, `store_transcript`, `retrieve` | [Memory lifecycle](docs/guides/memory.md) |
+| Extract from conversation | `store_transcript`, `stream_orchestrator_message` | [Extraction pipeline](docs/guides/memory.md#conversation-extraction) |
+| Recall relevant context | `retrieve`, `retrieve_structured` | [Memory lifecycle](docs/guides/memory.md) |
 | Correct or remove | `patch_memory`, `delete_memory` | [Inputs and results](docs/MCP.md#results-errors-and-mutation-semantics) |
 | User preferences | `get_profile`, `update_profile_field` | [API reference](docs/api-contracts-server.md) |
 | Scheduled follow-ups | `create_intent`, `list_intents`, `claim_intent` | [Concepts](docs/guides/memory.md#scheduled-intents) |
@@ -100,6 +112,9 @@ Discovery currently exposes **39 application operations and 4 documentation tool
 Use `list_tools()` for the current schemas and [the inventory](docs/mcp-route-mapping.json)
 for the complete mapping. Scheduled intents store scheduling/execution state; your
 integrating application supplies the worker that performs the action.
+
+For applications that already produce structured memories, [direct writes](examples/README.md#advanced-direct-write-example)
+provide an advanced path that bypasses extraction.
 
 ## Inspired by human memory
 
@@ -138,7 +153,7 @@ LLM-based extraction, retrieval orchestration, and maintenance.
 
 ## Project status
 
-MCP, memory CRUD, retrieval, profiles, scheduled-intent APIs, and portfolio APIs are
+Conversation extraction, MCP, memory CRUD, retrieval, profiles, scheduled-intent APIs, and portfolio APIs are
 implemented. The [MCP verification report](docs/MCP-verification.md) describes regression
 and live-backend checks, including their limits. Test results are evidence for those
 scenarios, not a throughput benchmark or enterprise certification.

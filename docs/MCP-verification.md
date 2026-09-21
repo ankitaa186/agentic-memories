@@ -63,3 +63,23 @@ The test refuses non-loopback database/cache/Chroma hosts and skips unless expli
 - Full LLM transcript extraction, narrative generation and every operational tool were not executed against live data. Their routing/schemas are covered and representative service behavior has mocked regression coverage. Global destructive/admin operations such as `compact_all_users` were deliberately not run on existing data.
 - No load/soak test or exhaustive multi-worker stress test was performed. The live claim-conflict check verifies sequential conflict behavior, not concurrent-worker throughput.
 - This is the maintained MCP v1 SDK integration, locked to 1.30.0; it does not claim MCP SDK v2 feature coverage.
+
+
+## Follow-up: conversation extraction example (September 21, 2026)
+
+The [main example](../examples/mcp_memory.py) was run against a temporary local API with
+real configured LLM extraction, OpenAI embeddings, PostgreSQL, ChromaDB, and Redis.
+Four conversation turns produced six classified memories; a new MCP connection
+retrieved all six extracted IDs. [The captured output](../examples/mcp-memory-output.txt)
+contains actual model-generated memory content, not a fallback direct write.
+
+The verification harness used a disposable Chroma database and exact generated test-user
+scope. It removed episodic/emotional/procedural rows, profile rows, and Redis state,
+then deleted the disposable database. The public example intentionally retains its
+records for inspection; harness cleanup is not a promise made by the script.
+
+This verifies one natural-conversation extraction/recall scenario. It is not an extraction
+quality benchmark, a guarantee of identical model output, or exhaustive proof that every
+pipeline side effect succeeds. The original report's full-extraction gap is narrowed by
+this follow-up; narrative generation, broader conversation coverage, load testing, and
+live identity/proxy validation still require separate work.

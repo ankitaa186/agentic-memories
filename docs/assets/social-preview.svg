@@ -7,7 +7,7 @@
 <text x="65" y="246" font-size="38" fill="#d4c8e5" font-weight="normal">Memory for your</text>
 <text x="65" y="298" font-size="38" fill="#d4c8e5" font-weight="normal">personal AI companion.</text>
 <rect x="65" y="351" width="950" height="110" rx="14" fill="#191326" stroke="#65517f"/>
-<text x="90" y="394" font-size="27" fill="#f4efff" font-weight="bold">Experiences. Preferences. Continuity.</text>
+<text x="90" y="394" font-size="27" fill="#f4efff" font-weight="bold">Conversation → Extraction → Recall</text>
 <text x="90" y="429" font-size="20" fill="#bcb0cf" font-weight="normal">Self-hosted memory service • MCP + REST</text>
 <text x="65" y="526" font-size="19" fill="#a5b4fc" font-weight="normal">github.com/ankitaa186/agentic-memories</text>
 </g></svg>

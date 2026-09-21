@@ -1,27 +1,43 @@
-"""Store and recall one personal preference across separate MCP connections.
+"""Extract personal memories from conversation, then recall through a new MCP connection.
 
-Run against a local stack: uv run python examples/mcp_memory.py
-Uses real embeddings; removes its own record and sets a fallback one-hour TTL.
+Uses real LLM and embedding requests. Extracted records remain for inspection.
+Use a dedicated demo user; the output identifies that user's scope.
 """
 
 import argparse
 import asyncio
-import json
 import uuid
 from contextlib import asynccontextmanager
 
+import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-PREFERENCE = "Evening walks help me unwind. I prefer quiet routes near the water."
+HISTORY = [
+    {"role": "assistant", "content": "What helps you unwind after a busy day?"},
+    {
+        "role": "user",
+        "content": (
+            "Evening walks help me unwind. I usually take a quiet route by the water "
+            "rather than a busy street. I have kept that habit for years."
+        ),
+    },
+    {"role": "assistant", "content": "What do you enjoy doing when you get home?"},
+    {
+        "role": "user",
+        "content": "I like making herbal tea and reading a novel. I avoid coffee in the evening.",
+    },
+]
 
 
 @asynccontextmanager
 async def connect(url):
-    async with streamable_http_client(url) as (read, write, _):
-        async with ClientSession(read, write) as client:
-            await client.initialize()
-            yield client
+    # Extraction can involve several provider calls; allow a bounded five minutes.
+    async with httpx.AsyncClient(timeout=300) as http:
+        async with streamable_http_client(url, http_client=http) as (read, write, _):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                yield client
 
 
 async def call(client, tool, arguments):
@@ -29,80 +45,63 @@ async def call(client, tool, arguments):
     envelope = result.structuredContent
     if result.isError or not isinstance(envelope, dict):
         raise RuntimeError(f"{tool} failed: {envelope or result.content}")
-    body = envelope.get("body")
-    if envelope.get("status_code", 500) >= 400 or (
-        isinstance(body, dict) and body.get("status") == "error"
-    ):
-        raise RuntimeError(f"{tool} failed: {body}")
-    return body
+    if envelope.get("status_code", 500) >= 400:
+        raise RuntimeError(f"{tool} failed: {envelope}")
+    return envelope["body"]
 
 
-async def demo(url):
-    user_id = f"readme_demo_{uuid.uuid4().hex}"
-    memory_id = None
-    try:
-        async with connect(url) as client:
-            print("SESSION 1 / store_memory_direct")
-            stored = await call(
-                client,
-                "store_memory_direct",
-                {
-                    "body": {
-                        "user_id": user_id,
-                        "content": PREFERENCE,
-                        "layer": "semantic",
-                        "type": "explicit",
-                        "ttl_seconds": 3600,
-                    }
-                },
+async def demo(url, user_id):
+    print(f"Demo user: {user_id}")
+    print("SESSION 1 / store_transcript")
+    for message in HISTORY:
+        print(f"{message['role']}: {message['content']}")
+    async with connect(url) as client:
+        stored = await call(
+            client,
+            "store_transcript",
+            {"body": {"user_id": user_id, "history": HISTORY}},
+        )
+        memories = stored.get("memories") or []
+        ids = set(stored.get("ids") or [])
+        if not ids or not memories:
+            raise RuntimeError(
+                "No new memories extracted. Worthiness, deduplication, and model "
+                "output can change the result; inspect the pipeline before retrying."
             )
-            memory_id = stored.get("memory_id")
-            if not memory_id or not stored.get("storage", {}).get("chromadb"):
-                raise RuntimeError(f"Memory was not persisted: {stored}")
-            print(f"Stored: {PREFERENCE}")
-        print("Connection closed. Opening a new MCP connection.\n")
-
-        async with connect(url) as client:
-            print("SESSION 2 / retrieve")
-            print("Query: How do I like to unwind?")
-            recalled = await call(
-                client,
-                "retrieve",
-                {
-                    "query": {
-                        "user_id": user_id,
-                        "query": "How do I like to unwind?",
-                        "limit": 5,
-                    }
-                },
+        print(f"\nEXTRACTION: {len(ids)} memories returned by the pipeline.")
+        for memory in memories:
+            print(f"EXTRACTED [{memory['layer']}]: {memory['content']}")
+    print("\nConnection closed. Opening a new MCP connection.")
+    async with connect(url) as client:
+        print("SESSION 2 / retrieve")
+        print("Query: How do I like to unwind in the evening?")
+        recalled = await call(
+            client,
+            "retrieve",
+            {
+                "query": {
+                    "user_id": user_id,
+                    "query": "How do I like to unwind in the evening?",
+                    "limit": 10,
+                }
+            },
+        )
+        matches = [item for item in recalled["results"] if item["id"] in ids]
+        if not matches:
+            raise RuntimeError(
+                "The new connection did not recall any extracted memories"
             )
-            match = next(
-                (item for item in recalled["results"] if item["id"] == memory_id),
-                None,
-            )
-            if not match or match["content"] != PREFERENCE:
-                raise RuntimeError("The new connection did not recall the demo memory")
-            print(f"Recalled: {match['content']}")
-            print("PASS: the same preference was recalled through a new connection.")
-    finally:
-        if memory_id:
-            async with connect(url) as client:
-                removed = await call(
-                    client,
-                    "delete_memory",
-                    {"path": {"memory_id": memory_id}, "query": {"user_id": user_id}},
-                )
-                if not removed.get("deleted"):
-                    raise RuntimeError(f"Demo cleanup failed: {json.dumps(removed)}")
-                remaining = await call(
-                    client, "retrieve", {"query": {"user_id": user_id}}
-                )
-                if remaining["results"]:
-                    raise RuntimeError("Demo records remain after cleanup")
-                print("CLEANUP: demo memory deleted; no demo memories remain.")
+        for item in matches:
+            print(f"RECALLED [{item['layer']}]: {item['content']}")
+        print("PASS: recalled pipeline-extracted memories through a new connection.")
+    print(
+        "Demo records remain for inspection; this script does not delete extracted data."
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://localhost:8080/mcp")
-    asyncio.run(demo(parser.parse_args().url))
+    parser.add_argument("--user-id", default=f"readme_extraction_{uuid.uuid4().hex}")
+    arguments = parser.parse_args()
+    asyncio.run(demo(arguments.url, arguments.user_id))

@@ -1,7 +1,7 @@
 # Documentation
 
 Agentic Memories provides biomimetic memory for personal AI companions. Start with MCP
-to retain experiences and preferences across conversations, using self-hosted storage.
+to extract experiences and preferences from conversations, using self-hosted storage.
 REST is a supported alternative.
 
 ## Start here

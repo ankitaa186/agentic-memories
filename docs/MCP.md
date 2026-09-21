@@ -9,6 +9,16 @@ revision determines availability; source documentation is not a deployment recor
 
 The existing FastAPI process serves Streamable HTTP at **`http://localhost:8080/mcp`** (substitute the existing server's host/port). Start the API with its normal configuration and command. There is no additional process or listening port. `uv sync --locked` installs the SDK; Docker uses the regenerated `requirements.txt`.
 
+## Start with conversation extraction
+
+For a personal companion, use `store_transcript` to submit conversation turns. The
+pipeline evaluates worthiness, extracts and organizes memories, checks for duplicates,
+and builds profile context where applicable. Then use `retrieve` to recall useful context.
+[Run the extraction example](../examples/README.md) or read [the pipeline guide](guides/memory.md#conversation-extraction).
+
+`store_memory_direct` is an advanced bypass for applications that already produce
+memory records; it does not exercise conversation extraction.
+
 ## Connect and use
 
 Configure an MCP client's **Streamable HTTP / HTTP** server URL as `http://localhost:8080/mcp`. This is not a stdio or legacy SSE endpoint. No trailing slash is needed. The transport accepts JSON responses; clients must send `Accept: application/json, text/event-stream` and `Content-Type: application/json`. The official SDK handles initialization and protocol headers:

@@ -26,8 +26,10 @@ is maintained by `scripts/export_mcp_inventory.py`.
 | LangGraph | Ingestion and maintenance orchestration |
 | Optional Langfuse | LLM tracing and observability |
 
-A direct memory write embeds known content and stores it. Transcript ingestion adds
-selection/extraction stages. Retrieval searches the relevant stores and returns context;
+The main ingestion path evaluates conversation worthiness, extracts and classifies
+memories, enriches and embeds them, checks for duplicates, derives profile fields, and
+stores the results. Direct writes are an advanced path for known content that bypasses
+conversation extraction. Retrieval searches the relevant stores and returns context;
 the calling agent decides how to use it. Some operations span multiple stores, so callers
 must inspect operation-level status as well as transport success.
 

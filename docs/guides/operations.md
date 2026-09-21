@@ -58,7 +58,8 @@ docker compose ps
 
 `checks.timescale_pool` exposes connection-pool statistics when available. For MCP,
 use the [example](../../examples/README.md) or the [verification suite](../MCP-verification.md).
-The example performs a small real write and embedding calls, then removes its record.
+The main example performs real extraction and embedding calls and leaves demo records
+for inspection. Run it under a dedicated demo user.
 
 ## Releases and deployments
 

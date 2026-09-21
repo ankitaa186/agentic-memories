@@ -35,16 +35,17 @@ curl --fail http://localhost:8080/health/full
 MCP is at `http://localhost:8080/mcp`; the API reference is at
 `http://localhost:8080/docs`; the UI is at `http://localhost:3000`.
 
-## Store a preference, then recall it
+## Extract memories from a conversation
 
 ```bash
 uv sync --locked
 uv run python examples/mcp_memory.py
 ```
 
-The [example](../../examples/README.md) closes its first MCP connection before opening
-a second one. It checks that the stored preference is returned, then removes it. This
-uses the real storage and embedding provider configured in your running service.
+The [example](../../examples/README.md) submits a short conversation to the extraction
+pipeline, prints the extracted memories, then closes the connection and recalls those
+records through a new connection. This uses real LLM, embedding, and storage services.
+Records remain available under the printed demo user ID for inspection.
 
 ## Connect your application
 
@@ -52,8 +53,9 @@ Add an HTTP / Streamable HTTP MCP server in your client and set its URL to
 `http://localhost:8080/mcp`. Initialize the connection and discover tools. A client on
 another computer needs your server's reachable address and the [remote access configuration](../MCP.md#access-controls-and-hosting).
 
-Your agent must be instructed or implemented to store useful context, retrieve it for
-later tasks, and use the returned information in its prompt. A memory tool connection
+Your companion must be configured to submit relevant conversations, retrieve context
+for later tasks, and use the returned information in its prompt. The extraction
+pipeline decides what memories to create from each submitted conversation. A memory tool connection
 is not automatic ingestion of every interaction.
 
 ## Troubleshooting

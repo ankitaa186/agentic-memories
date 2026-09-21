@@ -80,11 +80,12 @@ def main():
         ns = {"svg": "http://www.w3.org/2000/svg"}
         if tree.find("svg:title", ns) is None or tree.find("svg:desc", ns) is None:
             errors.append(f"{asset.name}: missing accessible title/description")
-    ast.parse((ROOT / "examples/mcp_memory.py").read_text())
+    for example_path in (ROOT / "examples").glob("*.py"):
+        ast.parse(example_path.read_text())
     inventory = json.loads((ROOT / "docs/mcp-route-mapping.json").read_text())
     tools = {item["tool"] for item in inventory}
     example = (ROOT / "examples/mcp_memory.py").read_text()
-    for tool in ("store_memory_direct", "retrieve", "delete_memory"):
+    for tool in ("store_transcript", "retrieve"):
         if tool not in tools or f'"{tool}"' not in example:
             errors.append(f"Demo tool missing from inventory/example: {tool}")
     readme = (ROOT / "README.md").read_text()

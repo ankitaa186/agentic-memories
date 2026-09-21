@@ -1,9 +1,26 @@
-SESSION 1 / store_memory_direct
-Stored: Evening walks help me unwind. I prefer quiet routes near the water.
-Connection closed. Opening a new MCP connection.
+Demo user: mcp_test_91d16eb6138c444fbb2415d2408d16cb
+SESSION 1 / store_transcript
+assistant: What helps you unwind after a busy day?
+user: Evening walks help me unwind. I usually take a quiet route by the water rather than a busy street. I have kept that habit for years.
+assistant: What do you enjoy doing when you get home?
+user: I like making herbal tea and reading a novel. I avoid coffee in the evening.
 
+EXTRACTION: 6 memories returned by the pipeline.
+EXTRACTED [procedural]: User unwinds after busy days by taking evening walks.
+EXTRACTED [semantic]: User prefers a quiet walking route by the water rather than busy streets.
+EXTRACTED [semantic]: User has maintained the habit of taking evening walks for years.
+EXTRACTED [semantic]: User likes making herbal tea when they get home.
+EXTRACTED [semantic]: User enjoys reading a novel after getting home.
+EXTRACTED [semantic]: User avoids coffee in the evening.
+
+Connection closed. Opening a new MCP connection.
 SESSION 2 / retrieve
-Query: How do I like to unwind?
-Recalled: Evening walks help me unwind. I prefer quiet routes near the water.
-PASS: the same preference was recalled through a new connection.
-CLEANUP: demo memory deleted; no demo memories remain.
+Query: How do I like to unwind in the evening?
+RECALLED [procedural]: User unwinds after busy days by taking evening walks.
+RECALLED [semantic]: User likes making herbal tea when they get home.
+RECALLED [semantic]: User enjoys reading a novel after getting home.
+RECALLED [semantic]: User avoids coffee in the evening.
+RECALLED [semantic]: User has maintained the habit of taking evening walks for years.
+RECALLED [semantic]: User prefers a quiet walking route by the water rather than busy streets.
+PASS: recalled pipeline-extracted memories through a new connection.
+Demo records remain for inspection; this script does not delete extracted data.
