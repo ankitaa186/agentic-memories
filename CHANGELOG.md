@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased — MCP integration
+
+- Added the preferred MCP agent interface at `/mcp`, using Streamable HTTP in the existing FastAPI process and port. All 39 application operations and four framework documentation endpoints are discoverable tools; REST remains supported.
+- Reuses the FastAPI request pipeline for validation, user scoping, credentials, responses and errors; integrates the SDK lifecycle and synchronized dependencies.
+- Added [client/configuration guidance](docs/MCP.md), a [route/tool inventory](docs/mcp-route-mapping.json), and protocol/regression tests. Remote deployments must protect `/mcp` with appropriate proxy access controls, including administrative operations.
+- Documentation now leads with MCP while retaining REST examples and clearly identifying older deferred-MCP plans. These changes describe this revision, not a tagged release or completed deployment.
+
 ## Changes on main — June 21–September 21, 2026
 
 ### Added

@@ -1,4 +1,24 @@
 # Architecture Document
+
+## Current integration: MCP (September 2026)
+
+**MCP is implemented and preferred for agent clients at `http://localhost:8080/mcp`, using Streamable HTTP in the existing FastAPI process and port.** [The MCP guide](MCP.md) is authoritative for setup, access controls, all 43 tools, and protocol behavior. REST remains supported and is the shared underlying request pipeline.
+
+`src/app.py` installs `src/mcp_interface.py` after REST registration. Discovery derives typed schemas from OpenAPI. Calls execute through the same in-process FastAPI ASGI pipeline, preserving middleware, dependencies, user scoping and response/error handling. The MCP session manager shares FastAPI's lifespan. No second service, port 8081, registry database or loopback HTTP connection is required.
+
+```text
+Agent / MCP client -- Streamable HTTP /mcp -- MCP tool adapter --+
+                                                               |
+REST client / Web UI -- REST routes ----------------------------+--> FastAPI pipeline
+                                                                    --> services --> stores
+```
+
+Remote deployment must protect `/mcp` (including administrative tools), not only `/v1/*`; host/origin allowlists are separate from authentication. The current API has no global identity enforcement. The source implementation has protocol/regression tests; this documentation does not assert a live deployment.
+
+### Historical architecture below
+
+The 2025 scope and deferred sections below are retained as historical planning. Their standalone port-8081 MCP server, `GET /mcp/discovery`, custom `/mcp/tools/*` endpoints and smart-aggregation tools are **not the implemented contract**. Discovery uses standard MCP `tools/list` at `/mcp`. Advanced aggregation, dedicated MCP caches/analytics and OAuth plans are not marked complete by this transport implementation.
+
 ## Agentic Memories v3.0 - User Profiles API
 
 **Version:** 3.0 (API-First MVP)

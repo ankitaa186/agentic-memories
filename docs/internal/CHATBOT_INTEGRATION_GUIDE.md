@@ -1,12 +1,54 @@
 # Integration Guide
 
-Give your AI agent persistent memory in under 5 minutes.
+**MCP is the preferred integration for agents.** Connect to `http://localhost:8080/mcp` with Streamable HTTP after starting the [API stack](../../README.md#-quick-start). It shares the FastAPI process and port. Direct REST remains a supported alternative and is the underlying pipeline for every tool.
 
-Agentic Memories is a REST API. You store memories by sending conversations in, and retrieve them by querying. Everything below assumes the service is running at `http://localhost:8080` (see [Quick Start](../../README.md#-quick-start) to get there).
+## MCP quickstart (preferred)
+
+Install dependencies with `uv sync --locked`, save this Python example, and execute it with `uv run python <filename>.py` against a server build containing MCP. It creates a demonstration memory.
+
+```python
+import asyncio
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async def main():
+    async with streamable_http_client("http://localhost:8080/mcp") as (read, write, _):
+        async with ClientSession(read, write) as client:
+            await client.initialize()
+            print([tool.name for tool in (await client.list_tools()).tools])
+            stored = await client.call_tool("store_transcript", {
+                "body": {"user_id": "demo_user", "history": [
+                    {"role": "user", "content": "I enjoy baking sourdough bread."}
+                ]}
+            })
+            if stored.isError:
+                raise RuntimeError(stored.structuredContent)
+            recalled = await client.call_tool("retrieve", {
+                "query": {"user_id": "demo_user", "query": "bread", "limit": 5}
+            })
+            if recalled.isError:
+                raise RuntimeError(recalled.structuredContent)
+            print(recalled.structuredContent["body"])
+
+asyncio.run(main())
+```
+
+The 43 discovered tools cover all 39 application operations plus four documentation endpoints. Parameters are grouped as `path`, `query`, and `body`; response envelopes contain `status_code`, `body`, and `content_type`. Credentials come from the HTTP client's headers/cookies, never from tool arguments. See [MCP connection/configuration](../MCP.md) and [the complete tool inventory](../mcp-route-mapping.json).
+
+Use `stream_orchestrator_message` for adaptive ingestion, `store_memory_direct` for explicit records, `get_profile`/`get_portfolio` for structured context, and `create_intent` for scheduling. All tool schemas are discoverable; deletion, claim/fire and maintenance tools have real side effects.
+
+The API does not enforce global authentication. Apply proxy access controls to `/mcp`, including administrative operations, and configure remote host/origin allowlists as described in [access controls](../MCP.md#access-controls-and-hosting). This change is implemented in the source revision; existing deployments require an updated build. No deployment is implied.
+
+## Direct REST alternative
+
+The remaining sections document supported REST patterns at `http://localhost:8080`. The same bodies, query parameters, scoping and service behavior are reused by MCP.
 
 ---
 
 ## Table of Contents
+
+- [MCP quickstart (preferred)](#mcp-quickstart-preferred)
+- [Direct REST alternative](#direct-rest-alternative)
 
 1. [Quickstart: 3 Calls to Persistent Memory](#1-quickstart-3-calls-to-persistent-memory)
 2. [Storing Memories](#2-storing-memories)

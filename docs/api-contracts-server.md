@@ -1,5 +1,18 @@
 # API Contracts - Backend API (Server)
 
+## MCP integration (preferred)
+
+Use **Streamable HTTP at `http://localhost:8080/mcp`** for agent integration. It runs in the same process and on the same port as the REST routes below. The official SDK handles initialization, `tools/list` discovery and `tools/call`; [MCP.md](MCP.md) provides runnable client setup and the full mapping of **39 application operations + 4 documentation endpoints**.
+
+For example, `retrieve` takes `{"query":{"user_id":"alice","query":"preferences","limit":5}}`; `get_portfolio` takes `{"query":{"user_id":"alice"}}`. Request bodies go in `body`, URL placeholders in `path`. Results contain `status_code`, `body` and `content_type`; HTTP errors set `isError: true`. See [the machine-readable inventory](mcp-route-mapping.json) for exact schemas and routes.
+
+This is implemented source support, not confirmation of a deployment. Protect `/mcp` with the appropriate proxy access controls, including administrative tools; the API has no global authentication enforcement. See [hosting and access controls](MCP.md#access-controls-and-hosting).
+
+## REST interface (supported alternative)
+
+The endpoint reference below describes the shared underlying REST interface. It is a curated reference; the inventory and live OpenAPI schema enumerate the complete surface.
+
+
 **Part:** Backend API (server)
 **Technology:** Python 3.12+, FastAPI 0.111.0
 **Base URL:** `http://localhost:8080`

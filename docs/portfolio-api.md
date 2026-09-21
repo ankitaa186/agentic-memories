@@ -1,5 +1,25 @@
 # Equity and options portfolio API
 
+## MCP integration (preferred)
+
+Connect an MCP client to `http://localhost:8080/mcp` using Streamable HTTP; the existing API process serves both transports on the same port. Use `get_portfolio`, `add_holding`, `update_holding`, `delete_holding`, `clear_portfolio`, and `portfolio_summary`. See [client setup and access controls](MCP.md) and [all tool schemas](mcp-route-mapping.json).
+
+With an initialized `ClientSession` named `client`:
+
+```python
+result = await client.call_tool("get_portfolio", {"query": {"user_id": "user_123"}})
+if result.isError:
+    raise RuntimeError(result.structuredContent)
+print(result.structuredContent["body"])
+```
+
+To create/upsert an equity, call `add_holding` with `{"body":{"user_id":"user_123","asset_class":"equity","ticker":"AAPL","shares":100,"avg_price":175}}`. This mutates the portfolio. For update/delete, put `position_key` in `path` and use the discovered body/query schema for user scoping. The original HTTP status (including create versus upsert) is preserved in `structuredContent.status_code`.
+
+## REST alternative and shared portfolio semantics
+
+The REST examples below remain supported. The schema/migration requirements, position identity, option behavior and confirmation rules apply equally through MCP.
+
+
 The explicit portfolio CRUD API stores positions in PostgreSQL. Options support requires [migration 025](../migrations/postgres/025_options_support.up.sql). The request and response models live in [the portfolio router](../src/routers/portfolio.py); lifecycle and symbol helpers live in [the portfolio service](../src/services/portfolio_service.py).
 
 ## Create or upsert

@@ -1,4 +1,6 @@
-# MCP interface
+# MCP interface (preferred agent integration)
+
+**MCP is the preferred integration for agents; direct REST remains a supported alternative.** This interface is implemented in this source revision. Existing deployments require an updated build; no deployment is implied.
 
 The existing FastAPI process serves Streamable HTTP at **`http://localhost:8080/mcp`** (substitute the existing server's host/port). Start the API with its normal configuration and command. There is no additional process or listening port. `uv sync --locked` installs the SDK; Docker uses the regenerated `requirements.txt`.
 
@@ -137,4 +139,6 @@ uv run ruff check src/mcp_interface.py tests/unit/test_mcp_interface.py scripts/
 
 The MCP tests exercise discovery/coverage, SDK client interoperability, schema validation, host/origin restrictions, per-call identity, ingestion, deletion/204/404, memory ownership, operational calls and lifespan. MCP tests use mocked backend services; a live Chroma/Postgres/Redis/LLM deployment is not needed for these checks.
 
-Verified on Python 3.12.3: the selected regression suite passed **839 tests** with **one existing database-dependent skip**. The final focused MCP suite passed **12 tests**, including a subsequently added backend-unavailable check. Dependency validation (`uv pip check`), lock consistency, Ruff and `git diff --check` passed. No live database/LLM end-to-end deployment was performed. README and project descriptions are intentionally untouched to avoid overlap with the parallel documentation task; only the dependency block of `pyproject.toml` changes.
+Verified on Python 3.12.3: **840 regression tests passed**, with one existing database-dependent skip. The focused MCP suite contains 12 passing tests. A separate **live backend test passed** against a temporary loopback Uvicorn process sharing one port for MCP and REST, using PostgreSQL, ChromaDB, Redis and real OpenAI embeddings. It covered portfolio/profile/intent CRUD, intent claim conflicts and execution history, memory create/patch/semantic retrieval/delete, ownership errors, null-TTL persistence and Redis cache invalidation. Disposable records, cache entries and the Chroma database were removed.
+
+See [the verification report](MCP-verification.md) for exact commands, coverage and remaining gaps. No existing API service was restarted or deployed. The README, integration guides and project description lead with MCP; historical deferred-MCP plans are explicitly identified as historical. The earlier documentation refresh is retained, including portfolio options, schema and recent-enhancement guidance.

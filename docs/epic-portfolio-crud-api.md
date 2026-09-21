@@ -1,5 +1,8 @@
 # Epic 3: Portfolio Direct CRUD API
 
+> **Implementation update — September 2026:** MCP is now implemented at `/mcp` in the existing API process and port, and is the preferred agent integration. See [MCP.md](MCP.md) for the actual 43-tool contract and access controls. The planning content below is historical: deferred MCP language, custom discovery/tool URLs, standalone servers, and proposed aggregation tools do not describe the current implementation. This update does not mark those broader epics complete or claim deployment.
+
+
 **Epic ID:** 3
 **Author:** Claude Code (Based on team discussion 2025-12-12)
 **Status:** Proposed

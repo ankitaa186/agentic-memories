@@ -9,6 +9,10 @@ Reviewed `main` through `47dab51d67efa1699e3bdd9f0a8ff305d96e09df` against the c
 | August 6 | [d394fe8](https://github.com/ankitaa186/agentic-memories/commit/d394fe8d1c41be33c3e711e27916c44552746c9d) | Options positions and migration 025 |
 | September 18 | [47dab51](https://github.com/ankitaa186/agentic-memories/commit/47dab51d67efa1699e3bdd9f0a8ff305d96e09df) | Retrieval relevance, procedural recall, deduplication, API-only update target |
 
+## Subsequent MCP integration
+
+The MCP implementation in this revision is separate from the `main` history inventory above. Agent clients should now start with [MCP at `/mcp`](MCP.md): same process/port as FastAPI, 43 discoverable tools covering every application operation and framework documentation endpoint. REST remains supported. This is an implementation/documentation update, not a claim of production deployment; proxy access controls must also cover `/mcp`.
+
 ## Retrieval relevance
 
 Ordinary text queries using hybrid or semantic retrieval, without a time range or emotional context, now sort by measured cosine similarity. Baseline semantic search also calculates cosine from the returned embeddings. The code does not assume that `1 - distance` represents cosine similarity: an existing Chroma collection may use squared L2 distance even if descriptive metadata says cosine.

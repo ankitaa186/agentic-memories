@@ -2,13 +2,14 @@
 
 <div align="center">
 
-**Persistent memory for AI agents with semantic retrieval, user profiles, scheduled intents, and equity/options portfolio tracking.**
+**Persistent memory for AI agents through MCP, with semantic retrieval, user profiles, scheduled intents, and equity/options portfolio tracking. REST is also supported.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 
+[Connect with MCP](#connect-with-mcp-preferred) •
 [Features](#-features) •
 [Vision](#-the-vision) •
 [Quick Start](#-quick-start) •
@@ -19,6 +20,14 @@
 </div>
 
 ---
+
+## Connect with MCP (preferred)
+
+Connect your agent or MCP-compatible client to **`http://localhost:8080/mcp`** using **Streamable HTTP**. MCP runs inside the existing FastAPI process on the same port: no separate MCP service is needed. Start the stack with [Quick Start](#-quick-start), then configure your client's HTTP server URL and initialize the connection.
+
+Discovery exposes **43 tools**: all 39 application operations plus four documentation endpoints. Store/retrieve memories, manage profiles and portfolios, schedule/fire intents, and run maintenance through typed tools. Use [the MCP connection guide](docs/MCP.md) for client setup, arguments, results, credentials, and the complete route-to-tool mapping. [Direct REST](#direct-rest-alternative) remains supported and provides the shared underlying request pipeline.
+
+**Availability:** MCP is implemented in this revision. Existing deployments need an image/build containing this change; this documentation does not claim that a hosted instance has been upgraded. For remote access, configure MCP host/origin allowlists and protect **`/mcp`** with the appropriate proxy access controls, including administrative operations. Protecting only `/v1/*` is insufficient; see [access controls](docs/MCP.md#access-controls-and-hosting).
 
 ## Recent enhancements (June–September 2026)
 
@@ -145,6 +154,8 @@ This is implemented today via the compaction system (`POST /v1/maintenance/compa
 
 ### 🛠️ Technical Features
 
+- **MCP integration (preferred)** — Streamable HTTP at `/mcp`, sharing the API process and port; typed discovery covers every application operation.
+
 - **⚡ High Performance**
   - Sub-second simple queries (ChromaDB only)
   - Hybrid multi-database queries for complex narratives
@@ -178,13 +189,13 @@ This is implemented today via the compaction system (`POST /v1/maintenance/compa
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                         CLIENT                                   │
-│              (Web UI / API / Chatbot Integration)                │
+│              (MCP Agents / Web UI / REST Clients)               │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                    AGENTIC MEMORIES API                          │
-│                        (FastAPI)                                 │
+│                  (FastAPI: /mcp + REST)                         │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────┐       │
@@ -298,7 +309,8 @@ curl -s http://localhost:8080/health/full | python3 -m json.tool
 
 | Service | URL |
 |---------|-----|
-| API | http://localhost:8080 |
+| **MCP (preferred)** | **http://localhost:8080/mcp** — Streamable HTTP |
+| REST API (alternative) | http://localhost:8080 |
 | API Docs (Swagger) | http://localhost:8080/docs |
 | Web UI | http://localhost:3000 |
 | TimescaleDB | `localhost:5432` |
@@ -340,34 +352,60 @@ For more troubleshooting, see [migrations/README.md](migrations/README.md).
 
 ---
 
-### Try Your First Memory!
+### Try Your First Memory with MCP
 
-```bash
-curl -X POST http://localhost:8080/v1/store \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "demo_user",
-    "history": [
-      {
-        "role": "user",
-        "content": "I just learned how to make sourdough bread! It took 3 days but the result was amazing. My family loved it."
-      }
-    ]
-  }' | jq
-```
+After starting a build containing MCP, install the checkout's Python dependencies with `uv sync --locked` ([uv installation](https://docs.astral.sh/uv/getting-started/installation/)). Save this example as `mcp_demo.py` and run `uv run python mcp_demo.py`. It stores a memory for `demo_user` and retrieves it; this performs a real write when connected to your server.
 
-Retrieve it:
-```bash
-curl "http://localhost:8080/v1/retrieve?user_id=demo_user&query=bread&limit=5" | jq
+```python
+import asyncio
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async def main():
+    async with streamable_http_client("http://localhost:8080/mcp") as (read, write, _):
+        async with ClientSession(read, write) as client:
+            await client.initialize()
+            print([tool.name for tool in (await client.list_tools()).tools])
+            stored = await client.call_tool("store_transcript", {
+                "body": {"user_id": "demo_user", "history": [
+                    {"role": "user", "content": "I enjoy baking sourdough bread."}
+                ]}
+            })
+            if stored.isError:
+                raise RuntimeError(stored.structuredContent)
+            recalled = await client.call_tool("retrieve", {
+                "query": {"user_id": "demo_user", "query": "bread", "limit": 5}
+            })
+            if recalled.isError:
+                raise RuntimeError(recalled.structuredContent)
+            print(recalled.structuredContent["body"])
+
+asyncio.run(main())
 ```
 
 ---
 
 ## 📖 Integration Guide
 
-Give your AI agent persistent memory in under 5 minutes. Store conversation turns, retrieve relevant context, inject into your LLM. For the full detailed guide with advanced patterns, see [docs/internal/CHATBOT_INTEGRATION_GUIDE.md](docs/internal/CHATBOT_INTEGRATION_GUIDE.md).
+Use **MCP first** for agent integration: initialize a Streamable HTTP client at `/mcp`, discover tools with `list_tools()`, then invoke tools with `call_tool()`. See [the runnable example above](#try-your-first-memory-with-mcp) and [the detailed integration guide](docs/internal/CHATBOT_INTEGRATION_GUIDE.md).
 
-### Quickstart: 3 Calls to Persistent Memory
+| Workflow | MCP tool | Arguments |
+|---|---|---|
+| Adaptive conversation ingestion | `stream_orchestrator_message` | `body` with conversation, role, content, metadata |
+| Transcript ingestion | `store_transcript` | `body` with user ID and history |
+| Direct memory write / patch / delete | `store_memory_direct`, `patch_memory`, `delete_memory` | See discovery for body, path and user scope |
+| Recall / narrative | `retrieve`, `retrieve_persona`, `retrieve_structured`, `narrative` | Query or body matching the selected tool |
+| Profile / portfolio | `get_profile`, `get_portfolio`, `add_holding`, `update_holding` | Explicit user ID plus operation fields |
+| Scheduled intents | `create_intent`, `list_intents`, `fire_intent`, `claim_intent` | Typed scheduling/execution arguments |
+| Operations | `health`, `health_full`, `compact_single_user`, `compact_all_users` | Discovery identifies reads and mutations |
+
+Tool responses include `status_code`, `body`, and `content_type`. Check `isError` and the returned body. Write/delete/maintenance calls retain REST mutation semantics; do not retry automatically. Discovery and [the complete inventory](docs/mcp-route-mapping.json) are authoritative for all 43 tools.
+
+### Direct REST alternative
+
+The following HTTP examples remain supported for services that prefer REST. Their request bodies and query parameters also map to MCP `body` and `query` arguments. Selecting the orchestrator is an ingestion strategy independent of the transport.
+
+#### REST quickstart: store and retrieve
 
 ```bash
 # 1. Store a conversation turn (orchestrator — recommended)
@@ -1192,7 +1230,8 @@ See the [current field reference](docs/data-models-server.md#portfolio_holdings)
 ```
 agentic-memories/
 ├── src/
-│   ├── app.py                    # FastAPI application & endpoints
+│   ├── app.py                    # FastAPI application, REST + MCP lifespan
+│   ├── mcp_interface.py          # Same-port MCP transport and tool discovery
 │   ├── config.py                 # Configuration management
 │   ├── models.py                 # Pydantic models
 │   ├── schemas.py                # API schemas
@@ -1310,8 +1349,11 @@ docker compose logs -f api   # Follow API logs
 - [**Deployment Results**](docs/internal/DEPLOYMENT_TEST_RESULTS.md) - Testing and verification
 - [**Migration Guide**](migrations/README.md) - Database migration system
 
-### API Reference
+### Integration Reference
 
+- **[MCP (preferred)](docs/MCP.md)**: client setup, tools, examples, access controls and coverage
+- **[Tool/route inventory](docs/mcp-route-mapping.json)**: exact method, path, tool and schemas
+- **[REST contracts (alternative)](docs/api-contracts-server.md)**: underlying HTTP interface
 - **OpenAPI Docs**: http://localhost:8080/docs (Swagger UI)
 - **ReDoc**: http://localhost:8080/redoc
 

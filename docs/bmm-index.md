@@ -1,5 +1,15 @@
 # Agentic Memories - Project Documentation Index
 
+## Start here: MCP (preferred)
+
+- [MCP connection guide](MCP.md) — same-process, same-port Streamable HTTP at `http://localhost:8080/mcp`; 43 tools, client examples and access controls.
+- [Agent integration guide](internal/CHATBOT_INTEGRATION_GUIDE.md) — MCP first, REST patterns as an alternative.
+- [Tool/route inventory](mcp-route-mapping.json) — all 39 application operations plus four documentation endpoints.
+- [Current architecture and historical design](architecture.md) — distinguishes implemented MCP from older deferred plans.
+
+MCP support is implemented in the source revision; a deployed instance must be rebuilt with that revision. The generated 2025 index below retains historical context.
+
+
 **Generated:** 2025-11-15
 **Project Type:** Multi-part (Backend API + Web UI)
 **Primary Language:** Python (Backend) + TypeScript (Frontend)
@@ -33,7 +43,7 @@
 - **[Integration Architecture](./integration-architecture.md)** _(To be generated)_ - How backend and frontend communicate
 
 ### API & Data
-- [API Contracts - Backend](./api-contracts-server.md) - All 15 REST API endpoints documented
+- [API Contracts - Backend](./api-contracts-server.md) - MCP entry point and supported REST endpoint reference
 - [Data Models - Backend](./data-models-server.md) - Complete database schema (11 tables across 3 databases)
 
 ### Components & UI

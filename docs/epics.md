@@ -1,5 +1,8 @@
 # Agentic Memories v3.0 - Epic Breakdown
 
+> **Implementation update — September 2026:** MCP is now implemented at `/mcp` in the existing API process and port, and is the preferred agent integration. See [MCP.md](MCP.md) for the actual 43-tool contract and access controls. The planning content below is historical: deferred MCP language, custom discovery/tool URLs, standalone servers, and proposed aggregation tools do not describe the current implementation. This update does not mark those broader epics complete or claim deployment.
+
+
 **Author:** Ankit
 **Date:** 2025-11-16 (Revised)
 **Project Level:** BMad Method (Brownfield Enhancement)

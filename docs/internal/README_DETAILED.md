@@ -1,5 +1,8 @@
 # Agentic Memories: The Digital Soul Architecture 🧠✨
 
+> **Historical design document:** For current integration, start with [MCP (preferred)](../MCP.md) or the [root README](../../README.md). The implemented transport is Streamable HTTP at `/mcp` in the existing API process/port; REST remains supported. Design and deployment statements below retain their original historical context.
+
+
 ## Table of Contents
 
 1. [The Grand Vision: Why This Matters](#the-grand-vision-why-this-matters)
