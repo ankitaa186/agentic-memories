@@ -46,7 +46,11 @@ def _make_event(idx: int, metadata: Dict[str, str] | None = None) -> MessageEven
     )
 
 
-def test_ingestion_batches_scale_with_volume() -> None:
+def test_ingestion_batches_scale_with_volume(monkeypatch) -> None:
+    # This test asserts raw-message batching, independent of API-key environment.
+    monkeypatch.setattr(
+        "src.memory_orchestrator.ingestion.is_llm_configured", lambda: False
+    )
     recorder = PersistRecorder()
     policy = IngestionPolicy(
         low_volume_cutoff=2,

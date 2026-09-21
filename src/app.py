@@ -181,10 +181,12 @@ async def lifespan(app: FastAPI):
     # Startup: Start scheduler
     _start_scheduler()
 
-    yield
-
-    # Shutdown: Close memory orchestrator
-    await _memory_orchestrator.shutdown()
+    try:
+        async with app.state.mcp.lifespan():
+            yield
+    finally:
+        # Always close the orchestrator, including on transport shutdown errors.
+        await _memory_orchestrator.shutdown()
 
 
 app = FastAPI(title="Agentic Memories API", version="0.1.0", lifespan=lifespan)
@@ -2256,3 +2258,9 @@ def compact_single_user(
             "status": "failed",
             "error": str(exc),
         }
+
+
+# Install after every REST route so discovery includes the complete API.
+from src.mcp_interface import install_mcp  # noqa: E402
+
+app.state.mcp = install_mcp(app)

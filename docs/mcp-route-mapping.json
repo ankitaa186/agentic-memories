@@ -1,0 +1,5673 @@
+[
+  {
+    "tool": "get_profile",
+    "method": "GET",
+    "path": "/v1/profile",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "include_metadata",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "If true, include `field_metadata` mirror with per-field timestamps",
+          "default": false,
+          "title": "Include Metadata"
+        },
+        "description": "If true, include `field_metadata` mirror with per-field timestamps"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProfileResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "include_metadata": {
+              "type": "boolean",
+              "description": "If true, include `field_metadata` mirror with per-field timestamps",
+              "default": false,
+              "title": "Include Metadata"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "delete_profile",
+    "method": "DELETE",
+    "path": "/v1/profile",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "confirmation",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "Must be 'DELETE' to confirm deletion",
+          "title": "Confirmation"
+        },
+        "description": "Must be 'DELETE' to confirm deletion"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DeleteResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "confirmation": {
+              "type": "string",
+              "description": "Must be 'DELETE' to confirm deletion",
+              "title": "Confirmation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id",
+            "confirmation"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_profile_completeness",
+    "method": "GET",
+    "path": "/v1/profile/completeness",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "details",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "If true, return per-category breakdown and high-value gaps",
+          "default": false,
+          "title": "Details"
+        },
+        "description": "If true, return per-category breakdown and high-value gaps"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CompletenessResponse"
+                },
+                {
+                  "$ref": "#/components/schemas/DetailedCompletenessResponse"
+                }
+              ],
+              "title": "Response Get Profile Completeness V1 Profile Completeness Get"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "details": {
+              "type": "boolean",
+              "description": "If true, return per-category breakdown and high-value gaps",
+              "default": false,
+              "title": "Details"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_profile_category",
+    "method": "GET",
+    "path": "/v1/profile/{category}",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "category",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Category"
+        }
+      },
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "include_metadata",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "If true, include `field_metadata` map with per-field timestamps",
+          "default": false,
+          "title": "Include Metadata"
+        },
+        "description": "If true, include `field_metadata` map with per-field timestamps"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CategoryResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "title": "Category"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "category"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "include_metadata": {
+              "type": "boolean",
+              "description": "If true, include `field_metadata` map with per-field timestamps",
+              "default": false,
+              "title": "Include Metadata"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "update_profile_field",
+    "method": "PUT",
+    "path": "/v1/profile/{category}/{field_name}",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "category",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Category"
+        }
+      },
+      {
+        "name": "field_name",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Field Name"
+        }
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/UpdateFieldRequest"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FieldUpdateResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "title": "Category"
+            },
+            "field_name": {
+              "type": "string",
+              "title": "Field Name"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "field_name"
+          ]
+        },
+        "body": {
+          "$ref": "#/$defs/UpdateFieldRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "body"
+      ],
+      "$defs": {
+        "UpdateFieldRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "value": {
+              "title": "Value"
+            },
+            "source": {
+              "type": "string",
+              "title": "Source",
+              "default": "manual"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id",
+            "value"
+          ],
+          "title": "UpdateFieldRequest",
+          "description": "Request model for updating a single profile field"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "delete_profile_field",
+    "method": "DELETE",
+    "path": "/v1/profile/{category}/{field_name}",
+    "source": "src/routers/profile.py",
+    "parameters": [
+      {
+        "name": "category",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Category"
+        }
+      },
+      {
+        "name": "field_name",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Field Name"
+        }
+      },
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FieldDeleteResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "title": "Category"
+            },
+            "field_name": {
+              "type": "string",
+              "title": "Field Name"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "field_name"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_portfolio",
+    "method": "GET",
+    "path": "/v1/portfolio",
+    "source": "src/routers/portfolio.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "include_inactive",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "If true, also return closed and expired option positions. Default: only equities and active options.",
+          "default": false,
+          "title": "Include Inactive"
+        },
+        "description": "If true, also return closed and expired option positions. Default: only equities and active options."
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PortfolioResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "include_inactive": {
+              "type": "boolean",
+              "description": "If true, also return closed and expired option positions. Default: only equities and active options.",
+              "default": false,
+              "title": "Include Inactive"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "clear_portfolio",
+    "method": "DELETE",
+    "path": "/v1/portfolio",
+    "source": "src/routers/portfolio.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "confirmation",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Must be 'DELETE_ALL' to confirm",
+          "title": "Confirmation"
+        },
+        "description": "Must be 'DELETE_ALL' to confirm"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PortfolioClearResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "confirmation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Must be 'DELETE_ALL' to confirm",
+              "title": "Confirmation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "add_holding",
+    "method": "POST",
+    "path": "/v1/portfolio/holding",
+    "source": "src/routers/portfolio.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/AddHoldingRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HoldingCreateResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/AddHoldingRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "AddHoldingRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticker"
+            },
+            "asset_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Name"
+            },
+            "shares": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shares"
+            },
+            "avg_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Avg Price"
+            },
+            "asset_class": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Class"
+            },
+            "underlying_ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Underlying Ticker"
+            },
+            "option_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Option Type"
+            },
+            "action_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action Type"
+            },
+            "strike_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strike Price"
+            },
+            "expiration_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expiration Date"
+            },
+            "contracts": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contracts"
+            },
+            "premium": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Premium"
+            },
+            "collateral_required": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collateral Required"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id"
+          ],
+          "title": "AddHoldingRequest",
+          "description": "Request model for adding a portfolio holding (equity or option)"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "update_holding",
+    "method": "PUT",
+    "path": "/v1/portfolio/holding/{position_key}",
+    "source": "src/routers/portfolio.py",
+    "parameters": [
+      {
+        "name": "position_key",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Position Key"
+        }
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/UpdateHoldingRequest"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HoldingUpdateResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "position_key": {
+              "type": "string",
+              "title": "Position Key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "position_key"
+          ]
+        },
+        "body": {
+          "$ref": "#/$defs/UpdateHoldingRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "body"
+      ],
+      "$defs": {
+        "UpdateHoldingRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "asset_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Name"
+            },
+            "shares": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shares"
+            },
+            "avg_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Avg Price"
+            },
+            "contracts": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contracts"
+            },
+            "premium": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Premium"
+            },
+            "collateral_required": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collateral Required"
+            },
+            "action_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action Type"
+            },
+            "underlying_ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Underlying Ticker"
+            },
+            "option_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Option Type"
+            },
+            "strike_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strike Price"
+            },
+            "expiration_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expiration Date"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id"
+          ],
+          "title": "UpdateHoldingRequest",
+          "description": "Request model for updating a portfolio holding (Story 3.4 + options support)"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "delete_holding",
+    "method": "DELETE",
+    "path": "/v1/portfolio/holding/{position_key}",
+    "source": "src/routers/portfolio.py",
+    "parameters": [
+      {
+        "name": "position_key",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Position Key"
+        }
+      },
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier",
+          "title": "User Id"
+        },
+        "description": "User identifier"
+      },
+      {
+        "name": "underlying_ticker",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Options: underlying ticker (defaults to path segment)",
+          "title": "Underlying Ticker"
+        },
+        "description": "Options: underlying ticker (defaults to path segment)"
+      },
+      {
+        "name": "option_type",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Options: 'put' or 'call' (with strike/expiration resolves an option position)",
+          "title": "Option Type"
+        },
+        "description": "Options: 'put' or 'call' (with strike/expiration resolves an option position)"
+      },
+      {
+        "name": "strike_price",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Options: strike price",
+          "title": "Strike Price"
+        },
+        "description": "Options: strike price"
+      },
+      {
+        "name": "expiration_date",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Options: expiration date (YYYY-MM-DD)",
+          "title": "Expiration Date"
+        },
+        "description": "Options: expiration date (YYYY-MM-DD)"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HoldingDeleteResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404,
+      500
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "position_key": {
+              "type": "string",
+              "title": "Position Key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "position_key"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier",
+              "title": "User Id"
+            },
+            "underlying_ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Options: underlying ticker (defaults to path segment)",
+              "title": "Underlying Ticker"
+            },
+            "option_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Options: 'put' or 'call' (with strike/expiration resolves an option position)",
+              "title": "Option Type"
+            },
+            "strike_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Options: strike price",
+              "title": "Strike Price"
+            },
+            "expiration_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Options: expiration date (YYYY-MM-DD)",
+              "title": "Expiration Date"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "create_intent",
+    "method": "POST",
+    "path": "/v1/intents",
+    "source": "src/routers/intents.py",
+    "parameters": [],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ScheduledIntentCreate"
+          }
+        }
+      }
+    },
+    "responses": {
+      "201": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScheduledIntentResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      201,
+      400,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/ScheduledIntentCreate"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "ScheduledIntentCreate": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "intent_name": {
+              "type": "string",
+              "title": "Intent Name"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "trigger_type": {
+              "type": "string",
+              "enum": [
+                "cron",
+                "interval",
+                "once",
+                "price",
+                "silence",
+                "portfolio"
+              ],
+              "title": "Trigger Type"
+            },
+            "trigger_schedule": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TriggerSchedule"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "trigger_condition": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TriggerCondition"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "action_type": {
+              "type": "string",
+              "enum": [
+                "notify",
+                "check_in",
+                "briefing",
+                "analysis",
+                "reminder"
+              ],
+              "title": "Action Type",
+              "description": "Type of action to perform when trigger fires",
+              "default": "notify"
+            },
+            "action_context": {
+              "type": "string",
+              "title": "Action Context",
+              "description": "Context passed to the LLM when firing this intent. Should include instructions for the AI assistant on how to respond to the trigger condition. Example: 'Alert the user about the price change and suggest reviewing their position.'"
+            },
+            "action_priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "critical"
+              ],
+              "title": "Action Priority",
+              "description": "Priority level affecting notification urgency and display",
+              "default": "normal"
+            },
+            "expires_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expires At"
+            },
+            "max_executions": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Executions"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id",
+            "intent_name",
+            "trigger_type",
+            "action_context"
+          ],
+          "title": "ScheduledIntentCreate",
+          "description": "Request model for creating a new scheduled intent.\n\nDefines a proactive trigger that can fire based on time (cron/interval/once)\nor conditions (price/silence/portfolio)."
+        },
+        "TriggerCondition": {
+          "properties": {
+            "ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticker"
+            },
+            "operator": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operator"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value"
+            },
+            "threshold_hours": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threshold Hours"
+            },
+            "condition_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition Type",
+              "description": "Condition category: 'price', 'portfolio', 'silence'"
+            },
+            "expression": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expression",
+              "description": "Human-readable condition expression (e.g., 'NVDA < 130', 'any_holding_change > 5%')"
+            },
+            "cooldown_hours": {
+              "type": "integer",
+              "maximum": 168.0,
+              "minimum": 1.0,
+              "title": "Cooldown Hours",
+              "description": "Minimum hours between condition-based trigger fires (1-168, default 24)",
+              "default": 24
+            },
+            "fire_mode": {
+              "type": "string",
+              "enum": [
+                "once",
+                "recurring"
+              ],
+              "title": "Fire Mode",
+              "description": "Fire mode: 'once' disables after first successful fire, 'recurring' (default) continues",
+              "default": "recurring"
+            }
+          },
+          "type": "object",
+          "title": "TriggerCondition",
+          "description": "Condition configuration for condition-based triggers (price, silence, portfolio).\n\nUsed within ScheduledIntentCreate to define the conditions that must be met.\nFields used depend on trigger_type:\n- price: ticker, operator, value OR expression (e.g., \"NVDA < 130\")\n- silence: threshold_hours OR expression (e.g., \"inactive_hours > 48\")\n- portfolio: expression (e.g., \"any_holding_change > 5%\")\n\nNew expression field takes precedence over structured fields when both are provided."
+        },
+        "TriggerSchedule": {
+          "properties": {
+            "cron": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cron"
+            },
+            "interval_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interval Minutes"
+            },
+            "trigger_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger At"
+            },
+            "check_interval_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 5.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Check Interval Minutes",
+              "description": "Polling interval in minutes for condition-based triggers (min 5). Default: 5 for most triggers, 15 for portfolio triggers.",
+              "default": 5
+            },
+            "timezone": {
+              "type": "string",
+              "title": "Timezone",
+              "description": "IANA timezone for scheduling (e.g., 'America/Los_Angeles', 'Europe/London', 'UTC')",
+              "default": "America/Los_Angeles"
+            }
+          },
+          "type": "object",
+          "title": "TriggerSchedule",
+          "description": "Schedule configuration for time-based triggers (cron, interval, once).\n\nUsed within ScheduledIntentCreate to define when a trigger should fire.\nOnly one of cron, interval_minutes, or trigger_at should be set based on trigger_type."
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "list_intents",
+    "method": "GET",
+    "path": "/v1/intents",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User identifier (required)",
+          "title": "User Id"
+        },
+        "description": "User identifier (required)"
+      },
+      {
+        "name": "trigger_type",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Filter by trigger type",
+          "title": "Trigger Type"
+        },
+        "description": "Filter by trigger type"
+      },
+      {
+        "name": "enabled",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Filter by enabled status",
+          "title": "Enabled"
+        },
+        "description": "Filter by enabled status"
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "description": "Maximum results",
+          "default": 50,
+          "title": "Limit"
+        },
+        "description": "Maximum results"
+      },
+      {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Results to skip",
+          "default": 0,
+          "title": "Offset"
+        },
+        "description": "Results to skip"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ScheduledIntentResponse"
+              },
+              "title": "Response List Intents V1 Intents Get"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User identifier (required)",
+              "title": "User Id"
+            },
+            "trigger_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by trigger type",
+              "title": "Trigger Type"
+            },
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by enabled status",
+              "title": "Enabled"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum results",
+              "default": 50,
+              "title": "Limit"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Results to skip",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_pending_intents",
+    "method": "GET",
+    "path": "/v1/intents/pending",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional user filter",
+          "title": "User Id"
+        },
+        "description": "Optional user filter"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ScheduledIntentResponse"
+              },
+              "title": "Response Get Pending Intents V1 Intents Pending Get"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional user filter",
+              "title": "User Id"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "required": []
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "fire_intent",
+    "method": "POST",
+    "path": "/v1/intents/{intent_id}/fire",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/IntentFireRequest"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/IntentFireResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        },
+        "body": {
+          "$ref": "#/$defs/IntentFireRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "body"
+      ],
+      "$defs": {
+        "IntentFireRequest": {
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed",
+                "gate_blocked",
+                "condition_not_met"
+              ],
+              "title": "Status"
+            },
+            "trigger_data": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger Data"
+            },
+            "gate_result": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Gate Result"
+            },
+            "message_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            },
+            "message_preview": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Preview"
+            },
+            "evaluation_ms": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evaluation Ms"
+            },
+            "generation_ms": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Generation Ms"
+            },
+            "delivery_ms": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Delivery Ms"
+            },
+            "error_message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Message"
+            }
+          },
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "title": "IntentFireRequest",
+          "description": "Request model for reporting intent execution results.\n\nSent by the proactive worker after attempting to fire an intent.\nRecords the execution outcome and timing metrics."
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "claim_intent",
+    "method": "POST",
+    "path": "/v1/intents/{intent_id}/claim",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/IntentClaimResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404,
+      409,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_intent_history",
+    "method": "GET",
+    "path": "/v1/intents/{intent_id}/history",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "description": "Maximum results (default 50, max 100)",
+          "default": 50,
+          "title": "Limit"
+        },
+        "description": "Maximum results (default 50, max 100)"
+      },
+      {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Results to skip",
+          "default": 0,
+          "title": "Offset"
+        },
+        "description": "Results to skip"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/IntentExecutionResponse"
+              },
+              "title": "Response Get Intent History V1 Intents  Intent Id  History Get"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum results (default 50, max 100)",
+              "default": 50,
+              "title": "Limit"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Results to skip",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_intent",
+    "method": "GET",
+    "path": "/v1/intents/{intent_id}",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScheduledIntentResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      404,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "update_intent",
+    "method": "PUT",
+    "path": "/v1/intents/{intent_id}",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ScheduledIntentUpdate"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScheduledIntentResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400,
+      404,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        },
+        "body": {
+          "$ref": "#/$defs/ScheduledIntentUpdate"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "body"
+      ],
+      "$defs": {
+        "ScheduledIntentUpdate": {
+          "properties": {
+            "intent_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Intent Name"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "trigger_type": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "cron",
+                    "interval",
+                    "once",
+                    "price",
+                    "silence",
+                    "portfolio"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger Type"
+            },
+            "trigger_schedule": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TriggerSchedule"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "trigger_condition": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TriggerCondition"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "action_type": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "notify",
+                    "check_in",
+                    "briefing",
+                    "analysis",
+                    "reminder"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action Type",
+              "description": "Type of action to perform when trigger fires"
+            },
+            "action_context": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action Context",
+              "description": "Context passed to the LLM when firing this intent"
+            },
+            "action_priority": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "normal",
+                    "high",
+                    "critical"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action Priority",
+              "description": "Priority level affecting notification urgency and display"
+            },
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enabled"
+            },
+            "expires_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expires At"
+            },
+            "max_executions": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Executions"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata"
+            }
+          },
+          "type": "object",
+          "title": "ScheduledIntentUpdate",
+          "description": "Request model for updating an existing scheduled intent (PATCH/PUT).\n\nAll fields are optional to support partial updates."
+        },
+        "TriggerCondition": {
+          "properties": {
+            "ticker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticker"
+            },
+            "operator": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operator"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value"
+            },
+            "threshold_hours": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threshold Hours"
+            },
+            "condition_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition Type",
+              "description": "Condition category: 'price', 'portfolio', 'silence'"
+            },
+            "expression": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expression",
+              "description": "Human-readable condition expression (e.g., 'NVDA < 130', 'any_holding_change > 5%')"
+            },
+            "cooldown_hours": {
+              "type": "integer",
+              "maximum": 168.0,
+              "minimum": 1.0,
+              "title": "Cooldown Hours",
+              "description": "Minimum hours between condition-based trigger fires (1-168, default 24)",
+              "default": 24
+            },
+            "fire_mode": {
+              "type": "string",
+              "enum": [
+                "once",
+                "recurring"
+              ],
+              "title": "Fire Mode",
+              "description": "Fire mode: 'once' disables after first successful fire, 'recurring' (default) continues",
+              "default": "recurring"
+            }
+          },
+          "type": "object",
+          "title": "TriggerCondition",
+          "description": "Condition configuration for condition-based triggers (price, silence, portfolio).\n\nUsed within ScheduledIntentCreate to define the conditions that must be met.\nFields used depend on trigger_type:\n- price: ticker, operator, value OR expression (e.g., \"NVDA < 130\")\n- silence: threshold_hours OR expression (e.g., \"inactive_hours > 48\")\n- portfolio: expression (e.g., \"any_holding_change > 5%\")\n\nNew expression field takes precedence over structured fields when both are provided."
+        },
+        "TriggerSchedule": {
+          "properties": {
+            "cron": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cron"
+            },
+            "interval_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interval Minutes"
+            },
+            "trigger_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger At"
+            },
+            "check_interval_minutes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 5.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Check Interval Minutes",
+              "description": "Polling interval in minutes for condition-based triggers (min 5). Default: 5 for most triggers, 15 for portfolio triggers.",
+              "default": 5
+            },
+            "timezone": {
+              "type": "string",
+              "title": "Timezone",
+              "description": "IANA timezone for scheduling (e.g., 'America/Los_Angeles', 'Europe/London', 'UTC')",
+              "default": "America/Los_Angeles"
+            }
+          },
+          "type": "object",
+          "title": "TriggerSchedule",
+          "description": "Schedule configuration for time-based triggers (cron, interval, once).\n\nUsed within ScheduledIntentCreate to define when a trigger should fire.\nOnly one of cron, interval_minutes, or trigger_at should be set based on trigger_type."
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "delete_intent",
+    "method": "DELETE",
+    "path": "/v1/intents/{intent_id}",
+    "source": "src/routers/intents.py",
+    "parameters": [
+      {
+        "name": "intent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "title": "Intent Id"
+        }
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "204": {
+        "description": "Successful Response"
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      204,
+      404,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "intent_id": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Intent Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "intent_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "store_memory_direct",
+    "method": "POST",
+    "path": "/v1/memories/direct",
+    "source": "src/routers/memories.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/DirectMemoryRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DirectMemoryResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/DirectMemoryRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "DirectMemoryRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id",
+              "description": "User identifier for memory ownership",
+              "example": "user_12345"
+            },
+            "content": {
+              "type": "string",
+              "maxLength": 5000,
+              "title": "Content",
+              "description": "Memory content text (max 5000 characters)",
+              "example": "User mentioned they prefer morning meetings and work best between 9am-12pm."
+            },
+            "layer": {
+              "type": "string",
+              "enum": [
+                "short-term",
+                "semantic",
+                "long-term",
+                "episodic",
+                "procedural",
+                "emotional"
+              ],
+              "title": "Layer",
+              "description": "Memory layer: 'short-term' (ephemeral), 'semantic' (facts), 'long-term' (persistent), 'episodic' (events), 'procedural' (skills), 'emotional' (feelings)",
+              "default": "semantic",
+              "example": "semantic"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "explicit",
+                "implicit"
+              ],
+              "title": "Type",
+              "description": "Memory type: 'explicit' (stated directly) or 'implicit' (inferred)",
+              "default": "explicit",
+              "example": "explicit"
+            },
+            "importance": {
+              "type": "number",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Importance",
+              "description": "Importance score from 0.0 (trivial) to 1.0 (critical)",
+              "default": 0.8,
+              "example": 0.8
+            },
+            "confidence": {
+              "type": "number",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "description": "Confidence score from 0.0 (uncertain) to 1.0 (certain)",
+              "default": 0.9,
+              "example": 0.9
+            },
+            "persona_tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "maxItems": 10,
+              "title": "Persona Tags",
+              "description": "Persona tags for memory (max 10 tags)",
+              "example": [
+                "work",
+                "preferences"
+              ]
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata",
+              "description": "Additional metadata key-value pairs",
+              "example": {
+                "session_id": "abc123",
+                "source": "chat"
+              }
+            },
+            "ttl_seconds": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ttl Seconds",
+              "description": "Optional TTL in seconds, honored on ALL layers (short-term, semantic, long-term, and typed layers). When set, the memory becomes eligible for eviction approximately `ttl_seconds` after creation. Soft contract: a record may linger up to one TTL-sweep cycle past its expiration before deletion. If omitted, short-term records use SHORT_TERM_TTL_SECONDS (default 60 days); all other layers remain immortal.",
+              "example": 86400
+            },
+            "event_timestamp": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Timestamp",
+              "description": "When the event occurred (ISO8601 format). Setting this triggers storage to episodic_memories table.",
+              "example": "2025-01-15T10:30:00Z"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Location",
+              "description": "Where the event occurred",
+              "example": "Office conference room"
+            },
+            "participants": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Participants",
+              "description": "People involved in the event",
+              "example": [
+                "Alice",
+                "Bob"
+              ]
+            },
+            "event_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type",
+              "description": "Type of event (e.g., 'meeting', 'conversation', 'milestone')",
+              "example": "meeting"
+            },
+            "emotional_state": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Emotional State",
+              "description": "Primary emotional state (e.g., 'happy', 'anxious', 'excited'). Setting this triggers storage to emotional_memories table.",
+              "example": "excited"
+            },
+            "valence": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 1.0,
+                  "minimum": -1.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Valence",
+              "description": "Emotional valence from -1.0 (negative) to 1.0 (positive)",
+              "example": 0.7
+            },
+            "arousal": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 1.0,
+                  "minimum": 0.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Arousal",
+              "description": "Emotional arousal from 0.0 (calm) to 1.0 (intense)",
+              "example": 0.6
+            },
+            "trigger_event": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger Event",
+              "description": "Event that triggered the emotional state",
+              "example": "Received promotion at work"
+            },
+            "skill_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill Name",
+              "description": "Name of the skill or procedure. Setting this triggers storage to procedural_memories table.",
+              "example": "Python programming"
+            },
+            "proficiency_level": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proficiency Level",
+              "description": "Proficiency level (e.g., 'beginner', 'intermediate', 'expert')",
+              "example": "intermediate"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id",
+            "content"
+          ],
+          "title": "DirectMemoryRequest",
+          "description": "Request body for direct memory storage.\n\nAllows clients to store memories directly without LLM extraction.\nSupports general memory fields plus optional typed fields (episodic,\nemotional, procedural) that trigger routing to specialized storage tables."
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "patch_memory",
+    "method": "PATCH",
+    "path": "/v1/memories/{memory_id}",
+    "source": "src/routers/memories.py",
+    "parameters": [
+      {
+        "name": "memory_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Memory Id"
+        }
+      },
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User ID for authorization",
+          "title": "User Id"
+        },
+        "description": "User ID for authorization"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/PatchMemoryRequest"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PatchMemoryResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      403,
+      404,
+      422,
+      500,
+      503
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "memory_id": {
+              "type": "string",
+              "title": "Memory Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "memory_id"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User ID for authorization",
+              "title": "User Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        },
+        "body": {
+          "$ref": "#/$defs/PatchMemoryRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "body"
+      ],
+      "$defs": {
+        "PatchMemoryRequest": {
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 5000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content",
+              "description": "New memory content. When changed, the embedding is regenerated synchronously. When the new content produces the same content_hash as the stored one, embedding regen is skipped.",
+              "example": "User now prefers afternoon meetings between 2-4pm."
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata",
+              "description": "Shallow-merge metadata patch. Keys present here override the stored values; keys absent here are preserved. Use the sentinel value `\"__delete__\"` to remove a key. System-managed keys (`user_id`, `layer`, `type`, `ttl_epoch`, `timestamp`, `content_hash`, `stored_in_*`, `typed_table_id`) cannot be set or deleted via PATCH metadata; attempts return 422.",
+              "example": {
+                "old_key": "__delete__",
+                "source": "chat-v2"
+              }
+            },
+            "layer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "short-term",
+                    "semantic",
+                    "long-term",
+                    "episodic",
+                    "procedural",
+                    "emotional"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layer",
+              "description": "New memory layer. Allowed flips are between non-typed layers (`short-term` <-> `semantic` <-> `long-term`). Flips into or out of typed-storage layers (`episodic`, `procedural`, `emotional`) return 422 in v1 \u2014 delete and recreate instead.",
+              "example": "long-term"
+            },
+            "importance": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 1.0,
+                  "minimum": 0.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Importance",
+              "description": "New importance score from 0.0 to 1.0. On typed tables that have an importance_score column (episodic_memories), the value is also fanned out.",
+              "example": 0.95
+            },
+            "ttl_seconds": {
+              "title": "Ttl Seconds",
+              "description": "New TTL in seconds. Recomputes `ttl_epoch = now + ttl_seconds`. Pass explicit JSON `null` to clear the stored TTL (immortalize the record). Omit the field entirely to leave the TTL unchanged. Soft-TTL contract: a record may linger up to one TTL-sweep cycle past its expiration before deletion.",
+              "example": 86400
+            }
+          },
+          "type": "object",
+          "title": "PatchMemoryRequest",
+          "description": "Request body for ``PATCH /v1/memories/{memory_id}``.\n\nAll fields are optional. Omitted fields leave the stored value unchanged.\n\nThe ``ttl_seconds`` field uses the ``UNSET`` sentinel scheme so the router\ncan distinguish between ``{\"ttl_seconds\": null}`` (clear TTL) and the field\nbeing absent from the request body (leave TTL unchanged). Other fields use\n``Optional[T] = None`` because ``None`` is not a meaningful value for\nthem \u2014 supplying ``None`` is equivalent to omitting the key.\n\nMetadata semantics (AC8): shallow merge. Use the string sentinel\n``\"__delete__\"`` as a value to remove a key. System-managed metadata keys\n(see ``src/services/_constants.py:SYSTEM_MANAGED_FIELDS``) cannot be\nset or deleted via this field; the router returns 422 for any such key."
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "delete_memory",
+    "method": "DELETE",
+    "path": "/v1/memories/{memory_id}",
+    "source": "src/routers/memories.py",
+    "parameters": [
+      {
+        "name": "memory_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "Memory Id"
+        }
+      },
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "User ID for authorization",
+          "title": "User Id"
+        },
+        "description": "User ID for authorization"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DeleteMemoryResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      403
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "memory_id": {
+              "type": "string",
+              "title": "Memory Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "memory_id"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "User ID for authorization",
+              "title": "User Id"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "stream_orchestrator_message",
+    "method": "POST",
+    "path": "/v1/orchestrator/message",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/OrchestratorMessageRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OrchestratorStreamResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/OrchestratorMessageRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "OrchestratorMessageRequest": {
+          "properties": {
+            "conversation_id": {
+              "type": "string",
+              "title": "Conversation Id"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "user",
+                "assistant",
+                "system",
+                "tool"
+              ],
+              "title": "Role"
+            },
+            "content": {
+              "type": "string",
+              "title": "Content"
+            },
+            "message_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Id"
+            },
+            "timestamp": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp"
+            },
+            "metadata": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "title": "Metadata"
+            },
+            "flush": {
+              "type": "boolean",
+              "title": "Flush",
+              "default": false
+            }
+          },
+          "type": "object",
+          "required": [
+            "conversation_id",
+            "role",
+            "content"
+          ],
+          "title": "OrchestratorMessageRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "fetch_orchestrator_memories",
+    "method": "POST",
+    "path": "/v1/orchestrator/retrieve",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/OrchestratorRetrieveRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OrchestratorRetrieveResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/OrchestratorRetrieveRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "OrchestratorRetrieveRequest": {
+          "properties": {
+            "conversation_id": {
+              "type": "string",
+              "title": "Conversation Id"
+            },
+            "query": {
+              "type": "string",
+              "title": "Query"
+            },
+            "metadata": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "title": "Metadata"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 50.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "default": 6
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0.0,
+              "title": "Offset",
+              "default": 0
+            }
+          },
+          "type": "object",
+          "required": [
+            "conversation_id",
+            "query"
+          ],
+          "title": "OrchestratorRetrieveRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "stream_orchestrator_transcript",
+    "method": "POST",
+    "path": "/v1/orchestrator/transcript",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/TranscriptRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OrchestratorTranscriptResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/TranscriptRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "TranscriptRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "history": {
+              "items": {
+                "$ref": "#/$defs/Message"
+              },
+              "type": "array",
+              "title": "History"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id",
+            "history"
+          ],
+          "title": "TranscriptRequest"
+        },
+        "Message": {
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": [
+                "user",
+                "assistant",
+                "system"
+              ],
+              "title": "Role"
+            },
+            "content": {
+              "type": "string",
+              "title": "Content"
+            }
+          },
+          "type": "object",
+          "required": [
+            "role",
+            "content"
+          ],
+          "title": "Message"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "health",
+    "method": "GET",
+    "path": "/health",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": true,
+              "type": "object",
+              "title": "Response Health Health Get"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "required": []
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "me",
+    "method": "GET",
+    "path": "/v1/me",
+    "source": "src/app.py",
+    "parameters": [
+      {
+        "name": "cf-access-jwt-assertion",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cf-Access-Jwt-Assertion"
+        }
+      },
+      {
+        "name": "authorization",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Authorization"
+        }
+      },
+      {
+        "name": "CF_Authorization",
+        "in": "cookie",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cf Authorization"
+        }
+      },
+      {
+        "name": "cf_authorization",
+        "in": "cookie",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cf Authorization"
+        }
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Response Me V1 Me Get"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "required": []
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "health_full",
+    "method": "GET",
+    "path": "/health/full",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": true,
+              "type": "object",
+              "title": "Response Health Full Health Full Get"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "required": []
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "store_transcript",
+    "method": "POST",
+    "path": "/v1/store",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/TranscriptRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoreResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/TranscriptRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "TranscriptRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "history": {
+              "items": {
+                "$ref": "#/$defs/Message"
+              },
+              "type": "array",
+              "title": "History"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metadata"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id",
+            "history"
+          ],
+          "title": "TranscriptRequest"
+        },
+        "Message": {
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": [
+                "user",
+                "assistant",
+                "system"
+              ],
+              "title": "Role"
+            },
+            "content": {
+              "type": "string",
+              "title": "Content"
+            }
+          },
+          "type": "object",
+          "required": [
+            "role",
+            "content"
+          ],
+          "title": "Message"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "retrieve",
+    "method": "GET",
+    "path": "/v1/retrieve",
+    "source": "src/app.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "User Id"
+        }
+      },
+      {
+        "name": "query",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Search query (optional - omit to get all memories)",
+          "title": "Query"
+        },
+        "description": "Search query (optional - omit to get all memories)"
+      },
+      {
+        "name": "layer",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Layer"
+        }
+      },
+      {
+        "name": "type",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Type"
+        }
+      },
+      {
+        "name": "persona",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Persona"
+        }
+      },
+      {
+        "name": "sort",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sort order: 'newest' or 'oldest' (by timestamp)",
+          "title": "Sort"
+        },
+        "description": "Sort order: 'newest' or 'oldest' (by timestamp)"
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "maximum": 1000,
+          "minimum": 1,
+          "default": 50,
+          "title": "Limit"
+        }
+      },
+      {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "title": "Offset"
+        }
+      },
+      {
+        "name": "created_after",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inclusive lower bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422.",
+          "title": "Created After"
+        },
+        "description": "Inclusive lower bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422."
+      },
+      {
+        "name": "created_before",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exclusive upper bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422.",
+          "title": "Created Before"
+        },
+        "description": "Exclusive upper bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422."
+      },
+      {
+        "name": "expires_after",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inclusive lower bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_after`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters.",
+          "title": "Expires After"
+        },
+        "description": "Inclusive lower bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_after`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters."
+      },
+      {
+        "name": "expires_before",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exclusive upper bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_before`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters.",
+          "title": "Expires Before"
+        },
+        "description": "Exclusive upper bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_before`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters."
+      },
+      {
+        "name": "kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exact-match filter on `metadata.kind` (a user-supplied metadata key written via `POST /v1/memories/direct`). Use the dedicated `kind` parameter rather than `metadata_filter=kind:value`.",
+          "title": "Kind"
+        },
+        "description": "Exact-match filter on `metadata.kind` (a user-supplied metadata key written via `POST /v1/memories/direct`). Use the dedicated `kind` parameter rather than `metadata_filter=kind:value`."
+      },
+      {
+        "name": "metadata_filter",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repeatable `key:value` metadata equality filter (scalar values only). Multiple values for the same key are AND-combined as the literal user provided. System-managed and internally-derived keys (user_id, layer, type, ttl_epoch, timestamp, content_hash, stored_in_*, typed_table_id, importance, relevance_score, confidence, usage_count, persona_tags, emotional_signature) are rejected with 422. Use the dedicated `kind` parameter for the `kind` key.",
+          "title": "Metadata Filter"
+        },
+        "description": "Repeatable `key:value` metadata equality filter (scalar values only). Multiple values for the same key are AND-combined as the literal user provided. System-managed and internally-derived keys (user_id, layer, type, ttl_epoch, timestamp, content_hash, stored_in_*, typed_table_id, importance, relevance_score, confidence, usage_count, persona_tags, emotional_signature) are rejected with 422. Use the dedicated `kind` parameter for the `kind` key."
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RetrieveResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      422
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "query": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search query (optional - omit to get all memories)",
+              "title": "Query"
+            },
+            "layer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layer"
+            },
+            "type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            },
+            "persona": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Persona"
+            },
+            "sort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sort order: 'newest' or 'oldest' (by timestamp)",
+              "title": "Sort"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            },
+            "created_after": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive lower bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422.",
+              "title": "Created After"
+            },
+            "created_before": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive upper bound on `metadata.timestamp` (ISO 8601). Server stores timestamps in UTC. Pass `Z` or an explicit offset; offset is normalized to UTC before comparison. Naive datetimes are rejected with 422.",
+              "title": "Created Before"
+            },
+            "expires_after": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive lower bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_after`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters.",
+              "title": "Expires After"
+            },
+            "expires_before": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive upper bound on `metadata.ttl_epoch` (epoch seconds as an integer, OR an ISO 8601 datetime that follows the same timezone-aware rules as `created_before`). Filters records WITH a TTL only. Immortal memories (no `ttl_epoch` set) are excluded from any `expires_*` filter. To find immortal memories, omit both `expires_*` parameters.",
+              "title": "Expires Before"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact-match filter on `metadata.kind` (a user-supplied metadata key written via `POST /v1/memories/direct`). Use the dedicated `kind` parameter rather than `metadata_filter=kind:value`.",
+              "title": "Kind"
+            },
+            "metadata_filter": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeatable `key:value` metadata equality filter (scalar values only). Multiple values for the same key are AND-combined as the literal user provided. System-managed and internally-derived keys (user_id, layer, type, ttl_epoch, timestamp, content_hash, stored_in_*, typed_table_id, importance, relevance_score, confidence, usage_count, persona_tags, emotional_signature) are rejected with 422. Use the dedicated `kind` parameter for the `kind` key.",
+              "title": "Metadata Filter"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "retrieve_persona",
+    "method": "POST",
+    "path": "/v1/retrieve",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "required": true,
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/PersonaRetrieveRequest"
+          }
+        }
+      }
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PersonaRetrieveResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/PersonaRetrieveRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "PersonaRetrieveRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "query": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 1000.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "default": 10
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0.0,
+              "title": "Offset",
+              "default": 0
+            },
+            "persona_context": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PersonaContext"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "granularity": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "episodic",
+                "arc",
+                "auto"
+              ],
+              "title": "Granularity",
+              "default": "auto"
+            },
+            "include_narrative": {
+              "type": "boolean",
+              "title": "Include Narrative",
+              "default": false
+            },
+            "explain": {
+              "type": "boolean",
+              "title": "Explain",
+              "default": false
+            },
+            "filters": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filters"
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id"
+          ],
+          "title": "PersonaRetrieveRequest"
+        },
+        "PersonaContext": {
+          "properties": {
+            "active_personas": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Active Personas"
+            },
+            "forced_persona": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Forced Persona"
+            },
+            "mood": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mood"
+            }
+          },
+          "type": "object",
+          "title": "PersonaContext"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "retrieve_structured",
+    "method": "POST",
+    "path": "/v1/retrieve/structured",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/StructuredRetrieveRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StructuredRetrieveResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/StructuredRetrieveRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "StructuredRetrieveRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "query": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 100.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "default": 50
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id"
+          ],
+          "title": "StructuredRetrieveRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "narrative",
+    "method": "POST",
+    "path": "/v1/narrative",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/NarrativeRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/NarrativeResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [
+      400
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/NarrativeRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "NarrativeRequest": {
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "query": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            },
+            "start_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Time"
+            },
+            "end_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Time"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 50.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "default": 25
+            }
+          },
+          "type": "object",
+          "required": [
+            "user_id"
+          ],
+          "title": "NarrativeRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "forget",
+    "method": "POST",
+    "path": "/v1/forget",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ForgetRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ForgetResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/ForgetRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "ForgetRequest": {
+          "properties": {
+            "scopes": {
+              "items": {
+                "type": "string",
+                "enum": [
+                  "short-term",
+                  "semantic",
+                  "long-term",
+                  "episodic",
+                  "procedural",
+                  "emotional"
+                ]
+              },
+              "type": "array",
+              "title": "Scopes"
+            },
+            "dry_run": {
+              "type": "boolean",
+              "title": "Dry Run",
+              "default": false
+            },
+            "jobs": {
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ttl_cleanup",
+                  "promotion",
+                  "compaction"
+                ]
+              },
+              "type": "array",
+              "title": "Jobs",
+              "description": "Reserved for future use; currently ignored. `/v1/forget` always runs ttl_cleanup + ttl_cleanup_timescale regardless of this list. The submitted jobs are echoed back as `jobs_requested` for caller debuggability."
+            }
+          },
+          "type": "object",
+          "title": "ForgetRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "maintenance",
+    "method": "POST",
+    "path": "/v1/maintenance",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/MaintenanceRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MaintenanceResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/MaintenanceRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "$defs": {
+        "MaintenanceRequest": {
+          "properties": {
+            "jobs": {
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ttl_cleanup",
+                  "promotion",
+                  "compaction"
+                ]
+              },
+              "type": "array",
+              "title": "Jobs"
+            },
+            "since_hours": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since Hours"
+            }
+          },
+          "type": "object",
+          "title": "MaintenanceRequest"
+        }
+      }
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "portfolio_summary",
+    "method": "GET",
+    "path": "/v1/portfolio/summary",
+    "source": "src/app.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "User Id"
+        }
+      },
+      {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "maximum": 1000,
+          "minimum": 1,
+          "default": 200,
+          "title": "Limit"
+        }
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PortfolioSummaryResponse"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "compact_all_users",
+    "method": "POST",
+    "path": "/v1/maintenance/compact_all",
+    "source": "src/app.py",
+    "parameters": [],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MaintenanceResponse"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "required": []
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "compact_single_user",
+    "method": "POST",
+    "path": "/v1/maintenance/compact",
+    "source": "src/app.py",
+    "parameters": [
+      {
+        "name": "user_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "title": "User Id"
+        }
+      },
+      {
+        "name": "skip_reextract",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "Skip expensive LLM re-extraction (default: true)",
+          "default": true,
+          "title": "Skip Reextract"
+        },
+        "description": "Skip expensive LLM re-extraction (default: true)"
+      },
+      {
+        "name": "skip_consolidate",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "description": "Skip memory consolidation into golden records (default: false - consolidation runs)",
+          "default": false,
+          "title": "Skip Consolidate"
+        },
+        "description": "Skip memory consolidation into golden records (default: false - consolidation runs)"
+      }
+    ],
+    "requestBody": null,
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Response Compact Single User V1 Maintenance Compact Post"
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    },
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "title": "User Id"
+            },
+            "skip_reextract": {
+              "type": "boolean",
+              "description": "Skip expensive LLM re-extraction (default: true)",
+              "default": true,
+              "title": "Skip Reextract"
+            },
+            "skip_consolidate": {
+              "type": "boolean",
+              "description": "Skip memory consolidation into golden records (default: false - consolidation runs)",
+              "default": false,
+              "title": "Skip Consolidate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "user_id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "tool": "get_openapi",
+    "method": "GET",
+    "path": "/openapi.json",
+    "source": null,
+    "parameters": [],
+    "requestBody": null,
+    "responses": {},
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "tool": "get_docs",
+    "method": "GET",
+    "path": "/docs",
+    "source": null,
+    "parameters": [],
+    "requestBody": null,
+    "responses": {},
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "tool": "get_redoc",
+    "method": "GET",
+    "path": "/redoc",
+    "source": null,
+    "parameters": [],
+    "requestBody": null,
+    "responses": {},
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "tool": "get_docs_oauth2_redirect",
+    "method": "GET",
+    "path": "/docs/oauth2-redirect",
+    "source": null,
+    "parameters": [],
+    "requestBody": null,
+    "responses": {},
+    "additional_explicit_handler_statuses": [],
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": null,
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]
