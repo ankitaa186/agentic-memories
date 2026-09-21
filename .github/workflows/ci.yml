@@ -52,14 +52,14 @@ jobs:
             exit 1
           }
 
-      - name: Install ruff
-        run: uv pip install --system ruff
+      - name: Install locked formatter
+        run: uv sync --locked --only-group dev
 
       - name: Check linting
-        run: ruff check .
+        run: uv run --locked --only-group dev ruff check .
 
       - name: Check formatting
-        run: ruff format --check .
+        run: uv run --locked --only-group dev ruff format --check .
 
   test:
     name: Run Tests

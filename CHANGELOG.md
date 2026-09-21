@@ -15,7 +15,7 @@ There are no historical versioned releases recorded here yet. See the
 
 ### Maintenance
 
-- Aligned Makefile and CI runtime dependency exports with the checked-in requirements by excluding the test dependency group.
+- Aligned Makefile and CI runtime dependency exports with the checked-in requirements by excluding the test dependency group; CI now uses the locked formatter for reproducible checks.
 
 ### Added
 
