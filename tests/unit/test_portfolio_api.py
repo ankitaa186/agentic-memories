@@ -136,7 +136,9 @@ def test_get_portfolio_success_with_holdings(api_client):
     """Successful portfolio retrieval with equity holdings"""
     mock_rows = [
         _holding_row(),
-        _holding_row(ticker="GOOGL", asset_name="Alphabet Inc.", shares=50.0, avg_price=2800.00),
+        _holding_row(
+            ticker="GOOGL", asset_name="Alphabet Inc.", shares=50.0, avg_price=2800.00
+        ),
     ]
     mock_conn = _MockConnection(_MockCursor(results=mock_rows))
 
@@ -1099,9 +1101,7 @@ def test_delete_holding_removes_existing(api_client):
 
     p1, p2 = _patch_db(mock_conn)
     with p1, p2:
-        response = api_client.delete(
-            "/v1/portfolio/holding/AAPL?user_id=test-user-123"
-        )
+        response = api_client.delete("/v1/portfolio/holding/AAPL?user_id=test-user-123")
 
     assert response.status_code == 200
     data = response.json()
@@ -1120,9 +1120,7 @@ def test_delete_holding_ticker_normalization(api_client):
 
     p1, p2 = _patch_db(mock_conn)
     with p1, p2:
-        response = api_client.delete(
-            "/v1/portfolio/holding/aapl?user_id=test-user-123"
-        )
+        response = api_client.delete("/v1/portfolio/holding/aapl?user_id=test-user-123")
 
     assert response.status_code == 200
     resolve_params = mock_cursor.queries[0][1]
@@ -1135,9 +1133,7 @@ def test_delete_holding_not_found(api_client):
 
     p1, p2 = _patch_db(mock_conn)
     with p1, p2:
-        response = api_client.delete(
-            "/v1/portfolio/holding/MSFT?user_id=test-user-123"
-        )
+        response = api_client.delete("/v1/portfolio/holding/MSFT?user_id=test-user-123")
 
     assert response.status_code == 404
 
@@ -1226,9 +1222,7 @@ def test_delete_holding_invalid_key(api_client):
 def test_delete_holding_database_unavailable(api_client):
     """Database unavailable returns 500"""
     with patch("src.routers.portfolio.get_timescale_conn", return_value=None):
-        response = api_client.delete(
-            "/v1/portfolio/holding/AAPL?user_id=test-user-123"
-        )
+        response = api_client.delete("/v1/portfolio/holding/AAPL?user_id=test-user-123")
     assert response.status_code == 500
 
 
@@ -1261,9 +1255,7 @@ def test_clear_portfolio_missing_confirmation(api_client):
 
 def test_clear_portfolio_invalid_confirmation(api_client):
     """Clear with wrong confirmation returns 400"""
-    response = api_client.delete(
-        "/v1/portfolio?user_id=test-user-123&confirmation=YES"
-    )
+    response = api_client.delete("/v1/portfolio?user_id=test-user-123&confirmation=YES")
     assert response.status_code == 400
 
 

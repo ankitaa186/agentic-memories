@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="567" viewBox="0 0 1080 567" role="img" aria-labelledby="title desc">
+<title id="title">Agentic Memories social preview</title><desc id="desc">Open-source MCP memory service. Memory for your personal AI companion.</desc>
+<defs><linearGradient id="accent"><stop stop-color="#a78bfa"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+<rect width="1080" height="567" rx="20" fill="#0b0a12"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="65" y="90" font-size="18" fill="#a5b4fc" font-weight="bold">OPEN SOURCE / MCP</text>
+<text x="65" y="184" font-size="58" fill="#f4efff" font-weight="bold">Agentic Memories</text>
+<text x="65" y="246" font-size="38" fill="#d4c8e5" font-weight="normal">Memory for your</text>
+<text x="65" y="298" font-size="38" fill="#d4c8e5" font-weight="normal">personal AI companion.</text>
+<rect x="65" y="351" width="950" height="110" rx="14" fill="#191326" stroke="#65517f"/>
+<text x="90" y="394" font-size="27" fill="#f4efff" font-weight="bold">Conversation → Extraction → Recall</text>
+<text x="90" y="429" font-size="20" fill="#bcb0cf" font-weight="normal">Self-hosted memory service • MCP + REST</text>
+<text x="65" y="526" font-size="19" fill="#a5b4fc" font-weight="normal">github.com/ankitaa186/agentic-memories</text>
+</g></svg>

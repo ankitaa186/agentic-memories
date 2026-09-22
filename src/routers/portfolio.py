@@ -168,7 +168,9 @@ class AddHoldingRequest(BaseModel):
     asset_class: Optional[str] = None  # 'equity' (default) | 'option'
     underlying_ticker: Optional[str] = None
     option_type: Optional[str] = None  # 'put' | 'call'
-    action_type: Optional[str] = None  # sell_to_open | buy_to_open | sell_to_close | buy_to_close
+    action_type: Optional[str] = (
+        None  # sell_to_open | buy_to_open | sell_to_close | buy_to_close
+    )
     strike_price: Optional[float] = None
     expiration_date: Optional[str] = None  # ISO YYYY-MM-DD
     contracts: Optional[int] = None  # 1 contract = 100 shares; defaults to 1
@@ -351,7 +353,11 @@ def _resolve_position(
             detail="To address an option by its key tuple, provide option_type, strike_price, AND expiration_date together.",
         )
 
-    if option_type is not None and strike_price is not None and expiration_date is not None:
+    if (
+        option_type is not None
+        and strike_price is not None
+        and expiration_date is not None
+    ):
         option_fields = _validate_option_fields(
             underlying_ticker=underlying_ticker,
             fallback_ticker=normalized_key,
@@ -691,9 +697,7 @@ def add_holding(request: AddHoldingRequest):
             holding = _row_to_holding(
                 {k: v for k, v in data.items() if k != "inserted"}
             )
-            response = HoldingCreateResponse(
-                **holding.model_dump(), created=inserted
-            )
+            response = HoldingCreateResponse(**holding.model_dump(), created=inserted)
 
             status_code = 201 if inserted else 200
             logger.info(
@@ -887,7 +891,8 @@ def delete_holding(
         None, description="Options: underlying ticker (defaults to path segment)"
     ),
     option_type: Optional[str] = Query(
-        None, description="Options: 'put' or 'call' (with strike/expiration resolves an option position)"
+        None,
+        description="Options: 'put' or 'call' (with strike/expiration resolves an option position)",
     ),
     strike_price: Optional[float] = Query(None, description="Options: strike price"),
     expiration_date: Optional[str] = Query(

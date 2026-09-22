@@ -1,0 +1,9 @@
+SESSION 1 / store_memory_direct
+Stored: Evening walks help me unwind. I prefer quiet routes near the water.
+Connection closed. Opening a new MCP connection.
+
+SESSION 2 / retrieve
+Query: How do I like to unwind?
+Recalled: Evening walks help me unwind. I prefer quiet routes near the water.
+PASS: the same preference was recalled through a new connection.
+CLEANUP: demo memory deleted; no demo memories remain.

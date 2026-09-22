@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="378" viewBox="0 0 1080 378" role="img" aria-labelledby="title desc">
+<title id="title">Memory across sessions</title><desc id="desc">Submit conversation, extract memories, then recall them in a later session.</desc>
+<defs><linearGradient id="accent"><stop stop-color="#a78bfa"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+<rect width="1080" height="378" rx="20" fill="#0b0a12"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="40" y="52" font-size="30" fill="#f4efff" font-weight="bold">A familiar preference. A new conversation.</text>
+<text x="40" y="83" font-size="18" fill="#bcb0cf" font-weight="normal">Your companion can recall what you have shared before.</text>
+<rect x="40" y="120" width="286" height="185" rx="14" fill="#191326" stroke="#65517f"/>
+<text x="62" y="153" font-size="14" fill="#a5b4fc" font-weight="bold">01 / CONVERSATION</text>
+<text x="62" y="191" font-size="23" fill="#f4efff" font-weight="bold">Share an experience</text>
+<text x="62" y="231" font-size="17" fill="#d4c8e5" font-weight="normal">“Evening walks</text>
+<text x="62" y="258" font-size="17" fill="#d4c8e5" font-weight="normal">help me unwind.”</text>
+<rect x="397" y="120" width="286" height="185" rx="14" fill="#191326" stroke="#65517f"/>
+<text x="419" y="153" font-size="14" fill="#a5b4fc" font-weight="bold">02 / EXTRACTION</text>
+<text x="419" y="191" font-size="23" fill="#f4efff" font-weight="bold">Identify what matters</text>
+<text x="419" y="231" font-size="17" fill="#d4c8e5" font-weight="normal">Extract and organize memories.</text>
+<text x="419" y="258" font-size="17" fill="#d4c8e5" font-weight="normal">Check duplicates and store.</text>
+<rect x="754" y="120" width="286" height="185" rx="14" fill="#191326" stroke="#65517f"/>
+<text x="776" y="153" font-size="14" fill="#a5b4fc" font-weight="bold">03 / RECALL</text>
+<text x="776" y="191" font-size="23" fill="#f4efff" font-weight="bold">Ask in a new session</text>
+<text x="776" y="231" font-size="17" fill="#d4c8e5" font-weight="normal">“How do I unwind?”</text>
+<text x="776" y="258" font-size="17" fill="#d4c8e5" font-weight="normal">Recall a familiar preference.</text>
+<path d="M337 212 L382 212" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M694 212 L739 212" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="40" y="343" font-size="16" fill="#bcb0cf" font-weight="normal">MCP tools: store_transcript → extraction pipeline → retrieve</text>
+</g></svg>

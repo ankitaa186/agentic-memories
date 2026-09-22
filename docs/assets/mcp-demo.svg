@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="817" viewBox="0 0 1080 817" role="img" aria-labelledby="title desc">
+<title id="title">Verified conversation extraction example</title><desc id="desc">A real run of store_transcript produced classified memories from four conversation turns. A new MCP connection recalled those extracted records.</desc>
+<defs><linearGradient id="accent"><stop stop-color="#a78bfa"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+<rect width="1080" height="817" rx="20" fill="#0b0a12"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="40" y="51" font-size="30" fill="#f4efff" font-weight="bold">From a conversation to personal memory</text>
+<text x="40" y="83" font-size="17" fill="#bcb0cf" font-weight="normal">Real MCP extraction run • wording and memory count vary by model</text>
+<rect x="40" y="112" width="1000" height="72" rx="14" fill="#191326" stroke="#65517f"/>
+<text x="62" y="143" font-size="20" fill="#f4efff" font-weight="bold">INPUT / 4 conversation turns via store_transcript</text>
+<text x="62" y="170" font-size="18" fill="#d4c8e5" font-weight="normal">Evening walks, quiet routes, herbal tea, reading and avoiding coffee.</text>
+<text x="40" y="225" font-size="21" fill="#c4b5fd" font-weight="bold">EXTRACTED / 6 memories returned by the pipeline</text>
+<rect x="40" y="245" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="269" font-size="13" fill="#c4b5fd" font-weight="bold">PROCEDURAL</text>
+<text x="58" y="295" font-size="19" fill="#f4efff" font-weight="normal">User unwinds after busy days by taking evening walks.</text>
+<rect x="40" y="325" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="349" font-size="13" fill="#c4b5fd" font-weight="bold">SEMANTIC</text>
+<text x="58" y="375" font-size="19" fill="#f4efff" font-weight="normal">User prefers a quiet walking route by the water rather than busy streets.</text>
+<rect x="40" y="405" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="429" font-size="13" fill="#c4b5fd" font-weight="bold">SEMANTIC</text>
+<text x="58" y="455" font-size="19" fill="#f4efff" font-weight="normal">User has maintained the habit of taking evening walks for years.</text>
+<rect x="40" y="485" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="509" font-size="13" fill="#c4b5fd" font-weight="bold">SEMANTIC</text>
+<text x="58" y="535" font-size="19" fill="#f4efff" font-weight="normal">User likes making herbal tea when they get home.</text>
+<rect x="40" y="565" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="589" font-size="13" fill="#c4b5fd" font-weight="bold">SEMANTIC</text>
+<text x="58" y="615" font-size="19" fill="#f4efff" font-weight="normal">User enjoys reading a novel after getting home.</text>
+<rect x="40" y="645" width="1000" height="70" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="58" y="669" font-size="13" fill="#c4b5fd" font-weight="bold">SEMANTIC</text>
+<text x="58" y="695" font-size="19" fill="#f4efff" font-weight="normal">User avoids coffee in the evening.</text>
+<text x="40" y="755" font-size="19" fill="#ddd0ff" font-weight="bold">NEW SESSION / retrieved records matched extraction-result IDs</text>
+<text x="40" y="786" font-size="17" fill="#bcb0cf" font-weight="normal">Printed memories are actual extraction output, not manually authored records.</text>
+</g></svg>

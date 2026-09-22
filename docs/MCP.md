@@ -1,8 +1,23 @@
 # MCP interface (preferred agent integration)
 
-**MCP is the preferred integration for agents; direct REST remains a supported alternative.** This interface is implemented in this source revision. Existing deployments require an updated build; no deployment is implied.
+**MCP is the preferred integration for agents; direct REST remains a supported alternative.**
+
+[Documentation](README.md) · [Setup](guides/getting-started.md) · [Cross-session example](../examples/README.md)
+
+Deploy a build containing the MCP interface before configuring clients. Your deployment
+revision determines availability; source documentation is not a deployment record.
 
 The existing FastAPI process serves Streamable HTTP at **`http://localhost:8080/mcp`** (substitute the existing server's host/port). Start the API with its normal configuration and command. There is no additional process or listening port. `uv sync --locked` installs the SDK; Docker uses the regenerated `requirements.txt`.
+
+## Start with conversation extraction
+
+For a personal companion, use `store_transcript` to submit conversation turns. The
+pipeline evaluates worthiness, extracts and organizes memories, checks for duplicates,
+and builds profile context where applicable. Then use `retrieve` to recall useful context.
+[Run the extraction example](../examples/README.md) or read [the pipeline guide](guides/memory.md#conversation-extraction).
+
+`store_memory_direct` is an advanced bypass for applications that already produce
+memory records; it does not exercise conversation extraction.
 
 ## Connect and use
 
@@ -125,6 +140,9 @@ Regenerate after route/model changes with `uv run python -m scripts.export_mcp_i
 | GET | `/docs/oauth2-redirect` | `get_docs_oauth2_redirect` |
 
 ## SDK compatibility and verification
+
+The results below are a historical verification snapshot for the MCP implementation.
+See the report for scope and rerun checks for your selected revision.
 
 This change uses the official Python SDK's maintained v1 line (`mcp>=1.28,<2`, locked to **1.30.0**). v2 is the current stable line, but v1 continues receiving critical/security fixes; retaining v1 avoids introducing the v2 HTTP client/transport migration into this older API stack. This is an explicit compatibility choice, not a claim that v1 is the latest major version. See the [official release guidance](https://pypi.org/project/mcp/), [v1 dependency metadata](https://github.com/modelcontextprotocol/python-sdk/blob/v1.x/pyproject.toml), and [official stateless embedding example](https://github.com/modelcontextprotocol/python-sdk/blob/v1.26.0/examples/servers/simple-streamablehttp-stateless/mcp_simple_streamablehttp_stateless/server.py).
 

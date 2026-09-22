@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="615" viewBox="0 0 1080 615" role="img" aria-labelledby="title desc">
+<title id="title">Agentic Memories architecture</title><desc id="desc">Personal AI via MCP and REST clients share FastAPI and its ChromaDB, PostgreSQL with TimescaleDB, and Redis stores.</desc>
+<defs><linearGradient id="accent"><stop stop-color="#a78bfa"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+<rect width="1080" height="615" rx="20" fill="#0b0a12"/>
+<g font-family="Arial, Helvetica, sans-serif"><text x="40" y="52" font-size="30" fill="#f4efff" font-weight="bold">One memory service. Two ways to connect.</text>
+<text x="40" y="83" font-size="18" fill="#bcb0cf" font-weight="normal">MCP is the preferred agent interface; REST shares the same application.</text>
+<rect x="150" y="120" width="350" height="90" rx="14" fill="#191326" stroke="#a78bfa"/>
+<text x="175" y="154" font-size="23" fill="#f4efff" font-weight="bold">Personal AI via MCP</text>
+<text x="175" y="184" font-size="18" fill="#d4c8e5" font-weight="normal">Streamable HTTP /mcp</text>
+<rect x="580" y="120" width="350" height="90" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="605" y="154" font-size="23" fill="#f4efff" font-weight="bold">REST clients + web UI</text>
+<text x="605" y="184" font-size="18" fill="#d4c8e5" font-weight="normal">HTTP routes</text>
+<path d="M325 214 L325 255" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M755 214 L755 255" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<rect x="150" y="265" width="780" height="115" rx="14" fill="#191326" stroke="#c4b5fd"/>
+<text x="175" y="306" font-size="25" fill="#f4efff" font-weight="bold">Shared FastAPI application</text>
+<text x="175" y="342" font-size="19" fill="#d4c8e5" font-weight="normal">Validation • ingestion • retrieval • profiles • intents • maintenance</text>
+<path d="M210 384 L210 426" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M540 384 L540 426" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M870 384 L870 426" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<rect x="60" y="438" width="300" height="96" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="77" y="473" font-size="20" fill="#f4efff" font-weight="bold">ChromaDB</text>
+<text x="77" y="505" font-size="16" fill="#d4c8e5" font-weight="normal">Vectors + memory documents</text>
+<rect x="390" y="438" width="300" height="96" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="407" y="473" font-size="20" fill="#f4efff" font-weight="bold">PostgreSQL + TimescaleDB</text>
+<text x="407" y="505" font-size="16" fill="#d4c8e5" font-weight="normal">Structured + time-based records</text>
+<rect x="720" y="438" width="300" height="96" rx="14" fill="#191326" stroke="#3c2e50"/>
+<text x="737" y="473" font-size="20" fill="#f4efff" font-weight="bold">Redis</text>
+<text x="737" y="505" font-size="16" fill="#d4c8e5" font-weight="normal">Cache + coordination</text>
+<text x="60" y="578" font-size="17" fill="#bcb0cf" font-weight="normal">Configured providers: embeddings + extraction   /   Optional tracing: Langfuse</text>
+</g></svg>

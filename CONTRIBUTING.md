@@ -49,6 +49,19 @@ make stop           # Stop Docker containers
 make docker-logs    # View container logs
 ```
 
+## Documentation changes
+
+Start with the [documentation index](docs/README.md). Keep the README focused on
+getting started; put detailed contracts and operations in linked guides.
+
+```bash
+python3 scripts/check_docs.py
+```
+
+Keep examples executable, distinguish implemented features from plans, and put
+user-visible changes in `CHANGELOG.md`. See [graphics sources](docs/assets/README.md)
+and [release preparation](docs/releases/README.md).
+
 ## Submitting Changes
 
 1. **Ensure tests pass**: Run `make test` before submitting
@@ -65,7 +78,7 @@ make docker-logs    # View container logs
 - **Testing**: LLM evaluation, performance benchmarks
 - **Documentation**: Tutorials, examples, translations
 - **UI/UX**: Web interface improvements
-- **Cognitive Features**: Consolidation, forgetting, prediction algorithms
+- **Memory lifecycle**: Consolidation, retention, and retrieval quality
 - **Security**: Encryption, consent management, auditing
 - **Internationalization**: Multi-language support
 
